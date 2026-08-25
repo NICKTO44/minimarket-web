@@ -1,0 +1,59 @@
+/* Estilos normales: oculto en pantalla, el recibo solo existe para imprimirse */
+.recibo-imprimible {
+  display: none;
+}
+
+/* Estilos SOLO al imprimir: aquí es donde se formatea como ticket térmico angosto */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .recibo-imprimible,
+  .recibo-imprimible * {
+    visibility: visible;
+  }
+  .recibo-imprimible {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 80mm; /* cambiar a 58mm si tu ticketera usa papel angosto */
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    padding: 4mm;
+  }
+
+  .recibo-centro {
+    text-align: center;
+  }
+
+  .recibo-linea {
+    border-top: 1px dashed #000;
+    margin: 4px 0;
+  }
+
+  .recibo-item {
+    margin-bottom: 4px;
+  }
+
+  .recibo-item-detalle,
+  .recibo-total,
+  .recibo-detalle-pago {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .recibo-total {
+    font-weight: bold;
+    font-size: 14px;
+  }
+  .recibo-comprobante-tipo {
+  font-weight: 700;
+  margin: 2px 0;
+}
+
+  @page {
+    margin: 0;
+    size: 80mm auto; /* ancho fijo, alto automático según el contenido */
+  }
+}

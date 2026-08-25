@@ -1,0 +1,289 @@
+.res-layout {
+  padding: 24px 28px;
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f4f5f7;
+}
+
+.res-layout h1 {
+  font-size: 22px;
+  margin: 0 0 2px;
+  color: #16181d;
+}
+
+.res-fecha {
+  font-size: 13px;
+  color: #6b7280;
+  text-transform: capitalize;
+  margin: 0 0 16px;
+}
+
+.res-cargando {
+  color: #6b7280;
+}
+
+.res-banner-caja {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+
+.res-banner-abierta {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.res-banner-cerrada {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.res-tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.res-tarjeta {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e4e6eb;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.res-tarjeta-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.res-tarjeta-valor {
+  font-size: 24px;
+  font-weight: 800;
+  color: #16181d;
+}
+
+.res-tarjeta-sub {
+  font-size: 12.5px;
+  color: #9ca3af;
+}
+
+.res-tarjeta-destacada {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.res-tarjeta-destacada .res-tarjeta-valor {
+  color: #4338ca;
+}
+
+.res-columnas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 800px) {
+  .res-columnas {
+    grid-template-columns: 1fr;
+  }
+}
+
+.res-columna {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e4e6eb;
+  padding: 16px;
+}
+
+.res-columna-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.res-columna-header h2 {
+  font-size: 14px;
+  margin: 0;
+  color: #16181d;
+}
+
+.res-icono-header {
+  color: #4338ca;
+  flex-shrink: 0;
+}
+
+.res-icono-alerta {
+  color: #d97706;
+}
+
+.res-contador {
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-left: auto;
+}
+
+.res-vacio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #15803d;
+  padding: 8px 0;
+  margin: 0;
+}
+
+.res-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.res-lista-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: #f4f5f7;
+  border-radius: 8px;
+  font-size: 13px;
+  gap: 8px;
+}
+
+.res-lista-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.res-stock-critico {
+  color: #b91c1c;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.res-dias-restantes {
+  color: #b45309;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Gráficos de barras (CSS puro, sin librerías) */
+.res-chart-barras {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.res-barra-fila {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.res-barra-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.res-barra-label-producto {
+  font-size: 11.5px;
+}
+
+.res-barra-pista {
+  height: 10px;
+  background: #f1f2f4;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.res-barra-relleno {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.res-barra-valor {
+  font-size: 12px;
+  font-weight: 700;
+  color: #16181d;
+  white-space: nowrap;
+  min-width: 50px;
+  text-align: right;
+}
+
+.res-accesos {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.res-accesos button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: none;
+  border-radius: 10px;
+  background: #4338ca;
+  color: white;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Responsive: celular */
+@media (max-width: 480px) {
+  .res-layout {
+    padding: 16px;
+  }
+
+  .res-tarjetas {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .res-tarjeta-valor {
+    font-size: 20px;
+  }
+
+  .res-barra-fila {
+    grid-template-columns: 70px 1fr auto;
+  }
+
+  .res-barra-label {
+    font-size: 11px;
+  }
+
+  .res-accesos {
+    flex-direction: column;
+  }
+
+  .res-accesos button {
+    width: 100%;
+    justify-content: center;
+  }
+}

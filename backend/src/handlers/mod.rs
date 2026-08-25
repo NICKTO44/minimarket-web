@@ -1,0 +1,15 @@
+pub mod auth;
+pub mod productos;
+pub mod clientes;
+pub mod ventas;
+pub mod lotes;
+pub mod cajas;
+pub mod devoluciones;
+pub mod proveedores;
+pub mod reportes;
+pub mod facturacion;
+pub mod impresora;
+pub mod devoluciones_proveedor;
+pub mod comprobantes;
+pub mod configuracion;
+pub mod imagenes;

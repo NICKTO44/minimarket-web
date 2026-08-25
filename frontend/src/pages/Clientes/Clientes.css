@@ -1,0 +1,247 @@
+.cli-layout {
+  padding: 24px 28px;
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f4f5f7;
+}
+
+.cli-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.cli-header h1 {
+  font-size: 22px;
+  margin: 0;
+  color: #16181d;
+}
+
+.cli-boton-nuevo {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  background: #4338ca;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cli-buscador {
+  width: 100%;
+  max-width: 400px;
+  padding: 10px 14px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  font-size: 14px;
+  background: white;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+
+.cli-cargando {
+  color: #6b7280;
+}
+
+.cli-tabla-wrapper {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e4e6eb;
+  overflow: hidden;
+}
+
+.cli-tabla {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cli-tabla th {
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+  padding: 12px 14px;
+  border-bottom: 1.5px solid #e4e6eb;
+}
+
+.cli-tabla td {
+  padding: 12px 14px;
+  font-size: 14px;
+  border-bottom: 1px solid #f1f2f4;
+  color: #16181d;
+}
+
+.cli-tabla tr:last-child td {
+  border-bottom: none;
+}
+
+.cli-badge-tipo {
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #eef2ff;
+  color: #4338ca;
+  padding: 2px 6px;
+  border-radius: 999px;
+  margin-right: 4px;
+}
+
+.cli-boton-editar,
+.cli-boton-eliminar {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 6px;
+}
+
+.cli-boton-editar {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.cli-boton-eliminar {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.cli-sin-resultados {
+  text-align: center;
+  color: #9ca3af;
+  padding: 30px !important;
+}
+
+.cli-mensaje {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.cli-mensaje-exito {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.cli-mensaje-error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.cli-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+
+.cli-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.cli-modal h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: #16181d;
+}
+
+.cli-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.cli-campo-fila {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.cli-campo label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cli-campo input {
+  padding: 10px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.cli-tipo-opciones {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+}
+
+.cli-tipo-opciones button {
+  padding: 8px 4px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  background: white;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cli-tipo-opciones button.activo {
+  background: #4338ca;
+  color: white;
+  border-color: #4338ca;
+}
+
+.cli-modal-acciones {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.cli-boton-cancelar {
+  flex: 1;
+  padding: 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cli-boton-guardar {
+  flex: 2;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: #4338ca;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cli-boton-guardar:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}

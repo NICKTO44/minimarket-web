@@ -1,0 +1,139 @@
+.comp-layout {
+  padding: 24px 28px;
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f4f5f7;
+}
+
+.comp-layout h1 {
+  font-size: 22px;
+  margin: 0 0 4px;
+  color: #16181d;
+}
+
+.comp-subtitulo {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0 0 16px;
+}
+
+.comp-filtros {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.comp-filtros select {
+  padding: 9px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  font-size: 13px;
+  background: white;
+}
+
+.comp-cargando {
+  color: #6b7280;
+}
+
+.comp-mensaje {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.comp-mensaje-error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.comp-tabla-wrapper {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e4e6eb;
+  overflow: hidden;
+}
+
+.comp-tabla {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.comp-tabla th {
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+  padding: 12px 14px;
+  border-bottom: 1.5px solid #e4e6eb;
+}
+
+.comp-tabla td {
+  padding: 12px 14px;
+  font-size: 14px;
+  border-bottom: 1px solid #f1f2f4;
+  color: #16181d;
+}
+
+.comp-tabla tr:last-child td {
+  border-bottom: none;
+}
+
+.comp-tipo {
+  font-weight: 700;
+}
+
+.comp-folio-venta {
+  font-size: 12.5px;
+  color: #9ca3af;
+}
+
+.comp-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.comp-badge-aceptado {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.comp-badge-rechazado {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.comp-badge-pendiente {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.comp-boton-imprimir {
+  padding: 6px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 6px;
+  background: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.comp-sin-resultados {
+  text-align: center;
+  color: #9ca3af;
+  padding: 30px !important;
+}
+.comp-tipo-ninguno {
+  color: #6b7280;
+}
+
+.comp-badge-ninguno {
+  background: #f1f2f4;
+  color: #6b7280;
+}

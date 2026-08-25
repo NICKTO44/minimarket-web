@@ -1,0 +1,500 @@
+.prov-layout {
+  padding: 24px 28px;
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f4f5f7;
+}
+
+.prov-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.prov-header h1 {
+  font-size: 22px;
+  margin: 0;
+  color: #16181d;
+}
+
+.prov-tabs {
+  display: flex;
+  gap: 6px;
+  background: white;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid #e4e6eb;
+}
+
+.prov-tabs button {
+  padding: 7px 14px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.prov-tabs button.activo {
+  background: #4338ca;
+  color: white;
+}
+
+.prov-boton-nuevo {
+  margin-left: auto;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  background: #4338ca;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.prov-cargando {
+  color: #6b7280;
+}
+
+.prov-mensaje {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.prov-mensaje-exito {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.prov-mensaje-error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.prov-tabla-wrapper {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e4e6eb;
+  overflow: hidden;
+}
+
+.prov-tabla {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.prov-tabla th {
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+  padding: 12px 14px;
+  border-bottom: 1.5px solid #e4e6eb;
+}
+
+.prov-tabla td {
+  padding: 12px 14px;
+  font-size: 14px;
+  border-bottom: 1px solid #f1f2f4;
+  color: #16181d;
+}
+
+.prov-tabla tr:last-child td {
+  border-bottom: none;
+}
+
+.prov-sin-resultados {
+  text-align: center;
+  color: #9ca3af;
+  padding: 30px !important;
+}
+
+.prov-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-transform: capitalize;
+}
+
+.prov-badge-pendiente {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.prov-badge-parcial {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.prov-badge-recibida {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.prov-badge-cancelada {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.prov-boton-recibir {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: #16a34a;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.prov-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+
+.prov-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.prov-modal-grande {
+  max-width: 640px;
+}
+
+.prov-modal h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: #16181d;
+}
+
+.prov-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.prov-campo-fila {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.prov-campo label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.prov-campo input,
+.prov-campo select {
+  padding: 10px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.prov-agregar-item {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.prov-agregar-item select,
+.prov-agregar-item input {
+  padding: 9px 10px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.prov-agregar-item button {
+  padding: 9px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #16181d;
+  color: white;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.prov-items-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.prov-item-fila {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f4f5f7;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.prov-item-fila button {
+  border: none;
+  background: none;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.prov-items-vacio {
+  font-size: 13px;
+  color: #9ca3af;
+  text-align: center;
+  padding: 12px;
+}
+
+.prov-total-compra {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-top: 1.5px solid #e4e6eb;
+  font-size: 15px;
+}
+
+.prov-total-compra strong {
+  font-size: 18px;
+}
+
+.prov-recepcion-nota {
+  font-size: 12.5px;
+  color: #6b7280;
+  margin: 0 0 16px;
+}
+
+.prov-recepcion-item {
+  border: 1px solid #e4e6eb;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.prov-recepcion-nombre {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #16181d;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prov-badge-vencimiento {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: #dbeafe;
+  color: #1e40af;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.prov-recepcion-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.prov-recepcion-campos .prov-campo {
+  margin-bottom: 0;
+}
+
+.prov-recepcion-campos input:disabled {
+  background: #f4f5f7;
+  color: #9ca3af;
+}
+
+.prov-modal-acciones {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.prov-boton-cancelar {
+  flex: 1;
+  padding: 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.prov-boton-guardar {
+  flex: 2;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: #4338ca;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.prov-boton-guardar:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+.prov-boton-producto-nuevo {
+  width: 100%;
+  padding: 9px;
+  border: 1.5px dashed #c7d2fe;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+
+.prov-nuevo-prod-caja {
+  border: 1.5px solid #c7d2fe;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+  background: #f8f9ff;
+}
+
+.prov-nuevo-prod-titulo {
+  font-size: 13px;
+  font-weight: 700;
+  color: #16181d;
+  margin: 0 0 10px;
+}
+
+.prov-campo-checkbox-vert {
+  justify-content: flex-end;
+}
+
+.prov-campo-checkbox-vert label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  text-transform: none;
+  padding-top: 8px;
+}
+
+.prov-nuevo-prod-aviso {
+  font-size: 11.5px;
+  color: #6b7280;
+  margin: 4px 0 10px;
+}
+
+.prov-nuevo-prod-acciones {
+  display: flex;
+  gap: 8px;
+}
+
+.prov-nuevo-prod-acciones button {
+  flex: 1;
+  padding: 9px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  background: white;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.prov-boton-crear-agregar {
+  flex: 2 !important;
+  background: #4338ca !important;
+  color: white !important;
+  border: none !important;
+}
+
+.prov-boton-crear-agregar:disabled {
+  background: #d1d5db !important;
+}
+
+.prov-nuevo-prod-subtitulo {
+  font-size: 12px;
+  font-weight: 700;
+  color: #16181d;
+  margin: 12px 0 8px;
+}
+.prov-nota-parcial {
+  display: block;
+  font-size: 10.5px;
+  color: #9ca3af;
+  margin-top: 3px;
+}
+.prov-danado-fijo {
+  font-size: 12.5px;
+  color: #92400e;
+  background: #fffbeb;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+
+.prov-nota-extraviado {
+  display: block;
+  font-size: 10.5px;
+  color: #b91c1c;
+  margin-top: 3px;
+}
+.prov-credito-caja {
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #166534;
+}
+
+.prov-credito-caja strong {
+  color: #15803d;
+}
+
+.prov-resumen-linea {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.prov-resumen-credito {
+  color: #15803d;
+}

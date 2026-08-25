@@ -1,0 +1,230 @@
+.caja-layout {
+  display: flex;
+  justify-content: center;
+  padding: 24px 16px;
+  min-height: 100vh;
+  background: var(--pos-bg, #f4f5f7);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.caja-cargando {
+  color: var(--pos-texto-tenue, #6b7280);
+  padding-top: 40px;
+}
+
+.caja-card {
+  background: white;
+  border-radius: 14px;
+  border: 1px solid var(--pos-borde, #e4e6eb);
+  padding: 24px;
+  width: 100%;
+  max-width: 420px;
+  height: fit-content;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.caja-card h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  color: var(--pos-texto, #16181d);
+}
+
+.caja-encabezado {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.caja-badge {
+  background: #eef2ff;
+  color: var(--pos-primario, #4338ca);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.caja-subtitulo {
+  font-size: 13px;
+  color: var(--pos-texto-tenue, #6b7280);
+  margin: 0 0 16px;
+}
+
+.caja-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pos-texto-tenue, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+
+.caja-card input,
+.caja-card textarea {
+  padding: 12px 14px;
+  border: 1.5px solid var(--pos-borde, #e4e6eb);
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  resize: none;
+}
+
+.caja-card input:focus,
+.caja-card textarea:focus {
+  border-color: var(--pos-primario, #4338ca);
+}
+
+.caja-card textarea {
+  min-height: 60px;
+}
+
+.caja-resumen-fila {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 0;
+  font-size: 14px;
+  color: var(--pos-texto, #16181d);
+}
+
+.caja-resumen-fila span {
+  color: var(--pos-texto-tenue, #6b7280);
+}
+
+.caja-resumen-total {
+  border-top: 1.5px solid var(--pos-borde, #e4e6eb);
+  margin-top: 4px;
+  padding-top: 10px;
+  font-size: 16px;
+}
+
+.caja-resumen-total strong {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.caja-separador {
+  border-top: 1px solid var(--pos-borde, #e4e6eb);
+  margin: 16px 0 4px;
+}
+
+.caja-subtitulo-cierre {
+  font-size: 15px;
+  margin: 4px 0 4px;
+  color: var(--pos-texto, #16181d);
+}
+
+.caja-diferencia-preview {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 8px 0 0;
+}
+
+.caja-diferencia-preview.ok {
+  color: #15803d;
+}
+
+.caja-diferencia-preview.aceptable {
+  color: #b45309;
+}
+
+.caja-diferencia-preview.alerta {
+  color: #b91c1c;
+}
+
+.caja-mensaje {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  margin-top: 14px;
+}
+
+.caja-mensaje-exito {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.caja-mensaje-error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.caja-boton-primario {
+  margin-top: 18px;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--pos-primario, #4338ca);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.caja-boton-primario:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+
+.caja-boton-cerrar {
+  margin-top: 18px;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  background: #b91c1c;
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.caja-boton-cerrar:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+
+.caja-resumen-cierre {
+  text-align: center;
+}
+
+.caja-diferencia {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  margin-top: 8px;
+  border-top: 1.5px solid var(--pos-borde, #e4e6eb);
+  font-size: 15px;
+}
+
+.caja-diferencia strong {
+  font-size: 17px;
+}
+
+.caja-diferencia-sin-diferencia strong {
+  color: #15803d;
+}
+
+.caja-diferencia-aceptable strong {
+  color: #b45309;
+}
+
+.caja-diferencia-significativa strong {
+  color: #b91c1c;
+}
+.caja-seccion-titulo {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pos-texto-tenue, #6b7280);
+  margin: 14px 0 6px;
+}
+
+.caja-fila-negativa strong {
+  color: #b91c1c;
+}

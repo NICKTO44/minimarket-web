@@ -1,0 +1,16 @@
+# Historial local de VS Code (extensión "Local History")
+.history/
+
+# Backend (Rust)
+backend/target/
+backend/.env
+backend/uploads/
+
+# Frontend (Node/Vite)
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# Sistema
+.DS_Store
+*.log

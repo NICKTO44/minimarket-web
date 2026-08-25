@@ -1,0 +1,72 @@
+/* ===== Login ===== */
+.login-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 16px;
+  background: #f4f5f7;
+}
+
+.login-form {
+  background: white;
+  padding: 32px 24px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-form h1 {
+  text-align: center;
+  margin-bottom: 12px;
+  font-size: 22px;
+  color: #1a1a1a;
+}
+
+.login-form input {
+  padding: 14px 16px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+.login-form button {
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  background: #2563eb;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 48px;
+}
+
+.login-form button:disabled {
+  opacity: 0.6;
+}
+
+.mensaje-error {
+  color: #dc2626;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ===== Shell principal (sidebar + contenido) ===== */
+.app-shell {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-contenido {
+  flex: 1;
+  height: 100vh;
+  overflow: auto;
+  min-width: 0;
+}

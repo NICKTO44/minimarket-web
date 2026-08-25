@@ -1,0 +1,13 @@
+pub mod cliente;
+pub mod producto;
+pub mod venta;
+pub mod lote;
+pub mod caja;
+pub mod devolucion;
+pub mod proveedor;
+pub mod reporte;
+pub mod facturacion;
+pub mod impresora;
+pub mod comprobante;
+pub mod configuracion;
+pub mod auth;
