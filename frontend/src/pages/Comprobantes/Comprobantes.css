@@ -23,6 +23,7 @@
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
 .comp-filtros select {
@@ -31,6 +32,7 @@
   border-radius: 8px;
   font-size: 13px;
   background: white;
+  box-sizing: border-box;
 }
 
 .comp-cargando {
@@ -50,15 +52,20 @@
   color: #991b1b;
 }
 
+/* ===== Tabla con scroll horizontal propio =====
+   El wrapper ya NO recorta el contenido (overflow: hidden);
+   ahora scrollea horizontal si la tabla no entra en el ancho disponible. */
 .comp-tabla-wrapper {
   background: white;
   border-radius: 12px;
   border: 1px solid #e4e6eb;
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .comp-tabla {
   width: 100%;
+  min-width: 680px;
   border-collapse: collapse;
 }
 
@@ -70,6 +77,7 @@
   color: #6b7280;
   padding: 12px 14px;
   border-bottom: 1.5px solid #e4e6eb;
+  white-space: nowrap;
 }
 
 .comp-tabla td {
@@ -83,13 +91,23 @@
   border-bottom: none;
 }
 
+.comp-tabla td:last-child {
+  white-space: nowrap;
+}
+
 .comp-tipo {
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.comp-tipo-ninguno {
+  color: #6b7280;
 }
 
 .comp-folio-venta {
   font-size: 12.5px;
   color: #9ca3af;
+  white-space: nowrap;
 }
 
 .comp-badge {
@@ -97,6 +115,7 @@
   font-weight: 700;
   padding: 3px 9px;
   border-radius: 999px;
+  white-space: nowrap;
 }
 
 .comp-badge-aceptado {
@@ -114,6 +133,11 @@
   color: #92400e;
 }
 
+.comp-badge-ninguno {
+  background: #f1f2f4;
+  color: #6b7280;
+}
+
 .comp-boton-imprimir {
   padding: 6px 12px;
   border: 1.5px solid #e4e6eb;
@@ -129,11 +153,16 @@
   color: #9ca3af;
   padding: 30px !important;
 }
-.comp-tipo-ninguno {
-  color: #6b7280;
-}
 
-.comp-badge-ninguno {
-  background: #f1f2f4;
-  color: #6b7280;
+/* ===== Responsive: celular y tablet ===== */
+@media (max-width: 640px) {
+  .comp-layout {
+    padding: 16px;
+    padding-top: 52px; /* espacio para el botón de menú fijo arriba */
+  }
+
+  .comp-filtros select {
+    flex: 1;
+    min-width: 140px;
+  }
 }

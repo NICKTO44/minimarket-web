@@ -15,9 +15,11 @@ const REGLAS_DOCUMENTO = {
 
 export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
   const [productos, setProductos] = useState([]);
+  const [imagenesFallidas, setImagenesFallidas] = useState(() => new Set());
   const [busqueda, setBusqueda] = useState('');
   const buscadorRef = useRef(null);
   const [carrito, setCarrito] = useState([]);
+  const [carritoAbierto, setCarritoAbierto] = useState(false);
   const [metodoPago, setMetodoPago] = useState('EFECTIVO');
   const [montoRecibido, setMontoRecibido] = useState('');
   const [cliente, setCliente] = useState(null);
@@ -92,7 +94,6 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
   useEffect(() => {
     setSinResultadosCliente(false);
   }, [busquedaCliente]);
-
 
   const manejarEnterBusquedaCliente = (e) => {
     if (e.key === 'Enter') {
@@ -172,6 +173,15 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
     const q = busqueda.toLowerCase();
     return productos.filter((p) => p.nombre.toLowerCase().includes(q) || p.codigo.includes(q));
   }, [productos, busqueda]);
+
+  const marcarImagenFallida = (id) => {
+    setImagenesFallidas((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
 
   const agregarAlCarrito = (producto) => {
     setCarrito((prev) => {
@@ -287,6 +297,7 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
         setMensaje({ tipo: 'error', texto: `Venta registrada, pero falló el comprobante: ${errorComprobante}` });
       } else {
         setMostrarModalVenta(true);
+        setCarritoAbierto(false);
       }
 
       setCarrito([]);
@@ -327,8 +338,13 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
         <div className="pos-grid">
           {productosFiltrados.map((p) => (
             <button key={p.id} className="pos-producto-card" onClick={() => agregarAlCarrito(p)}>
-              {p.imagen_url ? (
-                <img className="pos-producto-imagen" src={`${API_URL}${p.imagen_url}`} alt={p.nombre} />
+              {p.imagen_url && !imagenesFallidas.has(p.id) ? (
+                <img
+                  className="pos-producto-imagen"
+                  src={`${API_URL}${p.imagen_url}`}
+                  alt={p.nombre}
+                  onError={() => marcarImagenFallida(p.id)}
+                />
               ) : (
                 <div className="pos-producto-imagen pos-producto-imagen-vacia">📦</div>
               )}
@@ -343,8 +359,39 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
         </div>
       </div>
 
-      <div className="pos-carrito">
-             <div className="pos-comprobante">
+      <button
+        type="button"
+        className="pos-fab-carrito"
+        onClick={() => {
+          setMensaje(null);
+          setCarritoAbierto(true);
+        }}
+        aria-label="Abrir carrito"
+      >
+        <span className="pos-fab-carrito-icono">🛒</span>
+        <span className="pos-fab-carrito-total">S/ {total.toFixed(2)}</span>
+        {carrito.length > 0 && (
+          <span className="pos-fab-carrito-badge">{carrito.length}</span>
+        )}
+      </button>
+
+      <div className={`pos-carrito${carritoAbierto ? ' pos-carrito-abierto' : ''}`}>
+        <div className="pos-carrito-header-movil">
+          <h2>Cobrar</h2>
+          <button
+            type="button"
+            className="pos-carrito-cerrar"
+            onClick={() => {
+              setMensaje(null);
+              setCarritoAbierto(false);
+            }}
+            aria-label="Cerrar carrito"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="pos-comprobante">
           <span className="pos-comprobante-label">Comprobante</span>
           <div className="pos-comprobante-opciones">
             <button
@@ -545,13 +592,14 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
             )}
 
             <div className="pos-venta-modal-acciones">
-                            <button className="pos-venta-modal-imprimir" onClick={() => window.print()}>
+              <button className="pos-venta-modal-imprimir" onClick={() => window.print()}>
                 🖨 Imprimir
               </button>
               <button
                 className="pos-venta-modal-cerrar"
                 onClick={() => {
                   setMostrarModalVenta(false);
+                  setCarritoAbierto(false);
                   buscadorRef.current?.focus();
                 }}
               >

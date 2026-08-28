@@ -28,6 +28,8 @@
   padding: 4px;
   border-radius: 10px;
   border: 1px solid #e4e6eb;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .prov-tabs button {
@@ -39,6 +41,7 @@
   font-weight: 600;
   color: #6b7280;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .prov-tabs button.activo {
@@ -56,6 +59,7 @@
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .prov-cargando {
@@ -80,15 +84,20 @@
   color: #991b1b;
 }
 
+/* ===== Tabla con scroll horizontal propio =====
+   El wrapper ya NO recorta el contenido (overflow: hidden);
+   ahora scrollea horizontal si la tabla no entra en el ancho disponible. */
 .prov-tabla-wrapper {
   background: white;
   border-radius: 12px;
   border: 1px solid #e4e6eb;
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .prov-tabla {
   width: 100%;
+  min-width: 680px;
   border-collapse: collapse;
 }
 
@@ -100,6 +109,7 @@
   color: #6b7280;
   padding: 12px 14px;
   border-bottom: 1.5px solid #e4e6eb;
+  white-space: nowrap;
 }
 
 .prov-tabla td {
@@ -111,6 +121,10 @@
 
 .prov-tabla tr:last-child td {
   border-bottom: none;
+}
+
+.prov-tabla td:last-child {
+  white-space: nowrap;
 }
 
 .prov-sin-resultados {
@@ -125,6 +139,7 @@
   padding: 3px 9px;
   border-radius: 999px;
   text-transform: capitalize;
+  white-space: nowrap;
 }
 
 .prov-badge-pendiente {
@@ -156,6 +171,7 @@
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .prov-modal-overlay {
@@ -177,6 +193,7 @@
   max-width: 480px;
   max-height: 90vh;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .prov-modal-grande {
@@ -194,6 +211,7 @@
   flex-direction: column;
   gap: 5px;
   margin-bottom: 12px;
+  min-width: 0;
 }
 
 .prov-campo-fila {
@@ -212,10 +230,12 @@
 
 .prov-campo input,
 .prov-campo select {
+  width: 100%;
   padding: 10px 12px;
   border: 1.5px solid #e4e6eb;
   border-radius: 8px;
   font-size: 14px;
+  box-sizing: border-box;
 }
 
 .prov-agregar-item {
@@ -231,6 +251,7 @@
   border: 1.5px solid #e4e6eb;
   border-radius: 8px;
   font-size: 13px;
+  min-width: 0;
 }
 
 .prov-agregar-item button {
@@ -310,6 +331,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .prov-badge-vencimiento {
@@ -320,6 +342,7 @@
   color: #1e40af;
   padding: 2px 6px;
   border-radius: 999px;
+  white-space: nowrap;
 }
 
 .prov-recepcion-campos {
@@ -370,6 +393,7 @@
   background: #d1d5db;
   cursor: not-allowed;
 }
+
 .prov-boton-producto-nuevo {
   width: 100%;
   padding: 9px;
@@ -452,12 +476,14 @@
   color: #16181d;
   margin: 12px 0 8px;
 }
+
 .prov-nota-parcial {
   display: block;
   font-size: 10.5px;
   color: #9ca3af;
   margin-top: 3px;
 }
+
 .prov-danado-fijo {
   font-size: 12.5px;
   color: #92400e;
@@ -473,6 +499,7 @@
   color: #b91c1c;
   margin-top: 3px;
 }
+
 .prov-credito-caja {
   background: #f0fdf4;
   border: 1.5px solid #86efac;
@@ -497,4 +524,49 @@
 
 .prov-resumen-credito {
   color: #15803d;
+}
+
+/* ===== Responsive: celular y tablet ===== */
+@media (max-width: 640px) {
+  .prov-layout {
+    padding: 16px;
+    padding-top: 52px; /* espacio para el botón de menú fijo arriba */
+  }
+
+  .prov-header {
+    gap: 10px;
+  }
+
+  .prov-header h1 {
+    font-size: 19px;
+    width: 100%;
+  }
+
+  .prov-boton-nuevo {
+    margin-left: 0;
+    width: 100%;
+    padding: 12px;
+  }
+
+  .prov-campo-fila {
+    grid-template-columns: 1fr;
+  }
+
+  .prov-agregar-item,
+  .prov-item-fila {
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  }
+
+  .prov-agregar-item button {
+    grid-column: 1 / -1;
+  }
+
+  .prov-modal {
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  .prov-modal-grande {
+    max-width: 100%;
+  }
 }

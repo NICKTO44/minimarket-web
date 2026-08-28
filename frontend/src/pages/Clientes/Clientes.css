@@ -12,6 +12,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 18px;
+  gap: 10px;
 }
 
 .cli-header h1 {
@@ -29,6 +30,7 @@
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .cli-buscador {
@@ -47,15 +49,20 @@
   color: #6b7280;
 }
 
+/* ===== Tabla con scroll horizontal propio =====
+   El wrapper ya NO recorta el contenido (overflow: hidden);
+   ahora scrollea horizontal si la tabla no entra en el ancho disponible. */
 .cli-tabla-wrapper {
   background: white;
   border-radius: 12px;
   border: 1px solid #e4e6eb;
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .cli-tabla {
   width: 100%;
+  min-width: 620px;
   border-collapse: collapse;
 }
 
@@ -67,6 +74,7 @@
   color: #6b7280;
   padding: 12px 14px;
   border-bottom: 1.5px solid #e4e6eb;
+  white-space: nowrap;
 }
 
 .cli-tabla td {
@@ -80,6 +88,10 @@
   border-bottom: none;
 }
 
+.cli-tabla td:last-child {
+  white-space: nowrap;
+}
+
 .cli-badge-tipo {
   font-size: 10.5px;
   font-weight: 700;
@@ -88,6 +100,7 @@
   padding: 2px 6px;
   border-radius: 999px;
   margin-right: 4px;
+  white-space: nowrap;
 }
 
 .cli-boton-editar,
@@ -154,6 +167,7 @@
   max-width: 480px;
   max-height: 90vh;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .cli-modal h2 {
@@ -184,10 +198,12 @@
 }
 
 .cli-campo input {
+  width: 100%;
   padding: 10px 12px;
   border: 1.5px solid #e4e6eb;
   border-radius: 8px;
   font-size: 14px;
+  box-sizing: border-box;
 }
 
 .cli-tipo-opciones {
@@ -244,4 +260,42 @@
 .cli-boton-guardar:disabled {
   background: #d1d5db;
   cursor: not-allowed;
+}
+
+/* ===== Responsive: celular y tablet ===== */
+@media (max-width: 640px) {
+  .cli-layout {
+    padding: 16px;
+    padding-top: 52px; /* espacio para el botón de menú fijo arriba */
+  }
+
+  .cli-header {
+    flex-wrap: wrap;
+  }
+
+  .cli-header h1 {
+    font-size: 19px;
+  }
+
+  .cli-boton-nuevo {
+    width: 100%;
+    padding: 12px;
+  }
+
+  .cli-buscador {
+    max-width: 100%;
+  }
+
+  .cli-campo-fila {
+    grid-template-columns: 1fr;
+  }
+
+  .cli-tipo-opciones {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .cli-modal {
+    padding: 18px;
+    border-radius: 14px;
+  }
 }
