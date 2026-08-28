@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ItemBoleta {
     pub nombre: String,
     pub cantidad: f64,
@@ -8,7 +8,7 @@ pub struct ItemBoleta {
     pub subtotal: f64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DatosImpresion {
     pub nombre_tienda: String,
     pub direccion: Option<String>,
@@ -23,7 +23,7 @@ pub struct DatosImpresion {
     pub impresora_puerto: Option<u16>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ImpresionResponse {
     pub success: bool,
     pub message: String,

@@ -11,9 +11,11 @@ mod models;
 mod handlers;
 mod logica;
 mod middleware_auth;
+mod estado_impresion;
 
 pub struct AppState {
     pub db: libsql::Database,
+    pub estado_impresion: Arc<estado_impresion::EstadoImpresion>,
 }
 
 async fn health() -> &'static str {
@@ -27,6 +29,7 @@ async fn main() {
     let db_url = std::env::var("TURSO_DATABASE_URL").expect("Falta TURSO_DATABASE_URL en .env");
     let db_token = std::env::var("TURSO_AUTH_TOKEN").expect("Falta TURSO_AUTH_TOKEN en .env");
     std::env::var("JWT_SECRET").expect("Falta JWT_SECRET en .env (agrega una clave larga y aleatoria)");
+    std::env::var("AGENTE_IMPRESION_TOKEN").expect("Falta AGENTE_IMPRESION_TOKEN en .env (token para el agente de impresión)");
 
     std::fs::create_dir_all("uploads/productos").ok();
 
@@ -41,7 +44,10 @@ async fn main() {
         .expect("La conexión a Turso no respondió");
     println!("Conectado a Turso correctamente");
 
-    let state = Arc::new(AppState { db });
+    let state = Arc::new(AppState {
+        db,
+        estado_impresion: estado_impresion::EstadoImpresion::nuevo(),
+    });
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -51,6 +57,7 @@ async fn main() {
     let rutas_publicas = Router::new()
         .route("/", get(health))
         .route("/login", post(handlers::auth::login))
+        .route("/agente-impresion/ws", get(handlers::agente_impresion::agente_websocket))
         .nest_service("/uploads", ServeDir::new("uploads"));
 
     let rutas_protegidas = Router::new()
