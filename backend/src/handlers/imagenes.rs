@@ -1,14 +1,16 @@
-use axum::{extract::{State, Path, Multipart}, Json, http::StatusCode};
+use axum::{extract::{Extension, Path, Multipart}, Json, http::StatusCode};
 use std::sync::Arc;
 
-use crate::AppState;
+use crate::models::auth::Claims;
+use crate::tenants::TenantDb;
 use crate::models::producto::ProductoResponse;
 
 const ANCHO_MAXIMO: u32 = 800;
 const CALIDAD_JPEG: u8 = 80;
 
 pub async fn subir_imagen_producto(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<i64>,
     mut multipart: Multipart,
 ) -> Result<Json<ProductoResponse>, (StatusCode, String)> {
@@ -41,10 +43,14 @@ pub async fn subir_imagen_producto(
 
     let redimensionada = img.resize(ANCHO_MAXIMO, ANCHO_MAXIMO, image::imageops::FilterType::Lanczos3);
 
-    std::fs::create_dir_all("uploads/productos")
+    // Carpeta separada por tienda_id — dos negocios distintos comparten el
+    // mismo disco del servidor, así que sin esto el producto #5 de uno
+    // pisaría la foto del producto #5 del otro.
+    let carpeta = format!("uploads/productos/{}", claims.tienda_id);
+    std::fs::create_dir_all(&carpeta)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo crear la carpeta de imágenes: {}", e)))?;
 
-    let ruta = format!("uploads/productos/{}.jpg", id);
+    let ruta = format!("{}/{}.jpg", carpeta, id);
     let mut salida = std::fs::File::create(&ruta)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo guardar el archivo: {}", e)))?;
 
@@ -53,9 +59,9 @@ pub async fn subir_imagen_producto(
         .encode_image(&redimensionada)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al comprimir la imagen: {}", e)))?;
 
-    let url_publica = format!("/uploads/productos/{}.jpg", id);
+    let url_publica = format!("/uploads/productos/{}/{}.jpg", claims.tienda_id, id);
 
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     conn.execute(
         "UPDATE productos SET imagen_url = ?1, fecha_actualizacion = datetime('now','localtime') WHERE id = ?2",
         libsql::params![url_publica.clone(), id],

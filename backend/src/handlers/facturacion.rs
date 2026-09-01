@@ -1,15 +1,15 @@
-use axum::{extract::State, Json, http::StatusCode};
+use axum::{extract::Extension, Json, http::StatusCode};
 use std::sync::Arc;
 
-use crate::AppState;
+use crate::tenants::TenantDb;
 use crate::models::facturacion::*;
 use crate::logica::facturacion::{emitir_facturalibre, DatosParaEmitir, ItemFactura};
 
 pub async fn emitir_comprobante(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<EmitirComprobanteRequest>,
 ) -> Result<Json<ComprobanteResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut r = conn
         .query("SELECT total, subtotal FROM ventas WHERE id = ?1", libsql::params![payload.venta_id])

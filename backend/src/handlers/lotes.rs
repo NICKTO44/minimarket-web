@@ -1,15 +1,15 @@
-use axum::{extract::{State, Path, Query}, Json, http::StatusCode};
+use axum::{extract::{Extension, Path, Query}, Json, http::StatusCode};
 use std::sync::Arc;
 use serde::Deserialize;
 
-use crate::AppState;
+use crate::tenants::TenantDb;
 use crate::models::lote::{Lote, NuevoLote, LoteAlerta, LoteAccionResponse};
 
 pub async fn agregar_lote(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<NuevoLote>,
 ) -> Result<Json<Lote>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     conn.execute(
         "INSERT INTO lotes_producto (producto_id, cantidad, fecha_vencimiento, numero_lote) VALUES (?1, ?2, ?3, ?4)",
@@ -31,10 +31,10 @@ pub async fn agregar_lote(
 }
 
 pub async fn obtener_lotes_de_producto(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Path(producto_id): Path<i64>,
 ) -> Result<Json<Vec<Lote>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
       let mut rows = conn
         .query(
@@ -71,11 +71,11 @@ pub struct HorizonteQuery {
 // misma lógica que Lubricentro, pero a nivel de todo el negocio, no
 // de un solo producto. Por defecto, 15 días de horizonte.
 pub async fn lotes_por_vencer(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Query(params): Query<HorizonteQuery>,
 ) -> Result<Json<Vec<LoteAlerta>>, StatusCode> {
     let dias_horizonte = params.dias.unwrap_or(15);
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query(
@@ -108,10 +108,10 @@ pub async fn lotes_por_vencer(
 }
 
 pub async fn descartar_lote(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Path(lote_id): Path<i64>,
 ) -> Result<Json<LoteAccionResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     conn.execute(
         "UPDATE lotes_producto SET activo = 0, cantidad = 0 WHERE id = ?1",

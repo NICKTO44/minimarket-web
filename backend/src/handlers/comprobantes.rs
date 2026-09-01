@@ -1,8 +1,8 @@
-use axum::{extract::{State, Query}, Json, http::StatusCode};
+use axum::{extract::{Extension, Query}, Json, http::StatusCode};
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::AppState;
+use crate::tenants::TenantDb;
 use crate::models::comprobante::ComprobanteResumen;
 
 #[derive(Deserialize)]
@@ -12,10 +12,10 @@ pub struct FiltrosComprobante {
 }
 
 pub async fn listar_comprobantes(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Query(filtros): Query<FiltrosComprobante>,
 ) -> Result<Json<Vec<ComprobanteResumen>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut sql = String::from(
         "SELECT ce.id, v.id, v.folio, COALESCE(ce.tipo, 'NINGUNO'), ce.serie, ce.numero,

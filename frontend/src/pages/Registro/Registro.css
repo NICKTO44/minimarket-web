@@ -1,0 +1,27 @@
+.registro-form {
+  max-width: 380px;
+}
+
+.registro-campo-usuario {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.registro-usuario-estado {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 2px;
+}
+
+.registro-usuario-estado.verificando {
+  color: #9ca3af;
+}
+
+.registro-usuario-estado.disponible {
+  color: #15803d;
+}
+
+.registro-usuario-estado.ocupado {
+  color: #b91c1c;
+}

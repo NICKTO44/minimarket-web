@@ -1,9 +1,8 @@
-use axum::{extract::State, Json, http::StatusCode};
-use std::sync::Arc;
+use axum::{extract::Extension, Json, http::StatusCode};
 use chrono::Local;
 
-use crate::AppState;
 use crate::models::venta::{NuevaVenta, VentaResult};
+use crate::tenants::TenantDb;
 
 // Descuenta stock por FEFO: recorre lotes activos ordenados por fecha de
 // vencimiento y va restando hasta cubrir la cantidad vendida.
@@ -67,10 +66,10 @@ async fn descontar_stock_simple(
 }
 
 pub async fn procesar_venta(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<std::sync::Arc<TenantDb>>,
     Json(payload): Json<NuevaVenta>,
 ) -> Result<Json<VentaResult>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // 1. Verificar caja abierta
     let mut rows_caja = conn

@@ -1,9 +1,10 @@
 use axum::{
+    http::HeaderValue,
     routing::{get, post},
     Router,
 };
 use std::sync::Arc;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{AllowOrigin, CorsLayer, Any};
 use tower_http::services::ServeDir;
 use libsql::Builder;
 
@@ -12,10 +13,15 @@ mod handlers;
 mod logica;
 mod middleware_auth;
 mod estado_impresion;
+mod tenants;
+mod rate_limit;
+mod crypto;
 
 pub struct AppState {
     pub db: libsql::Database,
+    pub tiendas: tenants::RegistroTiendas,
     pub estado_impresion: Arc<estado_impresion::EstadoImpresion>,
+    pub limitador_login: Arc<rate_limit::LimitadorIntentos>,
 }
 
 async fn health() -> &'static str {
@@ -31,6 +37,10 @@ async fn main() {
     std::env::var("JWT_SECRET").expect("Falta JWT_SECRET en .env (agrega una clave larga y aleatoria)");
     std::env::var("AGENTE_IMPRESION_TOKEN").expect("Falta AGENTE_IMPRESION_TOKEN en .env (token para el agente de impresión)");
 
+    let central_db_url = std::env::var("CENTRAL_DATABASE_URL").expect("Falta CENTRAL_DATABASE_URL en .env");
+    let central_db_token = std::env::var("CENTRAL_AUTH_TOKEN").expect("Falta CENTRAL_AUTH_TOKEN en .env");
+    let clave_cifrado = crypto::cargar_clave_desde_env();
+
     std::fs::create_dir_all("uploads/productos").ok();
 
     let db = Builder::new_remote(db_url, db_token)
@@ -44,21 +54,49 @@ async fn main() {
         .expect("La conexión a Turso no respondió");
     println!("Conectado a Turso correctamente");
 
+    let central_db = Builder::new_remote(central_db_url, central_db_token)
+        .build()
+        .await
+        .expect("No se pudo conectar a la base central");
+
+    let conn_central = central_db.connect().expect("No se pudo abrir conexión a la base central");
+    conn_central
+        .query("SELECT 1", ())
+        .await
+        .expect("La base central no respondió");
+    println!("Conectado a la base central correctamente");
+
     let state = Arc::new(AppState {
         db,
+        tiendas: tenants::RegistroTiendas::nuevo(central_db, clave_cifrado),
         estado_impresion: estado_impresion::EstadoImpresion::nuevo(),
+        limitador_login: rate_limit::LimitadorIntentos::nuevo(),
     });
 
+    // Solo estos dos orígenes pueden llamar a la API — tu frontend real
+    // en Vercel, y tu entorno de desarrollo local. Cuando tengas dominio
+    // propio para minimarket-web, se agrega aquí.
+    let origenes_permitidos = AllowOrigin::list([
+        HeaderValue::from_static("https://frontend-sigma-three-23.vercel.app"),
+        HeaderValue::from_static("http://localhost:5173"),
+    ]);
+
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(origenes_permitidos)
         .allow_methods(Any)
         .allow_headers(Any);
 
+    let rutas_autenticacion = Router::new()
+        .route("/login", post(handlers::auth::login))
+        .route("/registro", post(handlers::registro::registrar_negocio))
+        .route("/registro/verificar-usuario", get(handlers::registro::verificar_usuario))
+        .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_intentos));
+
     let rutas_publicas = Router::new()
         .route("/", get(health))
-        .route("/login", post(handlers::auth::login))
         .route("/agente-impresion/ws", get(handlers::agente_impresion::agente_websocket))
-        .nest_service("/uploads", ServeDir::new("uploads"));
+        .nest_service("/uploads", ServeDir::new("uploads"))
+        .merge(rutas_autenticacion);
 
     let rutas_protegidas = Router::new()
         .route("/productos", get(handlers::productos::listar_productos))
@@ -106,7 +144,7 @@ async fn main() {
         .route("/usuarios", get(handlers::configuracion::listar_usuarios))
         .route("/usuarios", post(handlers::configuracion::crear_usuario))
         .route("/usuarios/:id/desactivar", post(handlers::configuracion::desactivar_usuario))
-        .route_layer(axum::middleware::from_fn(middleware_auth::requiere_auth));
+        .route_layer(axum::middleware::from_fn_with_state(state.clone(), middleware_auth::requiere_auth));
 
     let app = rutas_publicas
         .merge(rutas_protegidas)

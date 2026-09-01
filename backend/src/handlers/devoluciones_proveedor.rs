@@ -1,16 +1,16 @@
-use axum::{extract::{State, Path, Query}, Json, http::StatusCode};
+use axum::{extract::{Extension, Path, Query}, Json, http::StatusCode};
 use std::sync::Arc;
 use chrono::Local;
 use serde::Deserialize;
 
-use crate::AppState;
+use crate::tenants::TenantDb;
 use crate::models::proveedor::*;
 
 pub async fn registrar_devolucion(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<RegistrarDevolucionProveedorRequest>,
 ) -> Result<Json<DevolucionProveedorResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut r_estado = conn.query("SELECT estado, proveedor_id FROM compras WHERE id = ?1", libsql::params![payload.compra_id])
         .await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -74,11 +74,11 @@ pub async fn registrar_devolucion(
 }
 
 pub async fn resolver_devolucion(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Path(id): Path<i64>,
     Json(payload): Json<ResolverDevolucionProveedorRequest>,
 ) -> Result<Json<DevolucionProveedorResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut r1 = conn.query("SELECT estado FROM devoluciones_proveedor WHERE id = ?1", libsql::params![id])
         .await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -134,10 +134,10 @@ pub struct FiltroCompra {
 }
 
 pub async fn listar_devoluciones(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Query(params): Query<FiltroCompra>,
 ) -> Result<Json<Vec<DevolucionProveedorResumen>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (query, filtra) = match params.compra_id {
         Some(_) => (

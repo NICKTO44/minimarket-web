@@ -1,15 +1,15 @@
-use axum::{extract::{State, Path}, Json, http::StatusCode};
+use axum::{extract::{Extension, Path}, Json, http::StatusCode};
 use std::sync::Arc;
 use chrono::Local;
 
-use crate::AppState;
+use crate::tenants::TenantDb;
 use crate::models::devolucion::*;
 
 pub async fn buscar_venta_para_devolucion(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Path(identificador): Path<String>,
 ) -> Result<Json<VentaParaDevolucion>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let texto = identificador.trim().to_uppercase();
 
     let mut venta_id_opt: Option<i64> = None;
@@ -107,10 +107,10 @@ pub async fn buscar_venta_para_devolucion(
 }
 
 pub async fn procesar_devolucion(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<NuevaDevolucion>,
 ) -> Result<Json<DevolucionResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let fecha_actual = Local::now().format("%Y%m%d").to_string();
     let query_folio = format!(

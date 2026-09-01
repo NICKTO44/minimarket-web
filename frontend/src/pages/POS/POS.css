@@ -26,8 +26,7 @@
   grid-template-columns: 1fr;
   gap: 12px;
   padding: 12px;
-  position: fixed;
-  inset: 0;
+  height: 100vh;
   background: var(--pos-bg);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--pos-texto);

@@ -11,6 +11,12 @@ use crate::models::auth::Claims;
 pub struct LoginRequest {
     pub usuario: String,
     pub password: String,
+    /// Identificador único del negocio (ej. "bodega-juan"), si el navegador
+    /// ya lo recuerda de un login anterior. Si viene vacío o ausente, se
+    /// asume que es el primer login de este dispositivo, y se busca el
+    /// usuario en el índice central (ahí solo está el súper admin de cada
+    /// negocio, que es el único registrado ahí).
+    pub tienda: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -22,10 +28,17 @@ pub struct UsuarioSesion {
 }
 
 #[derive(Serialize)]
+pub struct TiendaSesion {
+    pub identificador: String,
+    pub nombre_negocio: String,
+}
+
+#[derive(Serialize)]
 pub struct LoginResponse {
     pub ok: bool,
     pub token: String,
     pub usuario: UsuarioSesion,
+    pub tienda: TiendaSesion,
 }
 
 pub async fn login(
@@ -36,7 +49,23 @@ pub async fn login(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // 1. Resolver a qué negocio pertenece este login.
+    let tienda = match payload.tienda.as_deref() {
+        Some(identificador) if !identificador.trim().is_empty() => {
+            state.tiendas.buscar_por_identificador(identificador).await
+        }
+        _ => state.tiendas.buscar_por_usuario(&payload.usuario).await,
+    }
+    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+    // 2. Conectarse a la base de ESE negocio y validar las credenciales ahí.
+    let db_tienda = state
+        .tiendas
+        .conectar(&tienda)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let conn = db_tienda.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query(
@@ -69,6 +98,7 @@ pub async fn login(
         username: payload.usuario.clone(),
         rol_id,
         nombre_completo: nombre_completo.clone(),
+        tienda_id: tienda.id,
         exp,
     };
 
@@ -83,6 +113,10 @@ pub async fn login(
             username: payload.usuario,
             nombre_completo,
             rol_id,
+        },
+        tienda: TiendaSesion {
+            identificador: tienda.identificador,
+            nombre_negocio: tienda.nombre_negocio,
         },
     }))
 }

@@ -10,6 +10,15 @@ function obtenerToken() {
   }
 }
 
+// Los endpoints públicos (login/registro/verificar-usuario) devuelven el
+// error a veces como JSON ({ message }) y a veces como texto plano, según
+// el tipo de StatusCode que use el handler en el backend. Esta función lee
+// cualquiera de los dos formatos sin romperse.
+async function leerRespuesta(res) {
+  const isJson = res.headers.get('content-type')?.includes('application/json');
+  return isJson ? res.json().catch(() => null) : res.text();
+}
+
 async function request(path, options = {}) {
   const token = obtenerToken();
   const headers = {
@@ -26,8 +35,7 @@ async function request(path, options = {}) {
     throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
   }
 
-  const isJson = res.headers.get('content-type')?.includes('application/json');
-  const data = isJson ? await res.json().catch(() => null) : await res.text();
+  const data = await leerRespuesta(res);
 
   if (!res.ok) {
     const mensaje = typeof data === 'string' ? data : data?.message || 'Error en la solicitud';
@@ -37,15 +45,37 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  login: async (usuario, password) => {
+  login: async (usuario, password, tienda) => {
     const res = await fetch(`${API_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario, password }),
+      body: JSON.stringify({ usuario, password, tienda: tienda || null }),
     });
-    const data = await res.json().catch(() => null);
+    const data = await leerRespuesta(res);
     if (!res.ok) {
-      throw new Error('Usuario o contraseña incorrectos');
+      const mensaje = typeof data === 'string' ? data : data?.message;
+      throw new Error(mensaje || 'Usuario o contraseña incorrectos');
+    }
+    return data;
+  },
+  registro: async ({ nombre_negocio, nombre_completo, usuario, password, ruc }) => {
+    const res = await fetch(`${API_URL}/registro`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre_negocio, nombre_completo, usuario, password, ruc: ruc || null }),
+    });
+    const data = await leerRespuesta(res);
+    if (!res.ok) {
+      const mensaje = typeof data === 'string' ? data : data?.message;
+      throw new Error(mensaje || 'No se pudo registrar el negocio');
+    }
+    return data;
+  },
+  verificarUsuario: async (usuario) => {
+    const res = await fetch(`${API_URL}/registro/verificar-usuario?usuario=${encodeURIComponent(usuario)}`);
+    const data = await leerRespuesta(res);
+    if (!res.ok || typeof data !== 'object' || data === null) {
+      return { disponible: null };
     }
     return data;
   },
@@ -94,7 +124,7 @@ export const api = {
     const params = new URLSearchParams(filtros).toString();
     return request(`/comprobantes${params ? `?${params}` : ''}`);
   },
-    productoSubirImagen: async (id, archivo) => {
+  productoSubirImagen: async (id, archivo) => {
     const token = obtenerToken();
     const formData = new FormData();
     formData.append('imagen', archivo);

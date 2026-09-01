@@ -1,14 +1,14 @@
-use axum::{extract::{State, Path}, Json, http::StatusCode};
+use axum::{extract::{Extension, Path}, Json, http::StatusCode};
 use std::sync::Arc;
 use chrono::Local;
 
-use crate::AppState;
+use crate::tenants::TenantDb;
 use crate::models::proveedor::*;
 
 pub async fn obtener_proveedores(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Result<Json<Vec<Proveedor>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query(
@@ -39,10 +39,10 @@ pub async fn obtener_proveedores(
 }
 
 pub async fn agregar_proveedor(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<NuevoProveedor>,
 ) -> Result<Json<Proveedor>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let tipo_doc = payload.tipo_documento.clone().unwrap_or_else(|| "RUC".to_string());
 
     conn.execute(
@@ -66,10 +66,10 @@ pub async fn agregar_proveedor(
 }
 
 pub async fn crear_compra(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<NuevaCompraRequest>,
 ) -> Result<Json<CompraResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let subtotal: f64 = payload.items.iter().map(|i| i.precio_compra * i.cantidad).sum();
     let descuento = payload.descuento.unwrap_or(0.0);
@@ -135,10 +135,10 @@ pub async fn crear_compra(
 }
 
 pub async fn recibir_mercaderia(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<RecibirMercaderiaRequest>,
 ) -> Result<Json<CompraResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     for item in &payload.items {
         let conforme = item.cantidad_conforme.min(item.cantidad_recibida);
@@ -245,9 +245,9 @@ pub async fn recibir_mercaderia(
 }
 
 pub async fn listar_compras(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Result<Json<Vec<CompraResumen>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query(
@@ -284,10 +284,10 @@ pub async fn listar_compras(
 }
 
 pub async fn detalle_compra(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Path(id): Path<i64>,
 ) -> Result<Json<CompraDetalle>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut r1 = conn.query(
         "SELECT c.id, c.folio, p.nombre, c.estado FROM compras c JOIN proveedores p ON c.proveedor_id = p.id WHERE c.id = ?1",

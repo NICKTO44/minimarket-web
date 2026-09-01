@@ -1,8 +1,8 @@
-use axum::{extract::{State, Query, Path}, Json, http::StatusCode};
+use axum::{extract::{Extension, Query, Path}, Json, http::StatusCode};
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::AppState;
+use crate::tenants::TenantDb;
 use crate::models::cliente::*;
 
 #[derive(Deserialize)]
@@ -11,7 +11,7 @@ pub struct BusquedaClientes {
 }
 
 pub async fn buscar_clientes(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Query(params): Query<BusquedaClientes>,
 ) -> Result<Json<Vec<Cliente>>, StatusCode> {
     let texto = params.q.unwrap_or_default();
@@ -20,7 +20,7 @@ pub async fn buscar_clientes(
     }
     let filtro = format!("%{}%", texto);
 
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut rows = conn
         .query(
             "SELECT id, tipo_documento, numero_documento, nombre_razon_social, telefono, email, direccion, activo
@@ -50,9 +50,9 @@ pub async fn buscar_clientes(
 }
 
 pub async fn listar_clientes(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Result<Json<Vec<Cliente>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query(
@@ -81,10 +81,10 @@ pub async fn listar_clientes(
 }
 
 pub async fn crear_cliente(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<NuevoCliente>,
 ) -> Result<Json<Cliente>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     conn.execute(
         "INSERT INTO clientes (tipo_documento, numero_documento, nombre_razon_social, telefono, email, direccion)
@@ -116,11 +116,11 @@ pub async fn crear_cliente(
 }
 
 pub async fn actualizar_cliente(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Path(id): Path<i64>,
     Json(payload): Json<ActualizarCliente>,
 ) -> Result<Json<ClienteResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     conn.execute(
         "UPDATE clientes SET tipo_documento=?1, numero_documento=?2, nombre_razon_social=?3,
@@ -136,10 +136,10 @@ pub async fn actualizar_cliente(
 }
 
 pub async fn desactivar_cliente(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Path(id): Path<i64>,
 ) -> Result<Json<ClienteResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     conn.execute(
         "UPDATE clientes SET activo = 0, fecha_actualizacion = datetime('now','localtime') WHERE id = ?1",

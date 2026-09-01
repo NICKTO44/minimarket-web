@@ -1,13 +1,13 @@
-use axum::{extract::{State, Path}, Json, http::StatusCode};
+use axum::{extract::{Extension, Path}, Json, http::StatusCode};
 use std::sync::Arc;
 
-use crate::AppState;
+use crate::tenants::TenantDb;
 use crate::models::configuracion::*;
 
 pub async fn obtener_configuracion(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Result<Json<ConfiguracionTienda>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query(
@@ -38,10 +38,10 @@ pub async fn obtener_configuracion(
 }
 
 pub async fn actualizar_configuracion(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<ActualizarConfiguracion>,
 ) -> Result<Json<AccionResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     conn.execute(
         "UPDATE configuracion_tienda SET nombre_tienda=?1, direccion=?2, telefono=?3, email=?4,
@@ -58,9 +58,9 @@ pub async fn actualizar_configuracion(
 }
 
 pub async fn listar_usuarios(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Result<Json<Vec<UsuarioResumen>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query(
@@ -88,10 +88,10 @@ pub async fn listar_usuarios(
 }
 
 pub async fn crear_usuario(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<NuevoUsuario>,
 ) -> Result<Json<AccionResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let hash = bcrypt::hash(&payload.password, bcrypt::DEFAULT_COST)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al encriptar contraseña: {}", e)))?;
@@ -105,10 +105,10 @@ pub async fn crear_usuario(
 }
 
 pub async fn desactivar_usuario(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Path(id): Path<i64>,
 ) -> Result<Json<AccionResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     conn.execute(
         "UPDATE usuarios SET activo = 0 WHERE id = ?1",

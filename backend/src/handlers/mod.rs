@@ -14,3 +14,4 @@ pub mod comprobantes;
 pub mod configuracion;
 pub mod imagenes;
 pub mod agente_impresion;
+pub mod registro;

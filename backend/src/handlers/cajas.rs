@@ -1,16 +1,16 @@
-use axum::{extract::{State, Query}, Json, http::StatusCode};
+use axum::{extract::{Extension, Query}, Json, http::StatusCode};
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::AppState;
+use crate::tenants::TenantDb;
 use crate::models::caja::{AbrirCajaRequest, CerrarCajaRequest, MovimientoCajaRequest, CajaResponse};
 use crate::models::caja::CajaEstado;
 
 pub async fn abrir_caja(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<AbrirCajaRequest>,
 ) -> Result<Json<CajaResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut rows = conn
         .query(
@@ -51,10 +51,10 @@ pub async fn abrir_caja(
 }
 
 pub async fn cerrar_caja(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<CerrarCajaRequest>,
 ) -> Result<Json<CajaResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut rows = conn
         .query(
@@ -120,10 +120,10 @@ pub async fn cerrar_caja(
 }
 
 pub async fn registrar_movimiento(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<MovimientoCajaRequest>,
 ) -> Result<Json<CajaResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     if !["RETIRO", "INGRESO", "GASTO"].contains(&payload.tipo.as_str()) {
         return Err((StatusCode::BAD_REQUEST, "Tipo de movimiento no válido".into()));
@@ -166,9 +166,9 @@ pub async fn registrar_movimiento(
 }
 
 pub async fn obtener_caja_abierta(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Json<Option<CajaEstado>> {
-    let conn = match state.db.connect() {
+    let conn = match tenant.0.connect() {
         Ok(c) => c,
         Err(_) => return Json(None),
     };
@@ -215,10 +215,10 @@ pub struct RangoFechas {
 }
 
 pub async fn listar_cajas(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Query(params): Query<RangoFechas>,
 ) -> Result<Json<Vec<crate::models::caja::CajaHistorial>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query(

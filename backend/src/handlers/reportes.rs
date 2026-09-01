@@ -1,8 +1,8 @@
-use axum::{extract::{State, Query}, Json, http::StatusCode};
+use axum::{extract::{Extension, Query}, Json, http::StatusCode};
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::AppState;
+use crate::tenants::TenantDb;
 use crate::models::reporte::*;
 
 #[derive(Deserialize)]
@@ -12,10 +12,10 @@ pub struct RangoFechas {
 }
 
 pub async fn ventas_por_rango(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Query(rango): Query<RangoFechas>,
 ) -> Result<Json<Vec<VentaResumen>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query(
@@ -45,10 +45,10 @@ pub async fn ventas_por_rango(
 }
 
 pub async fn productos_mas_vendidos(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Query(rango): Query<RangoFechas>,
 ) -> Result<Json<Vec<ProductoVendido>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query(
@@ -78,10 +78,10 @@ pub async fn productos_mas_vendidos(
 }
 
 pub async fn estadisticas_completas(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Query(rango): Query<RangoFechas>,
 ) -> Result<Json<EstadisticasCompletas>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut r1 = conn.query(
         "SELECT COUNT(*), COALESCE(SUM(total),0.0), COALESCE(AVG(total),0.0)

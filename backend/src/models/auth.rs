@@ -6,5 +6,6 @@ pub struct Claims {
     pub username: String,
     pub rol_id: i64,
     pub nombre_completo: String,
+    pub tienda_id: i64,
     pub exp: usize,
 }

@@ -1,13 +1,16 @@
-use axum::{extract::{State, Path}, Json, http::StatusCode};
+use axum::{extract::{Extension, Path}, Json, http::StatusCode};
 use std::sync::Arc;
 
-use crate::AppState;
+use crate::tenants::TenantDb;
 use crate::models::producto::*;
 
 pub async fn listar_productos(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Result<Json<Vec<Producto>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|e| {
+        eprintln!("❌ Error conectando en listar_productos: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let mut rows = conn
         .query(
@@ -21,7 +24,10 @@ pub async fn listar_productos(
             (),
         )
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            eprintln!("❌ Error en el SELECT de listar_productos: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     let mut productos = Vec::new();
     while let Some(row) = rows.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
@@ -48,9 +54,9 @@ pub async fn listar_productos(
 }
 
 pub async fn productos_stock_bajo(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Result<Json<Vec<Producto>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query(
@@ -89,9 +95,9 @@ pub async fn productos_stock_bajo(
 }
 
 pub async fn obtener_categorias(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Result<Json<Vec<Categoria>>, StatusCode> {
-    let conn = state.db.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut rows = conn
         .query("SELECT id, nombre FROM categorias WHERE activo = 1 ORDER BY nombre", ())
@@ -114,10 +120,10 @@ pub async fn obtener_categorias(
 // primer lote. Mismo patrón defensivo que usaba Lubricentro con
 // productos que tienen variantes/tallas.
 pub async fn agregar_producto(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<NuevoProducto>,
 ) -> Result<Json<ProductoResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let lleva_vencimiento = payload.lleva_vencimiento.unwrap_or(false);
     let stock_inicial = if lleva_vencimiento { 0.0 } else { payload.stock };
@@ -149,11 +155,11 @@ pub async fn agregar_producto(
 // el stock real con lo que dice FEFO. Mismo patrón que usaba Lubricentro
 // con productos de variantes en actualizar_producto.
 pub async fn actualizar_producto(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Path(id): Path<i64>,
     Json(payload): Json<ActualizarProducto>,
 ) -> Result<Json<ProductoResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let lleva_vencimiento = payload.lleva_vencimiento.unwrap_or(false);
 
@@ -196,10 +202,10 @@ pub async fn actualizar_producto(
 // llamando a este mismo endpoint, que devuelve success:false si no se
 // puede borrar, y el frontend decide ofrecer "desactivar" en su lugar.
 pub async fn eliminar_producto(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Path(id): Path<i64>,
 ) -> Result<Json<ProductoResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut r1 = conn.query("SELECT COUNT(*) FROM detalles_venta WHERE producto_id = ?1", libsql::params![id])
         .await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -232,13 +238,13 @@ pub async fn eliminar_producto(
 }
 
 pub async fn desactivar_producto(
-    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
     Path(id): Path<i64>,
 ) -> Result<Json<ProductoResponse>, (StatusCode, String)> {
-    let conn = state.db.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     conn.execute(
-        "UPDATE productos SET activo = 0, fecha_actualizacion = datetime('now','localtime') WHERE id = ?1",
+        "UPDATE productos SET activo = 0, fecha_actualizacion = datetime('now','localtime') WHERE id = 1",
         libsql::params![id],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al desactivar: {}", e)))?;
 
