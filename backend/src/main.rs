@@ -138,6 +138,7 @@ async fn main() {
         .route("/reportes/estadisticas", get(handlers::reportes::estadisticas_completas))
         .route("/comprobantes", post(handlers::facturacion::emitir_comprobante))
         .route("/comprobantes", get(handlers::comprobantes::listar_comprobantes))
+        .route("/comprobantes/:id/pdf", get(handlers::comprobantes::descargar_pdf))
         .route("/impresora/imprimir", post(handlers::impresora::imprimir_boleta))
         .route("/configuracion", get(handlers::configuracion::obtener_configuracion))
         .route("/configuracion", axum::routing::put(handlers::configuracion::actualizar_configuracion))

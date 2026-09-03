@@ -33,6 +33,8 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
   const [mensaje, setMensaje] = useState(null);
   const [ultimaVentaParaImprimir, setUltimaVentaParaImprimir] = useState(null);
   const [mostrarModalVenta, setMostrarModalVenta] = useState(false);
+  const [pdfVisible, setPdfVisible] = useState(null);
+  const iframePdfRef = useRef(null);
 
   const [nuevoTipoDocumento, setNuevoTipoDocumento] = useState('DNI');
   const [nuevoDocumento, setNuevoDocumento] = useState('');
@@ -319,6 +321,24 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
       ? 'RUC o razón social... (Enter si no aparece)'
       : 'Documento o nombre... (Enter si no aparece)';
 
+  // Si FacturaLibre emitió de verdad el comprobante (con su PDF oficial
+  // con logo/QR), lo mostramos incrustado en un modal propio del sistema
+  // (nada de pestaña/ventana nueva, que se cruza con el flujo del POS) —
+  // desde ahí mismo se imprime con un botón. Sin PDF real (nota simple),
+  // caemos al ticket casero de siempre con window.print().
+  const imprimirComprobante = () => {
+    const comp = ultimaVentaParaImprimir?.comprobante;
+    if (comp?.enlace_pdf && comp?.comprobante_id) {
+      setPdfVisible(api.comprobantePdfUrl(comp.comprobante_id));
+    } else {
+      window.print();
+    }
+  };
+
+  const imprimirPdfEmbebido = () => {
+    iframePdfRef.current?.contentWindow?.print();
+  };
+
   const mostrarFormularioNuevo = sinResultadosCliente && !buscandoCliente;
   const mostrarSeccionCliente = clienteEsObligatorio || mostrarBusquedaCliente || cliente;
 
@@ -556,7 +576,7 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
           {mensaje && <p className={`pos-mensaje pos-mensaje-${mensaje.tipo}`}>{mensaje.texto}</p>}
 
           {ultimaVentaParaImprimir && !mostrarModalVenta && (
-            <button className="pos-imprimir" onClick={() => window.print()}>
+            <button className="pos-imprimir" onClick={imprimirComprobante}>
               Imprimir última boleta · {ultimaVentaParaImprimir.venta.folio}
             </button>
           )}
@@ -592,7 +612,7 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
             )}
 
             <div className="pos-venta-modal-acciones">
-              <button className="pos-venta-modal-imprimir" onClick={() => window.print()}>
+              <button className="pos-venta-modal-imprimir" onClick={imprimirComprobante}>
                 🖨 Imprimir
               </button>
               <button
@@ -604,6 +624,33 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
                 }}
               >
                 Nueva venta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pdfVisible && (
+        <div className="pos-pdf-modal-overlay">
+          <div className="pos-pdf-modal">
+            <div className="pos-pdf-modal-header">
+              <h2>Comprobante</h2>
+              <button
+                type="button"
+                className="pos-carrito-cerrar"
+                onClick={() => setPdfVisible(null)}
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+            <p className="pos-pdf-modal-ayuda">
+              Para imprimir, usa el ícono 🖨 que trae el visor de PDF arriba del documento.
+            </p>
+            <iframe ref={iframePdfRef} src={pdfVisible} title="Comprobante" />
+            <div className="pos-pdf-modal-acciones">
+              <button className="pos-pdf-modal-cerrar" onClick={() => setPdfVisible(null)}>
+                Cerrar
               </button>
             </div>
           </div>

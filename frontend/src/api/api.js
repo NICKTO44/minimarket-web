@@ -124,6 +124,12 @@ export const api = {
     const params = new URLSearchParams(filtros).toString();
     return request(`/comprobantes${params ? `?${params}` : ''}`);
   },
+  // El <iframe> del PDF no puede mandar cabeceras — por eso el token va
+  // acá en la URL, en vez de como Authorization normal.
+  comprobantePdfUrl: (id) => {
+    const token = obtenerToken();
+    return `${API_URL}/comprobantes/${id}/pdf${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
   productoSubirImagen: async (id, archivo) => {
     const token = obtenerToken();
     const formData = new FormData();

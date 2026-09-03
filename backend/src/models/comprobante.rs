@@ -12,4 +12,6 @@ pub struct ComprobanteResumen {
     pub monto: f64,
     pub estado: Option<String>,
     pub fecha_emision: String,
+    pub mensaje_sunat: Option<String>,
+    pub enlace_pdf: Option<String>,
 }

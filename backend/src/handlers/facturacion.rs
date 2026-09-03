@@ -132,12 +132,12 @@ pub async fn emitir_comprobante(
 
     conn.execute(
         "INSERT INTO comprobantes_electronicos
-            (venta_id, tipo, proveedor, serie, numero, cliente_documento, cliente_nombre, estado, mensaje_sunat, enlace_cdr, external_id, hash)
-         VALUES (?1, ?2, 'FACTURALIBRE', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            (venta_id, tipo, proveedor, serie, numero, cliente_documento, cliente_nombre, estado, mensaje_sunat, enlace_pdf, enlace_cdr, external_id, hash)
+         VALUES (?1, ?2, 'FACTURALIBRE', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         libsql::params![
             payload.venta_id, payload.tipo.clone(), resultado.serie.clone(), numero,
             payload.cliente_documento.clone(), payload.cliente_nombre.clone(), estado, resultado.mensaje.clone(),
-            resultado.enlace_cdr.clone(), resultado.external_id.clone(), resultado.hash.clone()
+            resultado.enlace_pdf.clone(), resultado.enlace_cdr.clone(), resultado.external_id.clone(), resultado.hash.clone()
         ],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al guardar comprobante: {}", e)))?;
 
@@ -151,5 +151,6 @@ pub async fn emitir_comprobante(
         numero,
         estado: estado.to_string(),
         mensaje: resultado.mensaje,
+        enlace_pdf: resultado.enlace_pdf,
     }))
 }

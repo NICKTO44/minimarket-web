@@ -1,4 +1,4 @@
-use axum::{extract::{Extension, Query}, Json, http::StatusCode};
+use axum::{extract::{Extension, Query, Path}, http::{StatusCode, header}, response::{IntoResponse, Response}, body::Body, Json};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -19,7 +19,7 @@ pub async fn listar_comprobantes(
 
     let mut sql = String::from(
         "SELECT ce.id, v.id, v.folio, COALESCE(ce.tipo, 'NINGUNO'), ce.serie, ce.numero,
-                c.nombre_razon_social, v.total, ce.estado, v.fecha_hora
+                c.nombre_razon_social, v.total, ce.estado, v.fecha_hora, ce.mensaje_sunat, ce.enlace_pdf
          FROM ventas v
          LEFT JOIN comprobantes_electronicos ce ON ce.venta_id = v.id
          LEFT JOIN clientes c ON c.id = v.cliente_id
@@ -57,8 +57,58 @@ pub async fn listar_comprobantes(
             monto: row.get(7).unwrap_or_default(),
             estado: row.get(8).ok(),
             fecha_emision: row.get(9).unwrap_or_default(),
+            mensaje_sunat: row.get(10).ok(),
+            enlace_pdf: row.get(11).ok(),
         });
     }
 
     Ok(Json(comprobantes))
+}
+
+/// Puente para el PDF: en vez de que el navegador le pida el PDF directo
+/// a FacturaLibre (que fuerza descarga por sus propias cabeceras), se lo
+/// pide este backend y se lo re-entrega con cabeceras propias que sí
+/// permiten mostrarlo embebido (Content-Disposition: inline).
+pub async fn descargar_pdf(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Path(id): Path<i64>,
+) -> Result<Response, (StatusCode, String)> {
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut rows = conn
+        .query("SELECT enlace_pdf FROM comprobantes_electronicos WHERE id = ?1", libsql::params![id])
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let enlace: Option<String> = match rows.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        Some(row) => row.get(0).ok(),
+        None => return Err((StatusCode::NOT_FOUND, "Comprobante no encontrado".into())),
+    };
+
+    let enlace = enlace.ok_or((StatusCode::NOT_FOUND, "Este comprobante no tiene PDF disponible".into()))?;
+
+    let cliente = reqwest::Client::new();
+    let resp = cliente
+        .get(&enlace)
+        .send()
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("No se pudo obtener el PDF de FacturaLibre: {}", e)))?;
+
+    if !resp.status().is_success() {
+        return Err((StatusCode::BAD_GATEWAY, "FacturaLibre no devolvió el PDF correctamente".into()));
+    }
+
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error leyendo el PDF: {}", e)))?;
+
+    let respuesta = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/pdf")
+        .header(header::CONTENT_DISPOSITION, "inline; filename=\"comprobante.pdf\"")
+        .body(Body::from(bytes))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(respuesta.into_response())
 }

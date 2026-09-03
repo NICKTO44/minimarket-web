@@ -853,3 +853,89 @@
     height: 48px;
   }
 }
+
+/* ===== Modal de PDF embebido (comprobante real de FacturaLibre) ===== */
+.pos-pdf-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+  padding: 16px;
+}
+
+.pos-pdf-modal {
+  background: white;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 720px;
+  height: 90vh;
+  height: 90dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pos-pdf-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--pos-borde);
+  flex-shrink: 0;
+}
+
+.pos-pdf-modal-header h2 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--pos-texto);
+}
+
+.pos-pdf-modal iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: #f4f5f7;
+}
+
+.pos-pdf-modal-acciones {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--pos-borde);
+  flex-shrink: 0;
+}
+
+.pos-pdf-modal-cerrar {
+  flex: 1;
+  padding: 12px;
+  border: 1.5px solid var(--pos-borde);
+  border-radius: 8px;
+  background: white;
+  color: var(--pos-texto-tenue);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pos-pdf-modal-imprimir {
+  flex: 2;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--pos-texto);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pos-pdf-modal-ayuda {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--pos-texto-tenue);
+  background: #f4f5f7;
+  border-bottom: 1px solid var(--pos-borde);
+  flex-shrink: 0;
+}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../../api/api';
 import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
@@ -11,6 +11,8 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
   const [filtroEstado, setFiltroEstado] = useState('');
   const [mensaje, setMensaje] = useState(null);
   const [ventaParaImprimir, setVentaParaImprimir] = useState(null);
+  const [pdfVisible, setPdfVisible] = useState(null);
+  const iframePdfRef = useRef(null);
 
   const cargar = () => {
     setCargando(true);
@@ -31,6 +33,17 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
 
   const reimprimir = async (comp) => {
     setMensaje(null);
+
+    // Si FacturaLibre emitió de verdad el comprobante (aceptado, con su
+    // propio PDF oficial con logo/QR), lo mostramos incrustado en un
+    // modal propio del sistema — sin abrir pestaña/ventana nueva.
+    if (comp.enlace_pdf && comp.id) {
+      setPdfVisible(api.comprobantePdfUrl(comp.id));
+      return;
+    }
+
+    // Sin PDF real (nota simple, o comprobante rechazado sin documento
+    // válido) — usamos nuestro ticket propio como respaldo.
     try {
       const detalle = await api.ventaParaDevolucion(comp.folio_venta);
       setVentaParaImprimir({
@@ -43,6 +56,10 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
     }
+  };
+
+  const imprimirPdfEmbebido = () => {
+    iframePdfRef.current?.contentWindow?.print();
   };
 
   return (
@@ -101,7 +118,10 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
                   <td>S/ {c.monto.toFixed(2)}</td>
                   <td>
                     {c.estado ? (
-                      <span className={`comp-badge comp-badge-${c.estado.toLowerCase()}`}>{c.estado}</span>
+                      <>
+                        <span className={`comp-badge comp-badge-${c.estado.toLowerCase()}`}>{c.estado}</span>
+                        {c.mensaje_sunat && <p className="comp-motivo">{c.mensaje_sunat}</p>}
+                      </>
                     ) : (
                       <span className="comp-badge comp-badge-ninguno">Sin comprobante</span>
                     )}
@@ -123,6 +143,33 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {pdfVisible && (
+        <div className="comp-pdf-modal-overlay">
+          <div className="comp-pdf-modal">
+            <div className="comp-pdf-modal-header">
+              <h2>Comprobante</h2>
+              <button
+                type="button"
+                className="comp-pdf-modal-x"
+                onClick={() => setPdfVisible(null)}
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+            <p className="comp-pdf-modal-ayuda">
+              Para imprimir, usa el ícono 🖨 que trae el visor de PDF arriba del documento.
+            </p>
+            <iframe ref={iframePdfRef} src={pdfVisible} title="Comprobante" />
+            <div className="comp-pdf-modal-acciones">
+              <button className="comp-pdf-modal-cerrar" onClick={() => setPdfVisible(null)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -11,6 +11,19 @@ use crate::models::auth::Claims;
 use crate::tenants::TenantDb;
 use crate::AppState;
 
+/// Saca el token del query string (?token=...) — usado solo por el <iframe>
+/// del PDF embebido, que no puede mandar cabeceras personalizadas.
+fn extraer_token_de_query(req: &Request) -> Option<String> {
+    req.uri().query().and_then(|q| {
+        q.split('&').find_map(|par| {
+            let mut it = par.splitn(2, '=');
+            let clave = it.next()?;
+            let valor = it.next()?;
+            (clave == "token").then(|| valor.to_string())
+        })
+    })
+}
+
 pub async fn requiere_auth(
     State(state): State<Arc<AppState>>,
     mut req: Request,
@@ -19,17 +32,19 @@ pub async fn requiere_auth(
     let auth_header = req
         .headers()
         .get(header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok());
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .map(|s| s.to_string());
 
-    let token = match auth_header {
-        Some(h) if h.starts_with("Bearer ") => &h[7..],
+    let token = match auth_header.or_else(|| extraer_token_de_query(&req)) {
+        Some(t) if !t.is_empty() => t,
         _ => return Err(StatusCode::UNAUTHORIZED),
     };
 
     let jwt_secret = std::env::var("JWT_SECRET").expect("Falta JWT_SECRET en .env");
 
     let datos = decode::<Claims>(
-        token,
+        &token,
         &DecodingKey::from_secret(jwt_secret.as_bytes()),
         &Validation::default(),
     )

@@ -17,4 +17,5 @@ pub struct ComprobanteResponse {
     pub numero: i64,
     pub estado: String,
     pub mensaje: String,
+    pub enlace_pdf: Option<String>,
 }
