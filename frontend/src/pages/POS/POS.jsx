@@ -3,8 +3,10 @@ import { api, API_URL } from '../../api/api';
 import './POS.css';
 import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
+import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
 
 const DEBOUNCE_BUSQUEDA_VIVA_MS = 400;
+const DURACION_MENSAJE_ESCANEO_MS = 2500;
 
 const REGLAS_DOCUMENTO = {
   DNI: { maxLength: 8, soloNumeros: true, label: 'DNI (8 dígitos)' },
@@ -41,6 +43,10 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [creandoCliente, setCreandoCliente] = useState(false);
   const [errorCliente, setErrorCliente] = useState('');
+
+  // --- Escáner de código de barras por cámara ---
+  const [escanerAbierto, setEscanerAbierto] = useState(false);
+  const [ultimoEscaneo, setUltimoEscaneo] = useState(null);
 
   useEffect(() => {
     api.productos().then(setProductos).catch((e) => setMensaje({ tipo: 'error', texto: e.message }));
@@ -217,6 +223,32 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
     setMensaje({ tipo: 'error', texto: `No se encontró ningún producto con código o nombre "${texto}"` });
   };
 
+  // Llamado por EscanerCodigoBarras cada vez que la cámara detecta un
+  // código nuevo (ya filtrado de repeticiones por el propio escáner).
+  // Reusa la misma búsqueda exacta por código que ya usa el buscador de
+  // texto, para mantener un solo criterio de "qué cuenta como match".
+  const manejarCodigoEscaneado = useCallback(
+    (codigo) => {
+      const producto = productos.find((p) => p.codigo.toLowerCase() === codigo.toLowerCase());
+      if (producto) {
+        agregarAlCarrito(producto);
+        setUltimoEscaneo({ tipo: 'ok', texto: `${producto.nombre} agregado` });
+      } else {
+        setUltimoEscaneo({ tipo: 'error', texto: `Código "${codigo}" no encontrado` });
+      }
+    },
+    [productos]
+  );
+
+  // El mensaje de "producto agregado / no encontrado" se borra solo tras
+  // un par de segundos, para no acumular texto viejo mientras se sigue
+  // escaneando.
+  useEffect(() => {
+    if (!ultimoEscaneo) return;
+    const timeout = setTimeout(() => setUltimoEscaneo(null), DURACION_MENSAJE_ESCANEO_MS);
+    return () => clearTimeout(timeout);
+  }, [ultimoEscaneo]);
+
   const cambiarCantidad = (id, delta) => {
     setCarrito((prev) =>
       prev
@@ -345,16 +377,30 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
   return (
     <div className="pos-layout">
       <div className="pos-productos">
-        <input
-          ref={buscadorRef}
-          className="pos-buscador"
-          type="text"
-          placeholder="Escanea o busca por nombre / código..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          onKeyDown={manejarEnterBusquedaProducto}
-          autoFocus
-        />
+        <div className="pos-buscador-fila">
+          <input
+            ref={buscadorRef}
+            className="pos-buscador"
+            type="text"
+            placeholder="Escanea o busca por nombre / código..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            onKeyDown={manejarEnterBusquedaProducto}
+            autoFocus
+          />
+          <button
+            type="button"
+            className="pos-boton-escanear"
+            onClick={() => {
+              setMensaje(null);
+              setUltimoEscaneo(null);
+              setEscanerAbierto(true);
+            }}
+            aria-label="Escanear código de barras"
+          >
+            📷
+          </button>
+        </div>
         <div className="pos-grid">
           {productosFiltrados.map((p) => (
             <button key={p.id} className="pos-producto-card" onClick={() => agregarAlCarrito(p)}>
@@ -586,6 +632,14 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
           </button>
         </div>
       </div>
+
+      {escanerAbierto && (
+        <EscanerCodigoBarras
+          onCodigoDetectado={manejarCodigoEscaneado}
+          onCerrar={() => setEscanerAbierto(false)}
+          ultimoResultado={ultimoEscaneo}
+        />
+      )}
 
       {mostrarModalVenta && ultimaVentaParaImprimir && (
         <div className="pos-venta-modal-overlay">

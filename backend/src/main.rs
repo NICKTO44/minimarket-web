@@ -20,7 +20,10 @@ async fn main() {
 
     let db_url = std::env::var("TURSO_DATABASE_URL").expect("Falta TURSO_DATABASE_URL en .env");
     let db_token = std::env::var("TURSO_AUTH_TOKEN").expect("Falta TURSO_AUTH_TOKEN en .env");
-    std::env::var("JWT_SECRET").expect("Falta JWT_SECRET en .env (agrega una clave larga y aleatoria)");
+    // Antes solo se validaba que existiera y se descartaba el valor —
+    // ahora se guarda para pasarlo a AppState y que el middleware ya no
+    // tenga que leerlo del entorno en cada petición.
+    let jwt_secret = std::env::var("JWT_SECRET").expect("Falta JWT_SECRET en .env (agrega una clave larga y aleatoria)");
     std::env::var("AGENTE_IMPRESION_TOKEN").expect("Falta AGENTE_IMPRESION_TOKEN en .env (token para el agente de impresión)");
 
     let central_db_url = std::env::var("CENTRAL_DATABASE_URL").expect("Falta CENTRAL_DATABASE_URL en .env");
@@ -57,6 +60,7 @@ async fn main() {
         tiendas: tenants::RegistroTiendas::nuevo(central_db, clave_cifrado),
         estado_impresion: estado_impresion::EstadoImpresion::nuevo(),
         limitador_login: rate_limit::LimitadorIntentos::nuevo(),
+        jwt_secret,
     });
 
     // Solo estos dos orígenes pueden llamar a la API — tu frontend real

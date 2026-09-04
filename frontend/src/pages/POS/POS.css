@@ -971,3 +971,26 @@
     line-height: 1.5;
   }
 }
+/* ===== Botón de escanear código de barras, junto al buscador ===== */
+.pos-buscador-fila {
+  display: flex;
+  gap: 8px;
+}
+
+.pos-buscador-fila .pos-buscador {
+  flex: 1;
+}
+
+.pos-boton-escanear {
+  flex-shrink: 0;
+  width: 46px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: white;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.pos-boton-escanear:hover {
+  background: #f4f5f7;
+}

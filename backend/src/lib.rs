@@ -15,4 +15,7 @@ pub struct AppState {
     pub tiendas: tenants::RegistroTiendas,
     pub estado_impresion: Arc<estado_impresion::EstadoImpresion>,
     pub limitador_login: Arc<rate_limit::LimitadorIntentos>,
+    /// Leído del .env una sola vez al arrancar, en vez de en cada
+    /// petición autenticada (como hacía antes middleware_auth.rs).
+    pub jwt_secret: String,
 }

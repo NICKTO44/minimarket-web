@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api, API_URL } from '../../api/api';
 import './Inventario.css';
+import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
 
 const FORM_VACIO = {
   codigo: '',
@@ -40,6 +41,9 @@ export default function Inventario() {
   const [nuevoLoteCantidad, setNuevoLoteCantidad] = useState('');
   const [nuevoLoteFecha, setNuevoLoteFecha] = useState('');
   const [agregandoLote, setAgregandoLote] = useState(false);
+
+  // --- Escáner de código de barras (modo una sola lectura) ---
+  const [escanerCodigoAbierto, setEscanerCodigoAbierto] = useState(false);
 
   const cargarTodo = () => {
     setCargando(true);
@@ -388,7 +392,20 @@ export default function Inventario() {
             <div className="inv-form-grid">
               <div className="inv-campo">
                 <label>Código</label>
-                <input value={form.codigo} onChange={(e) => cambiarCampo('codigo', e.target.value)} />
+                <div className="inv-campo-codigo-fila">
+                  <input value={form.codigo} onChange={(e) => cambiarCampo('codigo', e.target.value)} />
+                  <button
+                    type="button"
+                    className="inv-boton-escanear"
+                    onClick={() => {
+                      setMensaje(null);
+                      setEscanerCodigoAbierto(true);
+                    }}
+                    aria-label="Escanear código de barras"
+                  >
+                    📷
+                  </button>
+                </div>
               </div>
               <div className="inv-campo">
                 <label>Nombre</label>
@@ -552,6 +569,14 @@ export default function Inventario() {
             </div>
           </div>
         </div>
+      )}
+
+      {escanerCodigoAbierto && (
+        <EscanerCodigoBarras
+          cerrarAlDetectar
+          onCodigoDetectado={(codigo) => cambiarCampo('codigo', codigo)}
+          onCerrar={() => setEscanerCodigoAbierto(false)}
+        />
       )}
     </div>
   );

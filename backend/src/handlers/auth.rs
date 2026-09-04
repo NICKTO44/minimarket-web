@@ -59,9 +59,14 @@ pub async fn login(
     .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     // 2. Conectarse a la base de ESE negocio y validar las credenciales ahí.
+    //    Se usa la versión cacheada: así la conexión que se arma aquí en
+    //    el login queda lista para reutilizarse en las peticiones
+    //    autenticadas que vengan después de esta misma sesión, en vez de
+    //    construirse dos veces (una en el login, otra en la primera
+    //    petición del middleware).
     let db_tienda = state
         .tiendas
-        .conectar(&tienda)
+        .conectar_cacheado(&tienda)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -90,7 +95,8 @@ pub async fn login(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let jwt_secret = std::env::var("JWT_SECRET").expect("Falta JWT_SECRET en .env");
+    // Antes: std::env::var("JWT_SECRET").expect(...) en cada login.
+    // Ahora: ya viene cargado una sola vez en AppState desde el arranque.
     let exp = (Utc::now() + Duration::hours(12)).timestamp() as usize;
 
     let claims = Claims {
@@ -102,7 +108,7 @@ pub async fn login(
         exp,
     };
 
-    let token = encode(&Header::default(), &claims, &EncodingKey::from_secret(jwt_secret.as_bytes()))
+    let token = encode(&Header::default(), &claims, &EncodingKey::from_secret(state.jwt_secret.as_bytes()))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(LoginResponse {

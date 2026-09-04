@@ -41,11 +41,11 @@ pub async fn requiere_auth(
         _ => return Err(StatusCode::UNAUTHORIZED),
     };
 
-    let jwt_secret = std::env::var("JWT_SECRET").expect("Falta JWT_SECRET en .env");
-
+    // Antes: std::env::var("JWT_SECRET").expect(...) en cada petición.
+    // Ahora: ya viene cargado una sola vez en AppState desde el arranque.
     let datos = decode::<Claims>(
         &token,
-        &DecodingKey::from_secret(jwt_secret.as_bytes()),
+        &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
         &Validation::default(),
     )
     .map_err(|_| StatusCode::UNAUTHORIZED)?;
@@ -53,7 +53,7 @@ pub async fn requiere_auth(
     let claims = datos.claims;
 
     // Resuelve a qué tienda pertenece este usuario (de la caché en memoria
-    // si ya se consultó antes) y abre una conexión a su base.
+    // si ya se consultó antes).
     let tienda = state
         .tiendas
         .resolver_por_id(claims.tienda_id)
@@ -63,9 +63,12 @@ pub async fn requiere_auth(
             StatusCode::UNAUTHORIZED
         })?;
 
+    // Antes: se reconstruía el Database (Builder::new_remote + build)
+    // en cada petición. Ahora: se reutiliza el ya armado para esa tienda,
+    // si existe en caché.
     let db_tienda = state
         .tiendas
-        .conectar(&tienda)
+        .conectar_cacheado(&tienda)
         .await
         .map_err(|e| {
             eprintln!("❌ Error conectando a la base de la tienda '{}': {}", tienda.identificador, e);

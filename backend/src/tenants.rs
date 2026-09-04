@@ -1,5 +1,6 @@
 use libsql::Builder;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::crypto;
@@ -18,16 +19,24 @@ pub struct TiendaConexion {
 }
 
 /// Envoltorio simple para poder inyectar la conexión de la tienda de la
-/// petición actual como `Extension` en los handlers.
-pub struct TenantDb(pub libsql::Database);
+/// petición actual como `Extension` en los handlers. Envuelve un
+/// `Arc<Database>` (no un `Database` propio) porque ese mismo handle se
+/// comparte entre todas las peticiones de una tienda — ver
+/// `RegistroTiendas::conectar_cacheado`. Los handlers no necesitan
+/// cambiar nada: `tenant.0.connect()` sigue funcionando igual, Rust
+/// atraviesa el Arc automáticamente.
+pub struct TenantDb(pub Arc<libsql::Database>);
 
 /// Registro central de negocios: sabe encontrar a qué base pertenece cada
 /// usuario/identificador, cachea el resultado en memoria para no golpear
-/// la base central en cada petición autenticada, y cifra/descifra los
-/// tokens de cada tienda con una clave que solo vive en el .env.
+/// la base central en cada petición autenticada, cachea también las
+/// conexiones ya armadas a cada base de tenant (para no reconstruirlas en
+/// cada petición), y cifra/descifra los tokens de cada tienda con una
+/// clave que solo vive en el .env.
 pub struct RegistroTiendas {
     central_db: libsql::Database,
     cache: RwLock<HashMap<i64, TiendaConexion>>,
+    conexiones: RwLock<HashMap<i64, Arc<libsql::Database>>>,
     clave_cifrado: [u8; 32],
 }
 
@@ -36,6 +45,7 @@ impl RegistroTiendas {
         Self {
             central_db,
             cache: RwLock::new(HashMap::new()),
+            conexiones: RwLock::new(HashMap::new()),
             clave_cifrado,
         }
     }
@@ -162,12 +172,40 @@ impl RegistroTiendas {
         Ok(tiendas)
     }
 
-    /// Abre una conexión real (libsql::Database) a la base de esa tienda.
+    /// Abre una conexión NUEVA (sin caché) a la base de esa tienda. Se
+    /// mantiene disponible para casos puntuales que de verdad necesitan
+    /// una conexión fresca, pero el camino caliente de cada petición
+    /// autenticada debe usar `conectar_cacheado` en su lugar.
     pub async fn conectar(&self, tienda: &TiendaConexion) -> Result<libsql::Database, String> {
         Builder::new_remote(tienda.db_url.clone(), tienda.db_token.clone())
             .build()
             .await
             .map_err(|e| e.to_string())
+    }
+
+    /// Igual que `conectar`, pero reutiliza el `Database` ya armado para
+    /// esa tienda si existe en caché, en vez de reconstruirlo en cada
+    /// petición. Es lo que debe usar el middleware de autenticación.
+    pub async fn conectar_cacheado(&self, tienda: &TiendaConexion) -> Result<Arc<libsql::Database>, String> {
+        if let Some(db) = self.conexiones.read().await.get(&tienda.id) {
+            return Ok(db.clone());
+        }
+
+        let db = self.conectar(tienda).await?;
+        let db = Arc::new(db);
+
+        self.conexiones.write().await.insert(tienda.id, db.clone());
+        Ok(db)
+    }
+
+    /// Descarta la conexión cacheada de una tienda (por ejemplo, si se
+    /// rotó su token de Turso y la conexión vieja ya no sirve). La
+    /// siguiente petición la reconstruye desde cero con los datos
+    /// actuales de `tiendas`. También conviene invalidar la caché de
+    /// metadatos (`resolver_por_id`) al mismo tiempo si el dato que
+    /// cambió es el token, ya que hoy esa caché tampoco expira sola.
+    pub async fn invalidar_conexion(&self, tienda_id: i64) {
+        self.conexiones.write().await.remove(&tienda_id);
     }
 
     /// Conexión directa a la base central (para el endpoint de registro,
