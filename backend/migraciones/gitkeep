@@ -1,0 +1,3 @@
+Esta carpeta debe existir siempre en el repo, incluso sin migraciones pendientes,
+para que Docker pueda copiarla al construir la imagen. Git no rastrea carpetas
+vacias, por eso este archivo (sin contenido real) la mantiene presente.
