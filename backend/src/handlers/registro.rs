@@ -137,6 +137,30 @@ async fn crear_token_turso(nombre_db: &str) -> Result<String, String> {
     Ok(datos.jwt)
 }
 
+/// Destruye una base de Turso (usado solo para deshacer un registro que
+/// falló a medias). Best-effort: si la base ya no existe (404), no se
+/// considera un error — puede pasar si el fallo ocurrió antes de que la
+/// base llegara a crearse de verdad.
+async fn destruir_base_turso(nombre_db: &str) -> Result<(), String> {
+    let api_token = std::env::var("TURSO_API_TOKEN").map_err(|_| "Falta TURSO_API_TOKEN en .env".to_string())?;
+    let org = std::env::var("TURSO_ORG").map_err(|_| "Falta TURSO_ORG en .env".to_string())?;
+
+    let cliente = reqwest::Client::new();
+    let resp = cliente
+        .delete(format!("https://api.turso.tech/v1/organizations/{}/databases/{}", org, nombre_db))
+        .bearer_auth(&api_token)
+        .send()
+        .await
+        .map_err(|e| format!("Error borrando base en Turso: {}", e))?;
+
+    if !resp.status().is_success() && resp.status().as_u16() != 404 {
+        let texto = resp.text().await.unwrap_or_default();
+        return Err(format!("Turso rechazó el borrado de la base: {}", texto));
+    }
+
+    Ok(())
+}
+
 /// Chequeo en vivo para el formulario de registro: ¿este usuario ya existe
 /// en algún negocio de la plataforma?
 pub async fn verificar_usuario(
@@ -147,6 +171,10 @@ pub async fn verificar_usuario(
     Json(VerificarUsuarioResponse { disponible })
 }
 
+/// Punto de entrada público: intenta el registro completo y, si algo
+/// falla en cualquier paso, deshace automáticamente lo que ya se haya
+/// creado (fila central, índice de usuario, y la base de Turso misma) en
+/// vez de dejar un negocio a medias o una base huérfana.
 pub async fn registrar_negocio(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RegistroRequest>,
@@ -162,24 +190,82 @@ pub async fn registrar_negocio(
         ));
     }
 
-    // 1. El usuario tiene que estar libre en toda la plataforma.
+    // El usuario tiene que estar libre en toda la plataforma.
     if state.tiendas.buscar_por_usuario(&payload.usuario).await.is_ok() {
         return Err((StatusCode::BAD_REQUEST, "Ese nombre de usuario ya está en uso".into()));
     }
 
-    // 2. Identificador único del negocio (slug + sufijo corto).
+    // Identificador único del negocio (slug + sufijo corto).
     let base_slug = slugify(&quitar_acentos(&payload.nombre_negocio));
     let identificador = format!("{}-{}", base_slug, generar_sufijo());
 
-    // 3. Crear la base nueva en Turso + su token de acceso.
-    let db_url = crear_base_turso(&identificador)
+    let mut base_turso_creada = false;
+    let mut tienda_id_central: Option<i64> = None;
+
+    let resultado = registrar_negocio_interno(
+        &state,
+        &payload,
+        &identificador,
+        &mut base_turso_creada,
+        &mut tienda_id_central,
+    )
+    .await;
+
+    match resultado {
+        Ok(respuesta) => Ok(Json(respuesta)),
+        Err(error_original) => {
+            // Deshacer la fila central (y su índice de usuario) si
+            // llegaron a crearse.
+            if let Some(id) = tienda_id_central {
+                if let Ok(conn_central) = state.tiendas.conexion_central() {
+                    let _ = conn_central
+                        .execute("DELETE FROM usuarios_indice WHERE tienda_id = ?1", libsql::params![id])
+                        .await;
+                    let _ = conn_central
+                        .execute("DELETE FROM tiendas WHERE id = ?1", libsql::params![id])
+                        .await;
+                }
+            }
+
+            // Deshacer la base de Turso si llegó a crearse.
+            if base_turso_creada {
+                if let Err(e) = destruir_base_turso(&identificador).await {
+                    eprintln!(
+                        "ATENCIÓN: el registro de '{}' falló y ADEMÁS no se pudo limpiar la base de Turso automáticamente: {}. Bórrala a mano: turso db destroy {}",
+                        identificador, e, identificador
+                    );
+                }
+            }
+
+            Err(error_original)
+        }
+    }
+}
+
+/// Contiene toda la lógica real del registro. Separado de
+/// `registrar_negocio` para que el rollback de arriba pueda envolver
+/// cualquier error que ocurra aquí adentro, sin importar en qué paso pasó.
+async fn registrar_negocio_interno(
+    state: &Arc<AppState>,
+    payload: &RegistroRequest,
+    identificador: &str,
+    base_turso_creada: &mut bool,
+    tienda_id_central: &mut Option<i64>,
+) -> Result<RegistroResponse, (StatusCode, String)> {
+    // 1. Crear la base nueva en Turso.
+    let db_url = crear_base_turso(identificador)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
-    let db_token = crear_token_turso(&identificador)
+    // A partir de aquí la base YA EXISTE de verdad — cualquier error de
+    // aquí en adelante debe destruirla.
+    *base_turso_creada = true;
+
+    // 2. Su token de acceso.
+    let db_token = crear_token_turso(identificador)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    // 4. Conectarse a la base nueva y correr el schema completo.
+    // 3. Conectarse a la base nueva y correr el schema completo.
     let db_nueva = libsql::Builder::new_remote(db_url.clone(), db_token.clone())
         .build()
         .await
@@ -193,7 +279,7 @@ pub async fn registrar_negocio(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error creando las tablas: {}", e)))?;
 
-    // 5. Nombre del negocio + RUC (ya existe una fila por defecto, del schema).
+    // 4. Nombre del negocio + RUC (ya existe una fila por defecto, del schema).
     conn_nueva
         .execute(
             "UPDATE configuracion_tienda SET nombre_tienda = ?1, ruc = ?2 WHERE id = 1",
@@ -202,7 +288,7 @@ pub async fn registrar_negocio(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // 6. Crear al súper admin dentro de la base nueva (rol_id 1 = ADMIN).
+    // 5. Crear al súper admin dentro de la base nueva (rol_id 1 = ADMIN).
     let hash = bcrypt::hash(&payload.password, bcrypt::DEFAULT_COST)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
@@ -214,7 +300,7 @@ pub async fn registrar_negocio(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // 7. Guardar el negocio + el índice de usuario en la base central.
+    // 6. Guardar el negocio + el índice de usuario en la base central.
     //    El token se cifra antes de guardarlo — nunca queda en texto
     //    plano en la base central.
     let token_cifrado = state
@@ -233,7 +319,7 @@ pub async fn registrar_negocio(
              VALUES (?1, ?2, ?3, ?4, ?5)",
             libsql::params![
                 payload.nombre_negocio.clone(),
-                identificador.clone(),
+                identificador.to_string(),
                 payload.ruc.clone(),
                 db_url,
                 token_cifrado
@@ -243,6 +329,9 @@ pub async fn registrar_negocio(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let tienda_id = conn_central.last_insert_rowid();
+    // A partir de aquí la fila central YA EXISTE — si el siguiente paso
+    // falla, hay que borrarla también, no solo la base de Turso.
+    *tienda_id_central = Some(tienda_id);
 
     conn_central
         .execute(
@@ -252,5 +341,5 @@ pub async fn registrar_negocio(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    Ok(Json(RegistroResponse { ok: true, identificador }))
+    Ok(RegistroResponse { ok: true, identificador: identificador.to_string() })
 }
