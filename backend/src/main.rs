@@ -8,21 +8,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer, Any};
 use tower_http::services::ServeDir;
 use libsql::Builder;
 
-mod models;
-mod handlers;
-mod logica;
-mod middleware_auth;
-mod estado_impresion;
-mod tenants;
-mod rate_limit;
-mod crypto;
-
-pub struct AppState {
-    pub db: libsql::Database,
-    pub tiendas: tenants::RegistroTiendas,
-    pub estado_impresion: Arc<estado_impresion::EstadoImpresion>,
-    pub limitador_login: Arc<rate_limit::LimitadorIntentos>,
-}
+use minimarket_backend::{crypto, estado_impresion, handlers, middleware_auth, rate_limit, tenants, AppState};
 
 async fn health() -> &'static str {
     "minimarket-backend OK"

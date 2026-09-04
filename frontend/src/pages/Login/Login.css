@@ -1,43 +1,137 @@
-.login-container {
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap');
+
+:root {
+  --mp-verde: #16a34a;
+  --mp-verde-oscuro: #0f7b37;
+  --mp-negro: #0b0f0d;
+  --mp-negro-suave: #171b19;
+  --mp-blanco: #ffffff;
+  --mp-gris-claro: #6b7280;
+  --mp-gris-oscuro: #9ca3af;
+}
+
+/* =========================================================
+   LOGIN GENERAL — marca "Monspeet POS"
+   ========================================================= */
+
+.login-general-container {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f4f5f7;
-  padding: 16px;
-  box-sizing: border-box;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-.login-form {
-  background: white;
-  border-radius: 16px;
-  border: 1px solid #e4e6eb;
-  padding: 32px 28px;
-  width: 100%;
-  max-width: 360px;
+/* --- Panel de marca (izquierda en desktop) --- */
+.login-general-marca {
+  position: relative;
+  flex: 0 0 44%;
+  background: var(--mp-negro);
+  color: var(--mp-blanco);
+  padding: 48px 44px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  justify-content: space-between;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
-.login-form h1 {
-  margin: 0 0 4px;
-  font-size: 20px;
-  color: #16181d;
-  text-align: center;
+.login-general-decoracion {
+  position: absolute;
+  right: -60px;
+  bottom: -40px;
+  width: 260px;
+  height: 340px;
+  color: var(--mp-verde);
+  opacity: 0.16;
+  pointer-events: none;
 }
 
-.login-negocio {
-  margin: 0 0 8px;
-  font-size: 15px;
+.login-general-marca-top,
+.login-general-marca-bottom {
+  position: relative;
+  z-index: 1;
+}
+
+.login-general-wordmark {
+  margin: 0 0 14px;
+  font-family: 'Space Grotesk', -apple-system, sans-serif;
   font-weight: 700;
-  color: #4338ca;
-  text-align: center;
+  font-size: 34px;
+  letter-spacing: -0.01em;
+  color: var(--mp-blanco);
 }
 
-.login-form input {
+.login-general-wordmark span {
+  color: var(--mp-verde);
+}
+
+.login-general-tagline {
+  margin: 0;
+  max-width: 320px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--mp-gris-oscuro);
+}
+
+.login-general-marca-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.login-whatsapp-boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: var(--mp-verde);
+  color: var(--mp-negro);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.login-whatsapp-boton:hover {
+  background: var(--mp-verde-oscuro);
+  color: var(--mp-blanco);
+}
+
+.login-general-firma {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mp-gris-oscuro);
+}
+
+/* --- Panel del formulario (derecha en desktop) --- */
+.login-general-panel {
+  flex: 1;
+  background: var(--mp-blanco);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  box-sizing: border-box;
+}
+
+.login-general-form {
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-general-form h1 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--mp-negro);
+}
+
+.login-general-form input {
   padding: 12px 14px;
   border: 1.5px solid #e4e6eb;
   border-radius: 10px;
@@ -47,25 +141,50 @@
   box-sizing: border-box;
 }
 
-.login-form input:focus {
-  border-color: #4338ca;
+.login-general-form input:focus {
+  border-color: var(--mp-verde);
 }
 
-.login-form button[type='submit'] {
+.login-general-form button[type='submit'] {
   padding: 13px;
   border: none;
   border-radius: 10px;
-  background: #4338ca;
-  color: white;
+  background: var(--mp-verde);
+  color: var(--mp-negro);
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
   margin-top: 4px;
+  transition: background 0.15s ease;
 }
 
-.login-form button[type='submit']:disabled {
+.login-general-form button[type='submit']:hover:not(:disabled) {
+  background: var(--mp-verde-oscuro);
+  color: var(--mp-blanco);
+}
+
+.login-general-form button[type='submit']:disabled {
   background: #d1d5db;
+  color: var(--mp-gris-claro);
   cursor: not-allowed;
+}
+
+/* Acción secundaria: ya no compite en peso con "Ingresar" */
+.login-enlace {
+  align-self: center;
+  border: none;
+  background: none;
+  color: var(--mp-gris-claro);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 6px;
+  padding: 4px;
+}
+
+.login-enlace:hover {
+  color: var(--mp-verde-oscuro);
+  text-decoration: underline;
 }
 
 .login-mensaje-error {
@@ -78,17 +197,135 @@
   text-align: center;
 }
 
-.login-enlace {
+@media (max-width: 900px) {
+  .login-general-container {
+    flex-direction: column;
+  }
+
+  .login-general-marca {
+    flex: none;
+    padding: 36px 28px;
+    min-height: 260px;
+  }
+
+  .login-general-decoracion {
+    width: 180px;
+    height: 240px;
+  }
+
+  .login-general-wordmark {
+    font-size: 28px;
+  }
+
+  .login-general-panel {
+    padding: 28px 20px 40px;
+  }
+}
+
+/* =========================================================
+   LOGIN DE NEGOCIO — el nombre de la tienda es lo primero
+   que se lee, sin branding de Monspeet encima
+   ========================================================= */
+
+.login-tienda-container {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f5f7;
+  padding: 16px;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.login-tienda-form {
+  background: var(--mp-blanco);
+  border-radius: 16px;
+  border: 1px solid #e4e6eb;
+  padding: 36px 28px 28px;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.login-tienda-badge {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--mp-negro);
+  color: var(--mp-verde);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.login-tienda-nombre {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #16181d;
+  text-align: center;
+}
+
+.login-tienda-subtitulo {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--mp-gris-claro);
+  text-align: center;
+}
+
+.login-tienda-form input {
+  padding: 12px 14px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  font-size: 15px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.login-tienda-form input:focus {
+  border-color: #4338ca;
+}
+
+.login-tienda-submit {
+  padding: 13px;
+  border: none;
+  border-radius: 10px;
+  background: #4338ca;
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 4px;
+  width: 100%;
+}
+
+.login-tienda-submit:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+
+.login-tienda-cambiar {
   border: none;
   background: none;
-  color: #4338ca;
+  color: var(--mp-gris-claro);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  margin-top: 6px;
+  margin-top: 4px;
   padding: 4px;
 }
 
-.login-enlace:hover {
+.login-tienda-cambiar:hover {
+  color: #4338ca;
   text-decoration: underline;
 }

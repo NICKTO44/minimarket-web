@@ -647,11 +647,22 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
             <p className="pos-pdf-modal-ayuda">
               Para imprimir, usa el ícono 🖨 que trae el visor de PDF arriba del documento.
             </p>
+            <p className="pos-pdf-modal-movil">
+              📄 Toca "Imprimir" abajo para ver el comprobante y enviarlo a imprimir.
+            </p>
             <iframe ref={iframePdfRef} src={pdfVisible} title="Comprobante" />
             <div className="pos-pdf-modal-acciones">
               <button className="pos-pdf-modal-cerrar" onClick={() => setPdfVisible(null)}>
                 Cerrar
               </button>
+              <a
+                className="pos-pdf-modal-imprimir"
+                href={pdfVisible}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                🖨 Imprimir
+              </a>
             </div>
           </div>
         </div>

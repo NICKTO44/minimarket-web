@@ -227,23 +227,6 @@
   cursor: pointer;
 }
 
-.comp-pdf-modal-ayuda {
-  margin: 0;
-  padding: 8px 16px;
-  font-size: 12px;
-  color: #6b7280;
-  background: #f4f5f7;
-  border-bottom: 1px solid #e4e6eb;
-  flex-shrink: 0;
-}
-
-.comp-pdf-modal iframe {
-  flex: 1;
-  width: 100%;
-  border: none;
-  background: #f4f5f7;
-}
-
 .comp-pdf-modal-acciones {
   display: flex;
   gap: 8px;
@@ -261,4 +244,92 @@
   color: #6b7280;
   font-weight: 600;
   cursor: pointer;
+}
+
+.comp-pdf-modal-imprimir {
+  flex: 2;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: #16181d;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.comp-pdf-modal-imprimir:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== Visor de PDF embebido (pdf.js) =====
+   Reemplaza al <iframe>: cada página se dibuja como imagen dentro del
+   modal, así que funciona igual en Android, iPhone y desktop, sin
+   depender de si el navegador trae un visor de PDF integrado. */
+.comp-pdf-paginas {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  flex: 1;
+  background: #f4f5f7;
+}
+
+.comp-pdf-pagina-img {
+  width: calc(100% - 24px);
+  max-width: 100%;
+  height: auto;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  background: #fff;
+}
+
+.comp-pdf-cargando {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.comp-pdf-error {
+  padding: 30px 20px;
+  text-align: center;
+  color: #b00020;
+}
+
+.comp-pdf-error a {
+  display: inline-block;
+  margin-top: 8px;
+  color: #1a4fb4;
+}
+
+/* ===== Impresión: solo el comprobante, sin salir del sistema ===== */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .comp-pdf-paginas,
+  .comp-pdf-paginas * {
+    visibility: visible;
+  }
+
+  .comp-pdf-paginas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    overflow: visible;
+    background: white;
+  }
+
+  /* Botones, header del modal, overlay de fondo: nunca se imprimen */
+  .comp-no-imprimir {
+    display: none !important;
+  }
 }

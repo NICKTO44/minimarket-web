@@ -139,6 +139,29 @@ impl RegistroTiendas {
         Ok(tienda)
     }
 
+    /// Lista TODOS los negocios registrados en la plataforma, con sus
+    /// tokens ya descifrados. Solo pensado para herramientas de
+    /// administración que necesitan recorrer cada base de tenant (por
+    /// ejemplo, el comando de migraciones) — nunca se expone vía HTTP.
+    pub async fn listar_todas(&self) -> Result<Vec<TiendaConexion>, String> {
+        let conn = self.central_db.connect().map_err(|e| e.to_string())?;
+        let mut rows = conn
+            .query(
+                "SELECT id, nombre_negocio, identificador, turso_db_url, turso_db_token
+                 FROM tiendas ORDER BY id",
+                (),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let mut tiendas = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+            tiendas.push(self.fila_a_tienda(&row)?);
+        }
+
+        Ok(tiendas)
+    }
+
     /// Abre una conexión real (libsql::Database) a la base de esa tienda.
     pub async fn conectar(&self, tienda: &TiendaConexion) -> Result<libsql::Database, String> {
         Builder::new_remote(tienda.db_url.clone(), tienda.db_token.clone())

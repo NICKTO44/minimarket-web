@@ -928,6 +928,11 @@
   color: white;
   font-weight: 700;
   cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .pos-pdf-modal-ayuda {
@@ -938,4 +943,31 @@
   background: #f4f5f7;
   border-bottom: 1px solid var(--pos-borde);
   flex-shrink: 0;
+}
+
+.pos-pdf-modal-movil {
+  display: none;
+}
+
+/* En celular, la mayoría de navegadores no pueden mostrar un PDF
+   incrustado en un <iframe> (a diferencia de desktop) — en vez de un
+   hueco roto, se oculta el intento de vista previa y se muestra un
+   mensaje invitando a usar el botón Imprimir directo. */
+@media (max-width: 899px) {
+  .pos-pdf-modal iframe,
+  .pos-pdf-modal-ayuda {
+    display: none;
+  }
+
+  .pos-pdf-modal-movil {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 32px 24px;
+    color: var(--pos-texto-tenue);
+    font-size: 14px;
+    line-height: 1.5;
+  }
 }

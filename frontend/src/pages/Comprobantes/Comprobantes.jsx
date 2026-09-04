@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api } from '../../api/api';
 import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
 import './Comprobantes.css';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }) {
   const [comprobantes, setComprobantes] = useState([]);
@@ -11,8 +15,13 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
   const [filtroEstado, setFiltroEstado] = useState('');
   const [mensaje, setMensaje] = useState(null);
   const [ventaParaImprimir, setVentaParaImprimir] = useState(null);
+
+  // --- Visor de PDF embebido (reemplaza al iframe) ---
   const [pdfVisible, setPdfVisible] = useState(null);
-  const iframePdfRef = useRef(null);
+  const [pdfPaginas, setPdfPaginas] = useState([]);
+  const [pdfCargando, setPdfCargando] = useState(false);
+  const [pdfError, setPdfError] = useState(null);
+  const pdfContenedorRef = useRef(null);
 
   const cargar = () => {
     setCargando(true);
@@ -31,12 +40,68 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroTipo, filtroEstado]);
 
+  // Renderiza cada página del PDF como imagen dentro del modal.
+  // No depende del visor nativo del navegador, por eso funciona igual
+  // en Android, iPhone y desktop.
+  const renderizarPdf = async (url) => {
+    setPdfCargando(true);
+    setPdfError(null);
+    setPdfPaginas([]);
+    try {
+      const documento = await pdfjsLib.getDocument({ url }).promise;
+      const anchoContenedor = pdfContenedorRef.current?.clientWidth || 380;
+      const paginasRenderizadas = [];
+
+      for (let numPagina = 1; numPagina <= documento.numPages; numPagina++) {
+        const pagina = await documento.getPage(numPagina);
+        const viewportBase = pagina.getViewport({ scale: 1 });
+        // *2 para que se vea nítido en pantallas retina/alta densidad
+        const escala = (anchoContenedor / viewportBase.width) * 2;
+        const viewport = pagina.getViewport({ scale: escala });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const contexto = canvas.getContext('2d');
+        await pagina.render({ canvasContext: contexto, viewport }).promise;
+
+        paginasRenderizadas.push(canvas.toDataURL('image/png'));
+      }
+
+      setPdfPaginas(paginasRenderizadas);
+    } catch (e) {
+      console.error('Error renderizando PDF:', e);
+      setPdfError('No se pudo cargar la vista previa del comprobante.');
+    } finally {
+      setPdfCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    if (pdfVisible) {
+      renderizarPdf(pdfVisible);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfVisible]);
+
+  const cerrarPdf = () => {
+    setPdfVisible(null);
+    setPdfPaginas([]);
+    setPdfError(null);
+  };
+
+  // Imprime solo las páginas renderizadas (ver regla @media print en
+  // Comprobantes.css) — no abre pestaña ni ventana nueva.
+  const imprimirPdfEmbebido = () => {
+    window.print();
+  };
+
   const reimprimir = async (comp) => {
     setMensaje(null);
 
     // Si FacturaLibre emitió de verdad el comprobante (aceptado, con su
-    // propio PDF oficial con logo/QR), lo mostramos incrustado en un
-    // modal propio del sistema — sin abrir pestaña/ventana nueva.
+    // propio PDF oficial con logo/QR), lo mostramos incrustado en el
+    // modal, renderizado con pdf.js.
     if (comp.enlace_pdf && comp.id) {
       setPdfVisible(api.comprobantePdfUrl(comp.id));
       return;
@@ -56,10 +121,6 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
     }
-  };
-
-  const imprimirPdfEmbebido = () => {
-    iframePdfRef.current?.contentWindow?.print();
   };
 
   return (
@@ -149,24 +210,52 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
       {pdfVisible && (
         <div className="comp-pdf-modal-overlay">
           <div className="comp-pdf-modal">
-            <div className="comp-pdf-modal-header">
+            <div className="comp-pdf-modal-header comp-no-imprimir">
               <h2>Comprobante</h2>
               <button
                 type="button"
                 className="comp-pdf-modal-x"
-                onClick={() => setPdfVisible(null)}
+                onClick={cerrarPdf}
                 aria-label="Cerrar"
               >
                 ×
               </button>
             </div>
-            <p className="comp-pdf-modal-ayuda">
-              Para imprimir, usa el ícono 🖨 que trae el visor de PDF arriba del documento.
-            </p>
-            <iframe ref={iframePdfRef} src={pdfVisible} title="Comprobante" />
-            <div className="comp-pdf-modal-acciones">
-              <button className="comp-pdf-modal-cerrar" onClick={() => setPdfVisible(null)}>
+
+            <div className="comp-pdf-paginas" ref={pdfContenedorRef}>
+              {pdfCargando && <p className="comp-pdf-cargando comp-no-imprimir">Cargando vista previa...</p>}
+
+              {pdfError && (
+                <div className="comp-pdf-error comp-no-imprimir">
+                  <p>{pdfError}</p>
+                  <a href={pdfVisible} target="_blank" rel="noopener noreferrer">
+                    Abrir el comprobante en una pestaña aparte
+                  </a>
+                </div>
+              )}
+
+              {!pdfCargando &&
+                !pdfError &&
+                pdfPaginas.map((imagenPagina, indice) => (
+                  <img
+                    key={indice}
+                    src={imagenPagina}
+                    alt={`Página ${indice + 1} del comprobante`}
+                    className="comp-pdf-pagina-img"
+                  />
+                ))}
+            </div>
+
+            <div className="comp-pdf-modal-acciones comp-no-imprimir">
+              <button className="comp-pdf-modal-cerrar" onClick={cerrarPdf}>
                 Cerrar
+              </button>
+              <button
+                className="comp-pdf-modal-imprimir"
+                onClick={imprimirPdfEmbebido}
+                disabled={pdfCargando || !!pdfError || pdfPaginas.length === 0}
+              >
+                🖨 Imprimir
               </button>
             </div>
           </div>
