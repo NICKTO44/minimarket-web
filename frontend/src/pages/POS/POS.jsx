@@ -1,9 +1,13 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api, API_URL } from '../../api/api';
 import './POS.css';
 import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 const DEBOUNCE_BUSQUEDA_VIVA_MS = 400;
 const DURACION_MENSAJE_ESCANEO_MS = 2500;
@@ -15,7 +19,7 @@ const REGLAS_DOCUMENTO = {
   RUC: { maxLength: 11, soloNumeros: true, label: 'RUC (11 dígitos)' },
 };
 
-export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
+export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion, telefono, ruc, identificadorNegocio }) {
   const [productos, setProductos] = useState([]);
   const [imagenesFallidas, setImagenesFallidas] = useState(() => new Set());
   const [busqueda, setBusqueda] = useState('');
@@ -35,8 +39,12 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
   const [mensaje, setMensaje] = useState(null);
   const [ultimaVentaParaImprimir, setUltimaVentaParaImprimir] = useState(null);
   const [mostrarModalVenta, setMostrarModalVenta] = useState(false);
+  const [telefonoWhatsapp, setTelefonoWhatsapp] = useState('');
   const [pdfVisible, setPdfVisible] = useState(null);
-  const iframePdfRef = useRef(null);
+  const [pdfPaginas, setPdfPaginas] = useState([]);
+  const [pdfCargando, setPdfCargando] = useState(false);
+  const [pdfError, setPdfError] = useState(null);
+  const pdfContenedorRef = useRef(null);
 
   const [nuevoTipoDocumento, setNuevoTipoDocumento] = useState('DNI');
   const [nuevoDocumento, setNuevoDocumento] = useState('');
@@ -340,6 +348,7 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
       setMostrarBusquedaCliente(false);
       setBusquedaCliente('');
       setTipoComprobante('BOLETA');
+      setTelefonoWhatsapp('');
       api.productos().then(setProductos);
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
@@ -353,22 +362,107 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
       ? 'RUC o razón social... (Enter si no aparece)'
       : 'Documento o nombre... (Enter si no aparece)';
 
-  // Si FacturaLibre emitió de verdad el comprobante (con su PDF oficial
-  // con logo/QR), lo mostramos incrustado en un modal propio del sistema
-  // (nada de pestaña/ventana nueva, que se cruza con el flujo del POS) —
-  // desde ahí mismo se imprime con un botón. Sin PDF real (nota simple),
-  // caemos al ticket casero de siempre con window.print().
+  // Las boletas se imprimen SIEMPRE con nuestro propio ticket (Recibo,
+  // formato angosto pensado para impresora térmica) — FacturaLibre solo
+  // entrega un formato genérico A4, no apto para ticket. Las facturas sí
+  // usan el PDF real de FacturaLibre (documento oficial en A4).
   const imprimirComprobante = () => {
     const comp = ultimaVentaParaImprimir?.comprobante;
-    if (comp?.enlace_pdf && comp?.comprobante_id) {
+    if (comp?.tipo === 'FACTURA' && comp?.enlace_pdf && comp?.comprobante_id) {
       setPdfVisible(api.comprobantePdfUrl(comp.comprobante_id));
     } else {
       window.print();
     }
   };
 
+  // Renderiza cada página del PDF como imagen dentro del modal — igual
+  // que en Comprobantes.jsx. No depende del visor nativo del navegador,
+  // así que funciona igual en Android, iPhone y desktop.
+  const renderizarPdf = async (url) => {
+    setPdfCargando(true);
+    setPdfError(null);
+    setPdfPaginas([]);
+    try {
+      const documento = await pdfjsLib.getDocument({ url }).promise;
+      const anchoContenedor = pdfContenedorRef.current?.clientWidth || 380;
+      const paginasRenderizadas = [];
+
+      for (let numPagina = 1; numPagina <= documento.numPages; numPagina++) {
+        const pagina = await documento.getPage(numPagina);
+        const viewportBase = pagina.getViewport({ scale: 1 });
+        const escala = (anchoContenedor / viewportBase.width) * 2;
+        const viewport = pagina.getViewport({ scale: escala });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const contexto = canvas.getContext('2d');
+        await pagina.render({ canvasContext: contexto, viewport }).promise;
+
+        paginasRenderizadas.push(canvas.toDataURL('image/png'));
+      }
+
+      setPdfPaginas(paginasRenderizadas);
+    } catch (e) {
+      console.error('Error renderizando PDF:', e);
+      setPdfError('No se pudo cargar la vista previa del comprobante.');
+    } finally {
+      setPdfCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    if (pdfVisible) {
+      renderizarPdf(pdfVisible);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfVisible]);
+
+  const cerrarPdf = () => {
+    setPdfVisible(null);
+    setPdfPaginas([]);
+    setPdfError(null);
+  };
+
+  // Imprime solo las páginas renderizadas — no abre pestaña ni ventana
+  // nueva. Requiere la misma regla @media print que ya tiene
+  // Comprobantes.css (ver nota más abajo sobre POS.css).
   const imprimirPdfEmbebido = () => {
-    iframePdfRef.current?.contentWindow?.print();
+    window.print();
+  };
+
+  // Manda el comprobante (o un resumen, si es nota simple) por WhatsApp.
+  // Usa SIEMPRE comp.enlace_pdf (el link público real de FacturaLibre) —
+  // nunca api.comprobantePdfUrl(), que lleva el token de sesión en la
+  // URL y no debe salir de la app.
+  const enviarPorWhatsapp = () => {
+    if (!ultimaVentaParaImprimir) return;
+    const numero = telefonoWhatsapp.replace(/\D/g, '');
+    if (numero.length < 9) {
+      setMensaje({ tipo: 'error', texto: 'Ingresa un número de WhatsApp válido (9 dígitos).' });
+      return;
+    }
+    const numeroConPais = numero.length === 9 ? `51${numero}` : numero;
+
+    const comp = ultimaVentaParaImprimir.comprobante;
+    const total = ultimaVentaParaImprimir.venta.total.toFixed(2);
+
+    let texto;
+    if (comp?.tipo === 'FACTURA' && comp?.enlace_pdf) {
+      // Factura: el A4 oficial real de FacturaLibre.
+      const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
+      texto = `Hola! Aquí tienes tu factura ${numeroDoc} por S/ ${total}.\n\nPuedes verla aquí: ${comp.enlace_pdf}\n\n¡Gracias por tu compra!`;
+    } else if (comp?.tipo === 'BOLETA' && comp?.comprobante_id && identificadorNegocio) {
+      // Boleta: nuestra propia página pública, en formato ticket (no el
+      // A4 genérico de FacturaLibre) — mismo QR real, otro formato.
+      const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
+      const urlPublica = `${window.location.origin}/boleta/${identificadorNegocio}/${comp.comprobante_id}`;
+      texto = `Hola! Aquí tienes tu boleta ${numeroDoc} por S/ ${total}.\n\nPuedes verla aquí: ${urlPublica}\n\n¡Gracias por tu compra!`;
+    } else {
+      texto = `Hola! Gracias por tu compra. Total: S/ ${total} — Venta ${ultimaVentaParaImprimir.venta.folio}.`;
+    }
+
+    window.open(`https://wa.me/${numeroConPais}?text=${encodeURIComponent(texto)}`, '_blank');
   };
 
   const mostrarFormularioNuevo = sinResultadosCliente && !buscandoCliente;
@@ -665,6 +759,18 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
               </div>
             )}
 
+            <div className="pos-venta-modal-whatsapp">
+              <input
+                type="tel"
+                placeholder="WhatsApp del cliente (opcional)"
+                value={telefonoWhatsapp}
+                onChange={(e) => setTelefonoWhatsapp(e.target.value)}
+              />
+              <button className="pos-venta-modal-whatsapp-boton" onClick={enviarPorWhatsapp}>
+                📲 Enviar por WhatsApp
+              </button>
+            </div>
+
             <div className="pos-venta-modal-acciones">
               <button className="pos-venta-modal-imprimir" onClick={imprimirComprobante}>
                 🖨 Imprimir
@@ -687,36 +793,53 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
       {pdfVisible && (
         <div className="pos-pdf-modal-overlay">
           <div className="pos-pdf-modal">
-            <div className="pos-pdf-modal-header">
+            <div className="pos-pdf-modal-header pos-no-imprimir">
               <h2>Comprobante</h2>
               <button
                 type="button"
                 className="pos-carrito-cerrar"
-                onClick={() => setPdfVisible(null)}
+                onClick={cerrarPdf}
                 aria-label="Cerrar"
               >
                 ×
               </button>
             </div>
-            <p className="pos-pdf-modal-ayuda">
-              Para imprimir, usa el ícono 🖨 que trae el visor de PDF arriba del documento.
-            </p>
-            <p className="pos-pdf-modal-movil">
-              📄 Toca "Imprimir" abajo para ver el comprobante y enviarlo a imprimir.
-            </p>
-            <iframe ref={iframePdfRef} src={pdfVisible} title="Comprobante" />
-            <div className="pos-pdf-modal-acciones">
-              <button className="pos-pdf-modal-cerrar" onClick={() => setPdfVisible(null)}>
+
+            <div className="pos-pdf-paginas" ref={pdfContenedorRef}>
+              {pdfCargando && <p className="pos-pdf-cargando pos-no-imprimir">Cargando vista previa...</p>}
+
+              {pdfError && (
+                <div className="pos-pdf-error pos-no-imprimir">
+                  <p>{pdfError}</p>
+                  <a href={pdfVisible} target="_blank" rel="noopener noreferrer">
+                    Abrir el comprobante en una pestaña aparte
+                  </a>
+                </div>
+              )}
+
+              {!pdfCargando &&
+                !pdfError &&
+                pdfPaginas.map((imagenPagina, indice) => (
+                  <img
+                    key={indice}
+                    src={imagenPagina}
+                    alt={`Página ${indice + 1} del comprobante`}
+                    className="pos-pdf-pagina-img"
+                  />
+                ))}
+            </div>
+
+            <div className="pos-pdf-modal-acciones pos-no-imprimir">
+              <button className="pos-pdf-modal-cerrar" onClick={cerrarPdf}>
                 Cerrar
               </button>
-              <a
+              <button
                 className="pos-pdf-modal-imprimir"
-                href={pdfVisible}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={imprimirPdfEmbebido}
+                disabled={pdfCargando || !!pdfError || pdfPaginas.length === 0}
               >
                 🖨 Imprimir
-              </a>
+              </button>
             </div>
           </div>
         </div>
@@ -729,6 +852,9 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket' }) {
           comprobante={ultimaVentaParaImprimir.comprobante}
           cliente={ultimaVentaParaImprimir.cliente}
           nombreTienda={nombreTienda}
+          direccion={direccion}
+          telefono={telefono}
+          ruc={ruc}
           cajero={usuario.nombre}
         />
       )}

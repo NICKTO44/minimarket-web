@@ -277,3 +277,35 @@
   margin: 0 0 6px;
   color: #16181d;
 }
+
+/* ===== Tarjeta de suscripción / canje de código ===== */
+.cfg-card-suscripcion {
+  border-color: #16a34a;
+  border-width: 1.5px;
+}
+
+.cfg-card-suscripcion .cfg-campo-fila {
+  align-items: flex-end;
+}
+
+.cfg-boton-canjear {
+  flex-shrink: 0;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #16a34a;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cfg-boton-canjear:hover:not(:disabled) {
+  background: #0f7b37;
+}
+
+.cfg-boton-canjear:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}

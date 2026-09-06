@@ -1,0 +1,75 @@
+.pos-bloqueado-container {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f5f7;
+  padding: 24px;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.pos-bloqueado-card {
+  background: white;
+  border-radius: 18px;
+  border: 1px solid #e4e6eb;
+  max-width: 420px;
+  width: 100%;
+  padding: 40px 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pos-bloqueado-icono {
+  font-size: 40px;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: #0b0f0d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.pos-bloqueado-card h1 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  color: #16181d;
+}
+
+.pos-bloqueado-mensaje {
+  margin: 0 0 24px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #4b5563;
+}
+
+.pos-bloqueado-whatsapp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 13px 24px;
+  border-radius: 10px;
+  background: #16a34a;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  width: 100%;
+  box-sizing: border-box;
+  transition: background 0.15s ease;
+}
+
+.pos-bloqueado-whatsapp:hover {
+  background: #0f7b37;
+}
+
+.pos-bloqueado-nota {
+  margin: 18px 0 0;
+  font-size: 12px;
+  color: #9ca3af;
+}

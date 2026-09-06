@@ -4,6 +4,11 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::AppState;
+use crate::licencias_logica::hoy;
+
+/// Cuántos días de prueba gratis recibe un negocio nuevo al registrarse,
+/// antes de pasar a modo lectura si no se activa con un código.
+const DIAS_PRUEBA_GRATIS: i64 = 15;
 
 /// Esquema completo de una instalación nueva, incrustado en el binario en
 /// tiempo de compilación (por eso el Dockerfile necesita copiar schema.sql
@@ -308,6 +313,14 @@ async fn registrar_negocio_interno(
         .cifrar_token(&db_token)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
+    // Todo negocio nuevo arranca con un período de prueba gratis — no
+    // con acceso indefinido. Si nadie lo activa con un código antes de
+    // que se cumpla, pasa solo a modo lectura (ver nivel_acceso() en
+    // tenants.rs).
+    let fecha_fin_prueba = (hoy() + chrono::Duration::days(DIAS_PRUEBA_GRATIS))
+        .format("%Y-%m-%d")
+        .to_string();
+
     let conn_central = state
         .tiendas
         .conexion_central()
@@ -315,14 +328,15 @@ async fn registrar_negocio_interno(
 
     conn_central
         .execute(
-            "INSERT INTO tiendas (nombre_negocio, identificador, ruc, turso_db_url, turso_db_token)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO tiendas (nombre_negocio, identificador, ruc, turso_db_url, turso_db_token, fecha_vencimiento)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             libsql::params![
                 payload.nombre_negocio.clone(),
                 identificador.to_string(),
                 payload.ruc.clone(),
                 db_url,
-                token_cifrado
+                token_cifrado,
+                fecha_fin_prueba
             ],
         )
         .await

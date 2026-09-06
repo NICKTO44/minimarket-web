@@ -2,13 +2,13 @@ use axum::{
     extract::{Request, State},
     middleware::Next,
     response::Response,
-    http::{StatusCode, header},
+    http::{Method, StatusCode, header},
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use std::sync::Arc;
 
 use crate::models::auth::Claims;
-use crate::tenants::TenantDb;
+use crate::tenants::{NivelAcceso, TenantDb};
 use crate::AppState;
 
 /// Saca el token del query string (?token=...) — usado solo por el <iframe>
@@ -62,6 +62,31 @@ pub async fn requiere_auth(
             eprintln!("❌ Error resolviendo tienda_id {}: {}", claims.tienda_id, e);
             StatusCode::UNAUTHORIZED
         })?;
+
+    // Control de suscripción: tres niveles.
+    //  - Bloqueado: ni entrar puede (casos extremos, no el flujo normal
+    //    de "no pagó todavía").
+    //  - SoloLectura: puede seguir viendo su información (peticiones
+    //    GET), pero cualquier escritura (procesar venta, editar algo)
+    //    se corta con 402 Payment Required — EXCEPTO canjear un código
+    //    de activación, que es justo el mecanismo para salir de este
+    //    estado por sí mismo.
+    //  - Completo: sin restricciones.
+    let es_canje_de_codigo = req.uri().path() == "/suscripcion/canjear-codigo";
+
+    match tienda.nivel_acceso() {
+        NivelAcceso::Bloqueado(motivo) => {
+            eprintln!("⛔ Acceso bloqueado a tienda '{}': {}", tienda.identificador, motivo);
+            return Err(StatusCode::FORBIDDEN);
+        }
+        NivelAcceso::SoloLectura(motivo)
+            if !es_canje_de_codigo && req.method() != Method::GET && req.method() != Method::HEAD =>
+        {
+            eprintln!("💳 Escritura bloqueada (modo lectura) a tienda '{}': {}", tienda.identificador, motivo);
+            return Err(StatusCode::PAYMENT_REQUIRED);
+        }
+        _ => {}
+    }
 
     // Antes: se reconstruía el Database (Builder::new_remote + build)
     // en cada petición. Ahora: se reutiliza el ya armado para esa tienda,

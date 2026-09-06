@@ -117,6 +117,30 @@ export const api = {
   usuariosListar: () => request('/usuarios'),
   usuarioCrear: (data) => request('/usuarios', { method: 'POST', body: JSON.stringify(data) }),
   usuarioDesactivar: (id) => request(`/usuarios/${id}/desactivar`, { method: 'POST' }),
+  canjearCodigo: (codigo) => request('/suscripcion/canjear-codigo', { method: 'POST', body: JSON.stringify({ codigo }) }),
+  suscripcionEstado: () => request('/suscripcion/estado'),
+  // Sin token — es la ruta pública que abre el cliente final desde el
+  // link de WhatsApp, sin haber iniciado sesión nunca.
+  comprobantePublico: async (identificador, id) => {
+    const res = await fetch(`${API_URL}/publico/comprobante/${encodeURIComponent(identificador)}/${id}`);
+    const data = await leerRespuesta(res);
+    if (!res.ok) {
+      const mensaje = typeof data === 'string' ? data : data?.message;
+      throw new Error(mensaje || 'No se pudo cargar el comprobante');
+    }
+    return data;
+  },
+  // Sin autenticación a propósito — la ve el cliente final desde un link
+  // de WhatsApp, nunca tiene sesión iniciada.
+  comprobantePublico: async (identificador, id) => {
+    const res = await fetch(`${API_URL}/publico/comprobante/${encodeURIComponent(identificador)}/${id}`);
+    const data = await leerRespuesta(res);
+    if (!res.ok) {
+      const mensaje = typeof data === 'string' ? data : data?.message;
+      throw new Error(mensaje || 'No se pudo cargar el comprobante');
+    }
+    return data;
+  },
   reportesVentas: (inicio, fin) => request(`/reportes/ventas?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   reportesProductosVendidos: (inicio, fin) => request(`/reportes/productos-vendidos?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   reportesEstadisticas: (inicio, fin) => request(`/reportes/estadisticas?fecha_inicio=${inicio}&fecha_fin=${fin}`),

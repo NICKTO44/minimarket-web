@@ -8,7 +8,7 @@ import './Comprobantes.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
-export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }) {
+export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', direccion, telefono, ruc, identificadorNegocio }) {
   const [comprobantes, setComprobantes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [filtroTipo, setFiltroTipo] = useState('');
@@ -18,6 +18,8 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
 
   // --- Visor de PDF embebido (reemplaza al iframe) ---
   const [pdfVisible, setPdfVisible] = useState(null);
+  const [enviandoWhatsapp, setEnviandoWhatsapp] = useState(null);
+  const [telefonoWhatsapp, setTelefonoWhatsapp] = useState('');
   const [pdfPaginas, setPdfPaginas] = useState([]);
   const [pdfCargando, setPdfCargando] = useState(false);
   const [pdfError, setPdfError] = useState(null);
@@ -96,25 +98,83 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
     window.print();
   };
 
+  const abrirEnvioWhatsapp = (comp) => {
+    setTelefonoWhatsapp('');
+    setEnviandoWhatsapp(comp);
+  };
+
+  // Usa SIEMPRE comp.enlace_pdf (el link público real de FacturaLibre) —
+  // nunca api.comprobantePdfUrl(), que lleva el token de sesión en la
+  // URL y no debe salir de la app.
+  const confirmarEnvioWhatsapp = () => {
+    if (!enviandoWhatsapp) return;
+    const numero = telefonoWhatsapp.replace(/\D/g, '');
+    if (numero.length < 9) {
+      setMensaje({ tipo: 'error', texto: 'Ingresa un número de WhatsApp válido (9 dígitos).' });
+      return;
+    }
+    const numeroConPais = numero.length === 9 ? `51${numero}` : numero;
+    const comp = enviandoWhatsapp;
+
+    let texto;
+    if (comp.tipo === 'FACTURA' && comp.enlace_pdf) {
+      const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
+      texto = `Hola! Aquí tienes tu factura ${numeroDoc} por S/ ${comp.monto.toFixed(2)}.\n\nPuedes verla aquí: ${comp.enlace_pdf}\n\n¡Gracias por tu compra!`;
+    } else if (comp.tipo === 'BOLETA' && comp.id && identificadorNegocio) {
+      const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
+      const urlPublica = `${window.location.origin}/boleta/${identificadorNegocio}/${comp.id}`;
+      texto = `Hola! Aquí tienes tu boleta ${numeroDoc} por S/ ${comp.monto.toFixed(2)}.\n\nPuedes verla aquí: ${urlPublica}\n\n¡Gracias por tu compra!`;
+    } else {
+      texto = `Hola! Gracias por tu compra. Total: S/ ${comp.monto.toFixed(2)} — Venta ${comp.folio_venta}.`;
+    }
+
+    window.open(`https://wa.me/${numeroConPais}?text=${encodeURIComponent(texto)}`, '_blank');
+    setEnviandoWhatsapp(null);
+  };
+
   const reimprimir = async (comp) => {
     setMensaje(null);
 
     // Si FacturaLibre emitió de verdad el comprobante (aceptado, con su
-    // propio PDF oficial con logo/QR), lo mostramos incrustado en el
-    // modal, renderizado con pdf.js.
-    if (comp.enlace_pdf && comp.id) {
+    // propio PDF oficial con logo/QR), y es FACTURA, lo mostramos
+    // incrustado en el modal, renderizado con pdf.js.
+    if (comp.tipo === 'FACTURA' && comp.enlace_pdf && comp.id) {
       setPdfVisible(api.comprobantePdfUrl(comp.id));
       return;
     }
 
-    // Sin PDF real (nota simple, o comprobante rechazado sin documento
-    // válido) — usamos nuestro ticket propio como respaldo.
+    // Boleta, o comprobante sin PDF real (nota simple, o rechazado) —
+    // usamos nuestro ticket propio, con los datos reales que ya trae
+    // esta fila (hash, RUC emisor, fecha) para que el QR salga correcto.
     try {
       const detalle = await api.ventaParaDevolucion(comp.folio_venta);
+
+      const tipoDocCliente =
+        comp.tipo === 'FACTURA'
+          ? '6'
+          : comp.cliente_documento
+            ? comp.cliente_documento.length === 11
+              ? '6'
+              : '1'
+            : '0';
+
       setVentaParaImprimir({
         venta: { folio: detalle.folio, total: detalle.total, montoRecibido: null, cambio: null },
         items: detalle.productos.map((p) => ({ nombre: p.nombre, cantidad: p.cantidad, precio: p.precio_unitario })),
-        comprobante: detalle.comprobante,
+        comprobante: comp.id
+          ? {
+              tipo: comp.tipo,
+              serie: comp.serie,
+              numero: comp.numero,
+              hash: comp.hash,
+              ruc_emisor: comp.ruc_emisor,
+              fecha_emision: comp.fecha_emision_corta,
+              igv: comp.monto - comp.monto / 1.18,
+              total_venta: comp.monto,
+              cliente_tipo_documento_codigo: tipoDocCliente,
+              cliente_numero_documento: comp.cliente_documento || '-',
+            }
+          : null,
         cliente: detalle.cliente || null,
       });
       setTimeout(() => window.print(), 200);
@@ -191,6 +251,9 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
                   <td>
                     <button className="comp-boton-imprimir" onClick={() => reimprimir(c)}>
                       🖨 Imprimir
+                    </button>
+                    <button className="comp-boton-whatsapp" onClick={() => abrirEnvioWhatsapp(c)}>
+                      📲
                     </button>
                   </td>
                 </tr>
@@ -269,8 +332,40 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket' }
           comprobante={ventaParaImprimir.comprobante}
           cliente={ventaParaImprimir.cliente}
           nombreTienda={nombreTienda}
+          direccion={direccion}
+          telefono={telefono}
+          ruc={ruc}
           cajero={usuario?.nombre || ''}
         />
+      )}
+
+      {enviandoWhatsapp && (
+        <div className="comp-whatsapp-modal-overlay" onClick={() => setEnviandoWhatsapp(null)}>
+          <div className="comp-whatsapp-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Enviar por WhatsApp</h2>
+            <p className="comp-whatsapp-modal-nota">
+              {enviandoWhatsapp.tipo === 'FACTURA' ? 'Factura' : enviandoWhatsapp.tipo === 'NINGUNO' ? 'Venta' : 'Boleta'}{' '}
+              {enviandoWhatsapp.serie && `${enviandoWhatsapp.serie}-${String(enviandoWhatsapp.numero).padStart(6, '0')}`}
+              {' — S/ '}
+              {enviandoWhatsapp.monto.toFixed(2)}
+            </p>
+            <input
+              type="tel"
+              placeholder="Número de WhatsApp del cliente"
+              value={telefonoWhatsapp}
+              onChange={(e) => setTelefonoWhatsapp(e.target.value)}
+              autoFocus
+            />
+            <div className="comp-whatsapp-modal-acciones">
+              <button className="comp-whatsapp-modal-cancelar" onClick={() => setEnviandoWhatsapp(null)}>
+                Cancelar
+              </button>
+              <button className="comp-whatsapp-modal-enviar" onClick={confirmarEnvioWhatsapp}>
+                📲 Enviar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

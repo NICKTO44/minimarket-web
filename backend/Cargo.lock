@@ -1859,6 +1859,7 @@ dependencies = [
  "image",
  "jsonwebtoken",
  "libsql",
+ "rand 0.8.7",
  "reqwest",
  "serde",
  "serde_json",

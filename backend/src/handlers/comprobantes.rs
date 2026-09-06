@@ -17,9 +17,23 @@ pub async fn listar_comprobantes(
 ) -> Result<Json<Vec<ComprobanteResumen>>, StatusCode> {
     let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // El RUC del emisor es el mismo para toda la tienda — se trae una
+    // sola vez, no por cada fila, y se copia en cada comprobante para
+    // que el frontend tenga todo lo que necesita para el QR sin tener
+    // que pedirlo aparte.
+    let mut r_ruc = conn
+        .query("SELECT ruc FROM configuracion_tienda LIMIT 1", ())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let ruc_emisor: Option<String> = match r_ruc.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
+        Some(row) => row.get(0).ok(),
+        None => None,
+    };
+
     let mut sql = String::from(
         "SELECT ce.id, v.id, v.folio, COALESCE(ce.tipo, 'NINGUNO'), ce.serie, ce.numero,
-                c.nombre_razon_social, v.total, ce.estado, v.fecha_hora, ce.mensaje_sunat, ce.enlace_pdf
+                c.nombre_razon_social, v.total, ce.estado, v.fecha_hora, ce.mensaje_sunat, ce.enlace_pdf,
+                ce.hash, ce.cliente_documento, substr(COALESCE(ce.fecha_emision, v.fecha_hora), 1, 10)
          FROM ventas v
          LEFT JOIN comprobantes_electronicos ce ON ce.venta_id = v.id
          LEFT JOIN clientes c ON c.id = v.cliente_id
@@ -59,6 +73,10 @@ pub async fn listar_comprobantes(
             fecha_emision: row.get(9).unwrap_or_default(),
             mensaje_sunat: row.get(10).ok(),
             enlace_pdf: row.get(11).ok(),
+            hash: row.get(12).ok(),
+            cliente_documento: row.get(13).ok(),
+            ruc_emisor: ruc_emisor.clone(),
+            fecha_emision_corta: row.get(14).ok(),
         });
     }
 

@@ -6,6 +6,7 @@ use chrono::{Utc, Duration};
 
 use crate::AppState;
 use crate::models::auth::Claims;
+use crate::tenants::NivelAcceso;
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
@@ -39,14 +40,21 @@ pub struct LoginResponse {
     pub token: String,
     pub usuario: UsuarioSesion,
     pub tienda: TiendaSesion,
+    /// true si el negocio está en modo lectura (no puede procesar
+    /// ventas ni modificar nada) — el frontend debe mostrar un aviso
+    /// persistente y deshabilitar las acciones de escritura de una vez,
+    /// sin esperar a que el backend rechace cada intento.
+    pub modo_lectura: bool,
+    /// Mensaje para mostrar al usuario cuando `modo_lectura` es true.
+    pub aviso: Option<String>,
 }
 
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
-) -> Result<Json<LoginResponse>, StatusCode> {
+) -> Result<Json<LoginResponse>, (StatusCode, String)> {
     if payload.usuario.trim().is_empty() || payload.password.is_empty() {
-        return Err(StatusCode::BAD_REQUEST);
+        return Err((StatusCode::BAD_REQUEST, "Completa usuario y contraseña.".to_string()));
     }
 
     // 1. Resolver a qué negocio pertenece este login.
@@ -56,9 +64,18 @@ pub async fn login(
         }
         _ => state.tiendas.buscar_por_usuario(&payload.usuario).await,
     }
-    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    .map_err(|_| (StatusCode::UNAUTHORIZED, "Usuario o contraseña incorrectos".to_string()))?;
 
-    // 2. Conectarse a la base de ESE negocio y validar las credenciales ahí.
+    // 2. Control de suscripción. "Modo lectura" (no pagó todavía) SÍ
+    // permite iniciar sesión — solo "Bloqueado" (casos extremos) impide
+    // entrar del todo.
+    let (modo_lectura, aviso) = match tienda.nivel_acceso() {
+        NivelAcceso::Bloqueado(motivo) => return Err((StatusCode::FORBIDDEN, motivo)),
+        NivelAcceso::SoloLectura(motivo) => (true, Some(motivo)),
+        NivelAcceso::Completo => (false, None),
+    };
+
+    // 3. Conectarse a la base de ESE negocio y validar las credenciales ahí.
     //    Se usa la versión cacheada: así la conexión que se arma aquí en
     //    el login queda lista para reutilizarse en las peticiones
     //    autenticadas que vengan después de esta misma sesión, en vez de
@@ -68,9 +85,11 @@ pub async fn login(
         .tiendas
         .conectar_cacheado(&tienda)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "No se pudo conectar a tu negocio.".to_string()))?;
 
-    let conn = db_tienda.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = db_tienda
+        .connect()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "No se pudo conectar a tu negocio.".to_string()))?;
 
     let mut rows = conn
         .query(
@@ -78,11 +97,15 @@ pub async fn login(
             libsql::params![payload.usuario.clone()],
         )
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Error consultando el usuario.".to_string()))?;
 
-    let row = match rows.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
+    let row = match rows
+        .next()
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Error consultando el usuario.".to_string()))?
+    {
         Some(r) => r,
-        None => return Err(StatusCode::UNAUTHORIZED),
+        None => return Err((StatusCode::UNAUTHORIZED, "Usuario o contraseña incorrectos".to_string())),
     };
 
     let id: i64 = row.get(0).unwrap_or_default();
@@ -92,11 +115,9 @@ pub async fn login(
 
     let valido = bcrypt::verify(&payload.password, &hash).unwrap_or(false);
     if !valido {
-        return Err(StatusCode::UNAUTHORIZED);
+        return Err((StatusCode::UNAUTHORIZED, "Usuario o contraseña incorrectos".to_string()));
     }
 
-    // Antes: std::env::var("JWT_SECRET").expect(...) en cada login.
-    // Ahora: ya viene cargado una sola vez en AppState desde el arranque.
     let exp = (Utc::now() + Duration::hours(12)).timestamp() as usize;
 
     let claims = Claims {
@@ -109,7 +130,7 @@ pub async fn login(
     };
 
     let token = encode(&Header::default(), &claims, &EncodingKey::from_secret(state.jwt_secret.as_bytes()))
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "No se pudo generar la sesión.".to_string()))?;
 
     Ok(Json(LoginResponse {
         ok: true,
@@ -124,5 +145,7 @@ pub async fn login(
             identificador: tienda.identificador,
             nombre_negocio: tienda.nombre_negocio,
         },
+        modo_lectura,
+        aviso,
     }))
 }

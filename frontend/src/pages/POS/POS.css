@@ -994,3 +994,113 @@
 .pos-boton-escanear:hover {
   background: #f4f5f7;
 }
+/* ===== Visor de PDF embebido en el POS (pdf.js) =====
+   Mismo patrón que Comprobantes.css — reemplaza las reglas viejas de
+   .pos-pdf-modal-ayuda / .pos-pdf-modal-movil / iframe si existen, ya
+   no se usan. */
+
+.pos-pdf-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.pos-pdf-paginas {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  flex: 1;
+  background: #f4f5f7;
+}
+
+.pos-pdf-pagina-img {
+  width: calc(100% - 24px);
+  max-width: 100%;
+  height: auto;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  background: #fff;
+}
+
+.pos-pdf-cargando {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.pos-pdf-error {
+  padding: 30px 20px;
+  text-align: center;
+  color: #b00020;
+}
+
+.pos-pdf-error a {
+  display: inline-block;
+  margin-top: 8px;
+  color: #1a4fb4;
+}
+
+/* Impresión: solo el comprobante, sin salir del sistema. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .pos-pdf-paginas,
+  .pos-pdf-paginas * {
+    visibility: visible;
+  }
+
+  .pos-pdf-paginas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    overflow: visible;
+    background: white;
+  }
+
+  .pos-no-imprimir {
+    display: none !important;
+  }
+}
+/* ===== Envío por WhatsApp, en el modal de venta registrada ===== */
+.pos-venta-modal-whatsapp {
+  display: flex;
+  gap: 6px;
+  margin-top: 14px;
+  width: 100%;
+}
+
+.pos-venta-modal-whatsapp input {
+  flex: 1;
+  padding: 11px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.pos-venta-modal-whatsapp input:focus {
+  border-color: #16a34a;
+}
+
+.pos-venta-modal-whatsapp-boton {
+  flex-shrink: 0;
+  padding: 11px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #16a34a;
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pos-venta-modal-whatsapp-boton:hover {
+  background: #0f7b37;
+}

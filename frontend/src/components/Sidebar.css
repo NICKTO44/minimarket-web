@@ -244,3 +244,29 @@
     z-index: 99;
   }
 }
+
+/* ===== Aviso de suscripción por vencer, en el ítem del sidebar ===== */
+.sidebar-item {
+  position: relative;
+}
+
+.sidebar-punto-aviso {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.sidebar-punto-alerta {
+  background: #f59e0b;
+}
+
+.sidebar-punto-critico {
+  background: #ef4444;
+}
+
+.sidebar-punto-vencido {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+}

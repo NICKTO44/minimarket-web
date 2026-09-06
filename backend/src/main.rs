@@ -85,6 +85,7 @@ async fn main() {
     let rutas_publicas = Router::new()
         .route("/", get(health))
         .route("/agente-impresion/ws", get(handlers::agente_impresion::agente_websocket))
+        .route("/publico/comprobante/:identificador/:id", get(handlers::publico::ver_comprobante_publico))
         .nest_service("/uploads", ServeDir::new("uploads"))
         .merge(rutas_autenticacion);
 
@@ -135,6 +136,8 @@ async fn main() {
         .route("/usuarios", get(handlers::configuracion::listar_usuarios))
         .route("/usuarios", post(handlers::configuracion::crear_usuario))
         .route("/usuarios/:id/desactivar", post(handlers::configuracion::desactivar_usuario))
+        .route("/suscripcion/canjear-codigo", post(handlers::suscripcion::canjear_codigo))
+        .route("/suscripcion/estado", get(handlers::suscripcion::estado_suscripcion))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), middleware_auth::requiere_auth));
 
     let app = rutas_publicas

@@ -6,7 +6,7 @@ import './EscanerCodigoBarras.css';
 // dispararlo. Sin esto, la cámara ve el mismo código en decenas de
 // fotogramas por segundo mientras no se mueve, y lo agregaría al carrito
 // muchas veces de golpe con un solo pase de escaneo.
-const ENFRIAMIENTO_MISMO_CODIGO_MS = 1500;
+const ENFRIAMIENTO_MISMO_CODIGO_MS = 700;
 
 function reproducirBeep() {
   try {

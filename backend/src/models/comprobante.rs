@@ -14,4 +14,13 @@ pub struct ComprobanteResumen {
     pub fecha_emision: String,
     pub mensaje_sunat: Option<String>,
     pub enlace_pdf: Option<String>,
+    // --- Agregado para poder reconstruir el QR oficial de SUNAT al
+    // reimprimir desde el historial, con los mismos datos reales que se
+    // usaron al emitir (no inventados). ---
+    pub hash: Option<String>,
+    pub cliente_documento: Option<String>,
+    pub ruc_emisor: Option<String>,
+    /// Solo la fecha (YYYY-MM-DD), sin hora — el formato exacto que
+    /// exige el QR de SUNAT.
+    pub fecha_emision_corta: Option<String>,
 }

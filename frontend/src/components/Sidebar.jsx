@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   Users,
+  CreditCard,
 } from 'lucide-react';
 import './Sidebar.css';
 
@@ -43,12 +44,21 @@ const GRUPOS = [
     items: [
       { id: 'COMPROBANTES', label: 'Comprobantes', icono: Receipt },
       { id: 'REPORTES', label: 'Reportes', icono: BarChart3 },
+      { id: 'SUSCRIPCION', label: 'Suscripción', icono: CreditCard },
       { id: 'CONFIGURACION', label: 'Configuración', icono: Settings },
     ],
   },
 ];
 
-export default function Sidebar({ pantalla, onCambiarPantalla, usuario, onLogout, nombreTienda = 'Mi Minimarket', ruc }) {
+export default function Sidebar({
+  pantalla,
+  onCambiarPantalla,
+  usuario,
+  onLogout,
+  nombreTienda = 'Mi Minimarket',
+  ruc,
+  diasRestantesSuscripcion,
+}) {
   const [abierto, setAbierto] = useState(false);
 
   const seleccionar = (id) => {
@@ -57,6 +67,17 @@ export default function Sidebar({ pantalla, onCambiarPantalla, usuario, onLogout
   };
 
   const rolLabel = usuario.rol_id === 1 ? 'Administrador' : 'Cajero';
+
+  // Solo se muestra un aviso cuando de verdad importa: pocos días o ya
+  // vencido. Si tiene vencimiento indefinido (null) o le queda tiempo de
+  // sobra, no se distrae al usuario con nada.
+  const claseAvisoSuscripcion = (() => {
+    if (diasRestantesSuscripcion == null) return null;
+    if (diasRestantesSuscripcion < 0) return 'sidebar-punto-vencido';
+    if (diasRestantesSuscripcion <= 7) return 'sidebar-punto-critico';
+    if (diasRestantesSuscripcion <= 15) return 'sidebar-punto-alerta';
+    return null;
+  })();
 
   return (
     <>
@@ -92,6 +113,9 @@ export default function Sidebar({ pantalla, onCambiarPantalla, usuario, onLogout
                   >
                     <Icono size={18} strokeWidth={2} />
                     <span className="sidebar-item-label">{item.label}</span>
+                    {item.id === 'SUSCRIPCION' && claseAvisoSuscripcion && (
+                      <span className={`sidebar-punto-aviso ${claseAvisoSuscripcion}`} />
+                    )}
                   </button>
                 );
               })}

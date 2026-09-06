@@ -10,6 +10,11 @@ pub struct ResultadoEmision {
     pub enlace_cdr: Option<String>,
     pub external_id: Option<String>,
     pub hash: Option<String>,
+    /// Fecha de emisión exacta que se le mandó a FacturaLibre — se
+    /// devuelve para que el QR use la MISMA fecha que quedó en el
+    /// documento real, nunca una recalculada por separado (evita
+    /// desincronías si la emisión ocurre justo al filo de medianoche).
+    pub fecha_emision: String,
 }
 
 #[derive(Debug, Clone)]
@@ -43,8 +48,12 @@ fn unidad_sunat(unidad_medida: &str) -> &'static str {
     }
 }
 
-/// Catálogo 06 de SUNAT (tipos de documento de identidad).
-fn codigo_tipo_documento_identidad(tipo: &str) -> &'static str {
+/// Catálogo 06 de SUNAT (tipos de documento de identidad). Pública para
+/// que el handler la reuse al armar el ComprobanteResponse — así el
+/// código que va al QR es exactamente el mismo que se mandó a
+/// FacturaLibre, sin riesgo de que se desincronicen dos copias de esta
+/// lógica.
+pub fn codigo_tipo_documento_identidad(tipo: &str) -> &'static str {
     match tipo {
         "DNI" => "1",
         "CE" => "4",
@@ -196,6 +205,7 @@ pub async fn emitir_facturalibre(
                 enlace_cdr: None,
                 external_id: None,
                 hash: None,
+                fecha_emision: hoy.clone(),
             }
         }
     };
@@ -248,6 +258,7 @@ pub async fn emitir_facturalibre(
                 enlace_cdr,
                 external_id,
                 hash,
+                fecha_emision: hoy,
             }
         }
         Err(_) => ResultadoEmision {
@@ -259,6 +270,7 @@ pub async fn emitir_facturalibre(
             enlace_cdr: None,
             external_id: None,
             hash: None,
+            fecha_emision: hoy,
         },
     }
 }

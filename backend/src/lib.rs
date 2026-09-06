@@ -9,6 +9,7 @@ pub mod tenants;
 pub mod rate_limit;
 pub mod crypto;
 pub mod migraciones;
+pub mod licencias_logica;
 
 pub struct AppState {
     pub db: libsql::Database,

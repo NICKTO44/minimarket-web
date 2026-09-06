@@ -40,6 +40,10 @@
     color: #333;
   }
 
+  .recibo-ruc {
+    font-weight: 700;
+  }
+
   .recibo-linea {
     border-top: 1px dashed #000;
     margin: 5px 0;
@@ -55,6 +59,30 @@
     font-size: 11.5px;
     letter-spacing: 0.02em;
     margin: 2px 0;
+  }
+
+  .recibo-comprobante-numero {
+    font-weight: 800;
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+
+  .recibo-seccion-titulo {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #555;
+    margin-top: 2px;
+  }
+
+  .recibo-cliente-nombre {
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+
+  .recibo-cliente-direccion {
+    font-size: 10.5px;
+    color: #444;
   }
 
   .recibo-fila-meta {
@@ -97,9 +125,22 @@
     padding: 3px 0;
   }
 
+  .recibo-importe-letras {
+    font-size: 10px;
+    line-height: 1.4;
+    margin: 3px 0;
+  }
+
   .recibo-detalle-pago {
     font-size: 11.5px;
     padding: 1px 0;
+  }
+
+  .recibo-disclaimer {
+    font-size: 9px;
+    color: #666;
+    line-height: 1.4;
+    margin: 4px 0;
   }
 
   .recibo-gracias {
@@ -108,6 +149,16 @@
     margin-top: 2px;
   }
 
+.recibo-qr-wrapper {
+  display: flex;
+  justify-content: center;
+  margin: 4px 0;
+}
+
+.recibo-qr {
+  width: 32mm;
+  height: 32mm;
+}
   @page {
     margin: 0;
     size: 80mm auto; /* ancho fijo, alto automático según el contenido */

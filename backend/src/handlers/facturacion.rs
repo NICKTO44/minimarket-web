@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::tenants::TenantDb;
 use crate::models::facturacion::*;
-use crate::logica::facturacion::{emitir_facturalibre, DatosParaEmitir, ItemFactura};
+use crate::logica::facturacion::{emitir_facturalibre, codigo_tipo_documento_identidad, DatosParaEmitir, ItemFactura};
 
 pub async fn emitir_comprobante(
     Extension(tenant): Extension<Arc<TenantDb>>,
@@ -67,15 +67,18 @@ pub async fn emitir_comprobante(
     // tocarlo.
     const CODIGO_PRODUCTO_SUNAT_GENERICO: &str = "50000000";
 
+    // Se agrega "ruc" a esta consulta — antes solo se traía token/ruta,
+    // pero el RUC del emisor es uno de los campos obligatorios del QR
+    // oficial de SUNAT.
     let mut rcfg = conn
-        .query("SELECT facturalibre_token, facturalibre_ruta FROM configuracion_tienda LIMIT 1", ())
+        .query("SELECT facturalibre_token, facturalibre_ruta, ruc FROM configuracion_tienda LIMIT 1", ())
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let (token, ruta): (Option<String>, Option<String>) =
+    let (token, ruta, ruc_emisor): (Option<String>, Option<String>, Option<String>) =
         match rcfg.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-            Some(row) => (row.get(0).ok(), row.get(1).ok()),
-            None => (None, None),
+            Some(row) => (row.get(0).ok(), row.get(1).ok(), row.get(2).ok()),
+            None => (None, None, None),
         };
 
     let codigo_sunat = CODIGO_PRODUCTO_SUNAT_GENERICO;
@@ -100,7 +103,7 @@ pub async fn emitir_comprobante(
 
     let datos = DatosParaEmitir {
         tipo: payload.tipo.clone(),
-        cliente_tipo_documento: tipo_doc_cliente,
+        cliente_tipo_documento: tipo_doc_cliente.clone(),
         cliente_documento: payload.cliente_documento.clone(),
         cliente_nombre: payload.cliente_nombre.clone(),
         cliente_direccion,
@@ -143,6 +146,20 @@ pub async fn emitir_comprobante(
 
     let comprobante_id = conn.last_insert_rowid();
 
+    // Código SUNAT (catálogo 06) del tipo de documento del cliente, y el
+    // número de documento — con el mismo fallback "0"/"-" que usa
+    // FacturaLibre para consumidor final sin documento, para que el QR
+    // quede consistente con lo que de verdad se le mandó a FacturaLibre.
+    let cliente_tipo_documento_codigo = match &tipo_doc_cliente {
+        Some(t) => codigo_tipo_documento_identidad(t).to_string(),
+        None => "0".to_string(),
+    };
+    let cliente_numero_documento = payload
+        .cliente_documento
+        .clone()
+        .filter(|d| !d.trim().is_empty())
+        .unwrap_or_else(|| "-".to_string());
+
     Ok(Json(ComprobanteResponse {
         success: resultado.aceptado,
         comprobante_id: Some(comprobante_id),
@@ -152,5 +169,12 @@ pub async fn emitir_comprobante(
         estado: estado.to_string(),
         mensaje: resultado.mensaje,
         enlace_pdf: resultado.enlace_pdf,
+        hash: resultado.hash,
+        ruc_emisor,
+        fecha_emision: Some(resultado.fecha_emision),
+        igv,
+        total_venta: total,
+        cliente_tipo_documento_codigo,
+        cliente_numero_documento,
     }))
 }

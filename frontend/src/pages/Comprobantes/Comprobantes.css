@@ -333,3 +333,96 @@
     display: none !important;
   }
 }
+/* ===== Botón de WhatsApp en la tabla de comprobantes ===== */
+.comp-boton-whatsapp {
+  margin-left: 6px;
+  padding: 6px 10px;
+  border: 1.5px solid #16a34a;
+  border-radius: 6px;
+  background: white;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.comp-boton-whatsapp:hover {
+  background: #dcfce7;
+}
+
+/* ===== Modal de envío por WhatsApp ===== */
+.comp-whatsapp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 450;
+  padding: 16px;
+}
+
+.comp-whatsapp-modal {
+  background: white;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 360px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.comp-whatsapp-modal h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  color: #16181d;
+}
+
+.comp-whatsapp-modal-nota {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.comp-whatsapp-modal input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  font-size: 15px;
+  outline: none;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+}
+
+.comp-whatsapp-modal input:focus {
+  border-color: #16a34a;
+}
+
+.comp-whatsapp-modal-acciones {
+  display: flex;
+  gap: 8px;
+}
+
+.comp-whatsapp-modal-cancelar {
+  flex: 1;
+  padding: 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  background: white;
+  color: #6b7280;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.comp-whatsapp-modal-enviar {
+  flex: 2;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: #16a34a;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.comp-whatsapp-modal-enviar:hover {
+  background: #0f7b37;
+}
