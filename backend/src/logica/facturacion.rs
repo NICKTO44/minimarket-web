@@ -115,8 +115,10 @@ pub async fn emitir_facturalibre(
     token: &str,
     ruta: &str,
     codigo_producto_sunat: &str,
+    serie_boleta: &str,
+    serie_factura: &str,
 ) -> ResultadoEmision {
-    let serie = if datos.tipo == "FACTURA" { "F001" } else { "B001" };
+    let serie = if datos.tipo == "FACTURA" { serie_factura } else { serie_boleta };
     let codigo_tipo_doc = if datos.tipo == "FACTURA" { "01" } else { "03" };
     let ahora = chrono::Local::now();
     let hoy = ahora.format("%Y-%m-%d").to_string();

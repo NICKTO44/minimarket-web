@@ -219,21 +219,34 @@
     transform: translateX(0);
   }
 
+  /* Pestaña angosta pegada al borde izquierdo, centrada verticalmente.
+     A propósito NO se coloca arriba (ahí siempre hay títulos de página)
+     y es tan angosta (22px) que cae dentro del padding horizontal que
+     ya tiene cada pantalla — nunca llega a tapar texto real, así que
+     ninguna página necesita reservar espacio para ella. */
   .sidebar-toggle-movil {
     display: flex;
     align-items: center;
     justify-content: center;
     position: fixed;
-    top: 10px;
-    left: 12px;
-    width: 36px;
-    height: 36px;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 58px;
+    padding: 0;
     border: none;
-    border-radius: 9px;
+    border-radius: 0 14px 14px 0;
     background: var(--sb-bg);
     color: white;
     cursor: pointer;
     z-index: 90;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.18);
+  }
+
+  .sidebar-toggle-movil svg {
+    width: 15px;
+    height: 15px;
   }
 
   .sidebar-overlay {

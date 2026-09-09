@@ -3,7 +3,7 @@ import { api } from '../../api/api';
 import './Login.css';
 
 // TODO: reemplazar por el número real de Monspeet Dev. (formato: código de país + número, sin +, sin espacios)
-const WHATSAPP_NUMERO = '51999999999';
+const WHATSAPP_NUMERO = '51910372220';
 const WHATSAPP_MENSAJE = 'Hola, estoy interesado en el sistema, quisiera más información.';
 const ENLACE_WHATSAPP = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(WHATSAPP_MENSAJE)}`;
 

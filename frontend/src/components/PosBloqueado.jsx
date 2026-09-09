@@ -1,7 +1,7 @@
 import './PosBloqueado.css';
 
 // Mismo número que en Login.jsx — si lo cambias ahí, cámbialo aquí también.
-const WHATSAPP_NUMERO = '51999999999';
+const WHATSAPP_NUMERO = '51910372220';
 const WHATSAPP_MENSAJE = 'Hola, mi POS está bloqueado por suscripción vencida, quisiera regularizarlo.';
 const ENLACE_WHATSAPP = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(WHATSAPP_MENSAJE)}`;
 

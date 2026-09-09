@@ -3,6 +3,9 @@
   height: 100vh;
   height: 100dvh;
   overflow-y: auto;
+  overflow-x: hidden; /* evita que la página entera intente moverse
+                          horizontalmente; el scroll horizontal debe
+                          vivir únicamente dentro de rep-tabla-wrapper */
   box-sizing: border-box;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: #f4f5f7;
@@ -149,14 +152,23 @@
 }
 
 /* ===== Tabla con scroll horizontal propio =====
-   El wrapper ya NO recorta el contenido (overflow: hidden);
-   ahora scrollea horizontal si la tabla no entra en el ancho disponible. */
+   touch-action: pan-x le dice explícitamente al navegador/webview que
+   el gesto horizontal sobre este elemento es scroll, no debe pasarlo
+   al contenedor padre ni interpretarlo como otra cosa (gesto de volver
+   atrás, por ejemplo, típico dentro de webviews como la de WhatsApp).
+   overscroll-behavior-x: contain evita que el scroll "se escape" hacia
+   afuera del wrapper una vez que llega al final. */
 .rep-tabla-wrapper {
   background: white;
   border-radius: 12px;
   border: 1px solid #e4e6eb;
   overflow-x: auto;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  width: 100%;
+  max-width: 100%;
 }
 
 .rep-tabla {
@@ -219,7 +231,6 @@
 @media (max-width: 640px) {
   .rep-layout {
     padding: 16px;
-    padding-top: 52px; /* espacio para el botón de menú fijo arriba */
   }
 
   .rep-header h1 {

@@ -707,7 +707,6 @@
     display: block;
     position: relative;
     padding: 10px;
-    padding-top: 52px; /* deja espacio libre para el botón de menú fijo arriba */
     overflow: hidden;
   }
 
@@ -1066,16 +1065,21 @@
     display: none !important;
   }
 }
-/* ===== Envío por WhatsApp, en el modal de venta registrada ===== */
+/* ===== Envío por WhatsApp, en el modal de venta registrada =====
+   Antes estaba en fila (input + botón lado a lado) y el botón, con
+   texto largo y sin poder encogerse, se salía del modal en pantallas
+   angostas. Ahora el botón va siempre debajo del campo, a ancho
+   completo — no depende del ancho disponible. */
 .pos-venta-modal-whatsapp {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
   margin-top: 14px;
   width: 100%;
 }
 
 .pos-venta-modal-whatsapp input {
-  flex: 1;
+  width: 100%;
   padding: 11px 12px;
   border: 1.5px solid #e4e6eb;
   border-radius: 8px;
@@ -1089,7 +1093,7 @@
 }
 
 .pos-venta-modal-whatsapp-boton {
-  flex-shrink: 0;
+  width: 100%;
   padding: 11px 14px;
   border: none;
   border-radius: 8px;
