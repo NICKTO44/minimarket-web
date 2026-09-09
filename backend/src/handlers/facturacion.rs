@@ -62,43 +62,48 @@ pub async fn emitir_comprobante(
         }
     }
 
-    // Igual que en Lubricentro: código genérico fijo en código, no en
-    // configuración de usuario — el cajero/administrador nunca necesita
-    // tocarlo. (Esto se revisará aparte, en un siguiente paso — no forma
-    // parte de este cambio de series.)
-    const CODIGO_PRODUCTO_SUNAT_GENERICO: &str = "50000000";
+    // Valor de respaldo si el tenant no tiene nada guardado en
+    // codigo_producto_sunat_generico (columna vacía/NULL) — antes este
+    // era el único valor posible para todos los tenants; ahora es solo
+    // el "por defecto" cuando nadie configuró uno específico.
+    const CODIGO_PRODUCTO_SUNAT_RESPALDO: &str = "50000000";
 
-    // Ahora se traen también serie_boleta y serie_factura — antes cada
-    // tenant estaba obligado a usar "B001"/"F001" sin poder tener las
-    // suyas propias, aunque su cuenta real de FacturaLibre tuviera
-    // series distintas activas.
+    // Se agrega codigo_producto_sunat_generico a la consulta — existía
+    // en la tabla desde el schema original pero nunca se leía; el
+    // sistema siempre mandaba la constante fija sin importar lo que
+    // tuviera guardado cada tenant.
     let mut rcfg = conn
         .query(
-            "SELECT facturalibre_token, facturalibre_ruta, ruc, serie_boleta, serie_factura FROM configuracion_tienda LIMIT 1",
+            "SELECT facturalibre_token, facturalibre_ruta, ruc, serie_boleta, serie_factura, codigo_producto_sunat_generico FROM configuracion_tienda LIMIT 1",
             (),
         )
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let (token, ruta, ruc_emisor, serie_boleta, serie_factura): (
+    let (token, ruta, ruc_emisor, serie_boleta, serie_factura, codigo_sunat_cfg): (
+        Option<String>,
         Option<String>,
         Option<String>,
         Option<String>,
         Option<String>,
         Option<String>,
     ) = match rcfg.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-        Some(row) => (row.get(0).ok(), row.get(1).ok(), row.get(2).ok(), row.get(3).ok(), row.get(4).ok()),
-        None => (None, None, None, None, None),
+        Some(row) => (
+            row.get(0).ok(),
+            row.get(1).ok(),
+            row.get(2).ok(),
+            row.get(3).ok(),
+            row.get(4).ok(),
+            row.get(5).ok(),
+        ),
+        None => (None, None, None, None, None, None),
     };
 
-    // Si el tenant todavía no tiene series configuradas (columna nueva,
-    // tenant sin migrar, o valor vacío a mano), se cae al mismo
-    // "B001"/"F001" que todos los tenants usaban antes de esta
-    // migración — nadie pierde funcionamiento por no haberlo configurado.
     let serie_boleta = serie_boleta.filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "B001".to_string());
     let serie_factura = serie_factura.filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "F001".to_string());
-
-    let codigo_sunat = CODIGO_PRODUCTO_SUNAT_GENERICO;
+    let codigo_sunat = codigo_sunat_cfg
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| CODIGO_PRODUCTO_SUNAT_RESPALDO.to_string());
 
     let (token, ruta) = match (token, ruta) {
         (Some(t), Some(r)) if !t.trim().is_empty() && !r.trim().is_empty() => (t, r),
@@ -130,7 +135,7 @@ pub async fn emitir_comprobante(
         items,
     };
 
-    let resultado = emitir_facturalibre(&datos, &token, &ruta, codigo_sunat, &serie_boleta, &serie_factura).await;
+    let resultado = emitir_facturalibre(&datos, &token, &ruta, &codigo_sunat, &serie_boleta, &serie_factura).await;
 
     let numero = if resultado.numero > 0 {
         resultado.numero
@@ -163,10 +168,6 @@ pub async fn emitir_comprobante(
 
     let comprobante_id = conn.last_insert_rowid();
 
-    // Código SUNAT (catálogo 06) del tipo de documento del cliente, y el
-    // número de documento — con el mismo fallback "0"/"-" que usa
-    // FacturaLibre para consumidor final sin documento, para que el QR
-    // quede consistente con lo que de verdad se le mandó a FacturaLibre.
     let cliente_tipo_documento_codigo = match &tipo_doc_cliente {
         Some(t) => codigo_tipo_documento_identidad(t).to_string(),
         None => "0".to_string(),
