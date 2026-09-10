@@ -63,3 +63,8 @@ pub struct Categoria {
     pub id: i64,
     pub nombre: String,
 }
+#[derive(Debug, Deserialize)]
+pub struct NuevaCategoria {
+    pub nombre: String,
+    pub descripcion: Option<String>,
+}

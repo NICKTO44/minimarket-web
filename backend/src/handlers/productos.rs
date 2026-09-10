@@ -4,6 +4,20 @@ use std::sync::Arc;
 use crate::tenants::TenantDb;
 use crate::models::producto::*;
 
+/// Unidades de medida soportadas -- vive aquí, no en un CHECK de SQLite,
+/// para que agregar una nueva en el futuro sea solo un cambio de código
+/// + redeploy, sin tocar la estructura de ninguna base de tenant nunca
+/// más.
+const UNIDADES_VALIDAS: &[&str] = &[
+    "UNIDAD", "KG", "GRAMO", "LITRO", "ML", "PAQUETE", "CAJA", "DOCENA",
+    "PAR", "METRO", "GALON", "BOLSA", "ONZA", "LIBRA", "ROLLO", "YARDA",
+    "MILLAR", "JUEGO", "SACO", "TONELADA",
+];
+
+fn unidad_valida(unidad: &str) -> bool {
+    UNIDADES_VALIDAS.contains(&unidad)
+}
+
 pub async fn listar_productos(
     Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Result<Json<Vec<Producto>>, StatusCode> {
@@ -115,6 +129,32 @@ pub async fn obtener_categorias(
     Ok(Json(categorias))
 }
 
+/// Nuevo -- antes no existía forma de crear categorías desde la
+/// interfaz, todo negocio dependía de las 10 categorías de minimarket
+/// que schema.sql insertaba por defecto. Ahora cada negocio arma las
+/// suyas propias, sin importar su rubro.
+pub async fn crear_categoria(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Json(payload): Json<NuevaCategoria>,
+) -> Result<Json<Categoria>, (StatusCode, String)> {
+    if payload.nombre.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "El nombre de la categoría es obligatorio.".into()));
+    }
+
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    conn.execute(
+        "INSERT INTO categorias (nombre, descripcion) VALUES (?1, ?2)",
+        libsql::params![payload.nombre.trim().to_string(), payload.descripcion.clone()],
+    )
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al crear categoría (¿nombre duplicado?): {}", e)))?;
+
+    let id = conn.last_insert_rowid();
+
+    Ok(Json(Categoria { id, nombre: payload.nombre.trim().to_string() }))
+}
+
 // Si el producto es perecible (lleva_vencimiento), el stock inicial se
 // fuerza a 0 — el trigger de lotes lo calcula solo apenas se cree el
 // primer lote. Mismo patrón defensivo que usaba Lubricentro con
@@ -123,6 +163,10 @@ pub async fn agregar_producto(
     Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<NuevoProducto>,
 ) -> Result<Json<ProductoResponse>, (StatusCode, String)> {
+    if !unidad_valida(&payload.unidad_medida) {
+        return Err((StatusCode::BAD_REQUEST, format!("Unidad de medida no reconocida: {}", payload.unidad_medida)));
+    }
+
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let lleva_vencimiento = payload.lleva_vencimiento.unwrap_or(false);
@@ -159,6 +203,10 @@ pub async fn actualizar_producto(
     Path(id): Path<i64>,
     Json(payload): Json<ActualizarProducto>,
 ) -> Result<Json<ProductoResponse>, (StatusCode, String)> {
+    if !unidad_valida(&payload.unidad_medida) {
+        return Err((StatusCode::BAD_REQUEST, format!("Unidad de medida no reconocida: {}", payload.unidad_medida)));
+    }
+
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let lleva_vencimiento = payload.lleva_vencimiento.unwrap_or(false);
@@ -244,7 +292,7 @@ pub async fn desactivar_producto(
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     conn.execute(
-        "UPDATE productos SET activo = 0, fecha_actualizacion = datetime('now','localtime') WHERE id = 1",
+        "UPDATE productos SET activo = 0, fecha_actualizacion = datetime('now','localtime') WHERE id = ?1",
         libsql::params![id],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al desactivar: {}", e)))?;
 

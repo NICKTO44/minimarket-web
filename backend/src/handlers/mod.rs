@@ -17,3 +17,4 @@ pub mod agente_impresion;
 pub mod registro;
 pub mod suscripcion;
 pub mod publico;
+pub mod documentos;

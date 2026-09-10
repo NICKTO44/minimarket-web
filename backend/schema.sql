@@ -114,7 +114,7 @@ CREATE TABLE productos (
   precio REAL NOT NULL CHECK (precio > 0),
   stock REAL NOT NULL DEFAULT 0 CHECK (stock >= 0),
   stock_minimo REAL DEFAULT 5,
-  unidad_medida TEXT NOT NULL DEFAULT 'UNIDAD' CHECK (unidad_medida IN ('UNIDAD', 'KG', 'GRAMO', 'LITRO', 'ML', 'PAQUETE')),
+  unidad_medida TEXT NOT NULL DEFAULT 'UNIDAD',
   categoria_id INTEGER NOT NULL,
   descuento_porcentaje REAL DEFAULT 0,
   lleva_vencimiento INTEGER DEFAULT 0,
@@ -807,17 +807,6 @@ INSERT INTO roles (nombre, descripcion) VALUES
 ('CAJERO', 'Acceso a punto de venta y caja'),
 ('INVENTARIO', 'Gestión de productos y proveedores');
 
-INSERT INTO categorias (nombre, descripcion) VALUES
-('Abarrotes', 'Productos secos: arroz, azúcar, menestras, fideos'),
-('Bebidas', 'Gaseosas, jugos, agua, cerveza'),
-('Lácteos', 'Leche, yogurt, queso, mantequilla'),
-('Frutas y Verduras', 'Productos frescos'),
-('Panadería', 'Pan y derivados'),
-('Limpieza', 'Productos de limpieza del hogar'),
-('Cuidado Personal', 'Higiene y cuidado personal'),
-('Congelados', 'Productos que requieren congelación'),
-('Snacks', 'Golosinas, galletas, piqueos'),
-('Otros', 'Categoría general');
 
 INSERT INTO configuracion_tienda (nombre_tienda, moneda, iva_porcentaje) VALUES
 ('Mi Minimarket', 'PEN', 18);

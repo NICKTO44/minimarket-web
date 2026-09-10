@@ -51,7 +51,8 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [creandoCliente, setCreandoCliente] = useState(false);
   const [errorCliente, setErrorCliente] = useState('');
-
+  const [consultandoDocumento, setConsultandoDocumento] = useState(false);
+  const [nombreAutocompletado, setNombreAutocompletado] = useState(false);
   // --- Escáner de código de barras por cámara ---
   const [escanerAbierto, setEscanerAbierto] = useState(false);
   const [ultimoEscaneo, setUltimoEscaneo] = useState(null);
@@ -144,6 +145,44 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
 
   const tipoDocumentoParaNuevo = tipoComprobante === 'FACTURA' ? 'RUC' : nuevoTipoDocumento;
   const reglaDocumento = REGLAS_DOCUMENTO[tipoDocumentoParaNuevo];
+
+  // Autocompleta el nombre real (RENIEC/SUNAT) apenas el documento
+  // alcanza su largo completo. Nunca bloquea ni marca error si falla
+  // -- api.documentoConsultar ya devuelve existe:null en cualquier
+  // problema (sin token, timeout, tipo no soportado como CE/PASAPORTE),
+  // y aquí simplemente no se autocompleta nada en ese caso.
+  useEffect(() => {
+    setNombreAutocompletado(false);
+
+    const documentoCompleto =
+      (tipoDocumentoParaNuevo === 'DNI' || tipoDocumentoParaNuevo === 'RUC') &&
+      nuevoDocumento.length === reglaDocumento.maxLength;
+
+    if (!documentoCompleto) return;
+
+    let cancelado = false;
+    setConsultandoDocumento(true);
+
+    api
+      .documentoConsultar(tipoDocumentoParaNuevo, nuevoDocumento)
+      .then((resultado) => {
+        if (cancelado) return;
+        if (resultado.existe === true && resultado.nombre) {
+          setNuevoNombre(resultado.nombre);
+          setNombreAutocompletado(true);
+        }
+      })
+      .catch(() => {
+        // Silencioso a propósito -- ver nota arriba.
+      })
+      .finally(() => {
+        if (!cancelado) setConsultandoDocumento(false);
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [nuevoDocumento, tipoDocumentoParaNuevo, reglaDocumento.maxLength]);
 
   const manejarCambioDocumento = (valor) => {
     let limpio = valor;
@@ -645,11 +684,23 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
                     />
                     <input
                       type="text"
-                      placeholder={tipoComprobante === 'FACTURA' ? 'Razón social' : 'Nombre completo'}
+                      placeholder={
+                        consultandoDocumento
+                          ? 'Buscando nombre...'
+                          : tipoComprobante === 'FACTURA'
+                            ? 'Razón social'
+                            : 'Nombre completo'
+                      }
                       value={nuevoNombre}
-                      onChange={(e) => setNuevoNombre(e.target.value)}
+                      onChange={(e) => {
+                        setNuevoNombre(e.target.value);
+                        setNombreAutocompletado(false);
+                      }}
                       autoFocus
                     />
+                    {nombreAutocompletado && (
+                      <p className="pos-cliente-nuevo-autocompletado">✓ Nombre obtenido de RENIEC/SUNAT</p>
+                    )}
                     {errorCliente && <p className="pos-cliente-nuevo-error">{errorCliente}</p>}
                     <button
                       className="pos-cliente-nuevo-guardar"

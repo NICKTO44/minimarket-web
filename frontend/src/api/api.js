@@ -85,6 +85,12 @@ export const api = {
   clientesTodos: () => request('/clientes/todos'),
   clienteActualizar: (id, data) => request(`/clientes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   clienteDesactivar: (id) => request(`/clientes/${id}/desactivar`, { method: 'POST' }),
+  // Autocompletado de DNI/RUC en el formulario de cliente nuevo. Nunca
+  // lanza error hacia el llamador -- si Factiliza falla o no hay token
+  // configurado, el backend responde igual con existe: null, y aquí
+  // simplemente se propaga tal cual para que el formulario siga
+  // funcionando sin bloquear al cajero.
+  documentoConsultar: (tipo, numero) => request(`/documentos/consultar?tipo=${tipo}&numero=${encodeURIComponent(numero)}`),
   ventaCrear: (venta) => request('/ventas', { method: 'POST', body: JSON.stringify(venta) }),
   cajaAbrir: (data) => request('/cajas/abrir', { method: 'POST', body: JSON.stringify(data) }),
   cajaCerrar: (data) => request('/cajas/cerrar', { method: 'POST', body: JSON.stringify(data) }),
@@ -119,18 +125,7 @@ export const api = {
   usuarioDesactivar: (id) => request(`/usuarios/${id}/desactivar`, { method: 'POST' }),
   canjearCodigo: (codigo) => request('/suscripcion/canjear-codigo', { method: 'POST', body: JSON.stringify({ codigo }) }),
   suscripcionEstado: () => request('/suscripcion/estado'),
-  // Sin token — es la ruta pública que abre el cliente final desde el
-  // link de WhatsApp, sin haber iniciado sesión nunca.
-  comprobantePublico: async (identificador, id) => {
-    const res = await fetch(`${API_URL}/publico/comprobante/${encodeURIComponent(identificador)}/${id}`);
-    const data = await leerRespuesta(res);
-    if (!res.ok) {
-      const mensaje = typeof data === 'string' ? data : data?.message;
-      throw new Error(mensaje || 'No se pudo cargar el comprobante');
-    }
-    return data;
-  },
-  // Sin autenticación a propósito — la ve el cliente final desde un link
+  // Sin autenticación a propósito -- la ve el cliente final desde un link
   // de WhatsApp, nunca tiene sesión iniciada.
   comprobantePublico: async (identificador, id) => {
     const res = await fetch(`${API_URL}/publico/comprobante/${encodeURIComponent(identificador)}/${id}`);
