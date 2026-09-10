@@ -506,3 +506,35 @@
 .inv-boton-escanear:hover {
   background: #f4f5f7;
 }
+.inv-boton-nueva-categoria {
+  margin-top: 6px;
+  border: none;
+  background: none;
+  color: #4338ca;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.inv-nueva-categoria-fila {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.inv-nueva-categoria-fila input {
+  flex: 1;
+}
+
+.inv-boton-guardar-categoria,
+.inv-boton-cancelar-categoria {
+  flex-shrink: 0;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 6px;
+  background: white;
+  padding: 0 10px;
+  cursor: pointer;
+  font-size: 13px;
+}

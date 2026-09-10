@@ -98,6 +98,7 @@ export const api = {
   cajaAbierta: () => request('/cajas/abierta'),
   cajasListar: (inicio, fin) => request(`/cajas?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   categorias: () => request('/categorias'),
+  categoriaCrear: (data) => request('/categorias', { method: 'POST', body: JSON.stringify(data) }),
   productosStockBajo: () => request('/productos/stock-bajo'),
   productoCrear: (data) => request('/productos', { method: 'POST', body: JSON.stringify(data) }),
   productoActualizar: (id, data) => request(`/productos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

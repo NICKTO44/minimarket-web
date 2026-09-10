@@ -16,6 +16,31 @@ const FORM_VACIO = {
   precio_compra: '',
 };
 
+// Misma lista que UNIDADES_VALIDAS en el backend (src/handlers/productos.rs)
+// -- si se agrega una unidad nueva allá, hay que agregarla aquí también.
+const UNIDADES_MEDIDA = [
+  { valor: 'UNIDAD', label: 'Unidad' },
+  { valor: 'KG', label: 'Kilogramo' },
+  { valor: 'GRAMO', label: 'Gramo' },
+  { valor: 'LITRO', label: 'Litro' },
+  { valor: 'ML', label: 'Mililitro' },
+  { valor: 'PAQUETE', label: 'Paquete' },
+  { valor: 'CAJA', label: 'Caja' },
+  { valor: 'DOCENA', label: 'Docena' },
+  { valor: 'PAR', label: 'Par' },
+  { valor: 'METRO', label: 'Metro' },
+  { valor: 'GALON', label: 'Galón' },
+  { valor: 'BOLSA', label: 'Bolsa' },
+  { valor: 'ONZA', label: 'Onza' },
+  { valor: 'LIBRA', label: 'Libra' },
+  { valor: 'ROLLO', label: 'Rollo' },
+  { valor: 'YARDA', label: 'Yarda' },
+  { valor: 'MILLAR', label: 'Millar' },
+  { valor: 'JUEGO', label: 'Juego' },
+  { valor: 'SACO', label: 'Saco' },
+  { valor: 'TONELADA', label: 'Tonelada' },
+];
+
 export default function Inventario() {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
@@ -41,6 +66,11 @@ export default function Inventario() {
   const [nuevoLoteCantidad, setNuevoLoteCantidad] = useState('');
   const [nuevoLoteFecha, setNuevoLoteFecha] = useState('');
   const [agregandoLote, setAgregandoLote] = useState(false);
+
+  // --- Crear categoría nueva, sin salir del formulario de producto ---
+  const [mostrarNuevaCategoria, setMostrarNuevaCategoria] = useState(false);
+  const [nombreNuevaCategoria, setNombreNuevaCategoria] = useState('');
+  const [creandoCategoria, setCreandoCategoria] = useState(false);
 
   // --- Escáner de código de barras (modo una sola lectura) ---
   const [escanerCodigoAbierto, setEscanerCodigoAbierto] = useState(false);
@@ -84,6 +114,8 @@ export default function Inventario() {
     setImagenArchivo(null);
     setImagenPreview(null);
     setMensaje(null);
+    setMostrarNuevaCategoria(false);
+    setNombreNuevaCategoria('');
     setMostrarForm(true);
   };
 
@@ -104,6 +136,8 @@ export default function Inventario() {
     setImagenArchivo(null);
     setImagenPreview(p.imagen_url ? `${API_URL}${p.imagen_url}?t=${Date.now()}` : null);
     setMensaje(null);
+    setMostrarNuevaCategoria(false);
+    setNombreNuevaCategoria('');
     setMostrarForm(true);
 
     if (p.lleva_vencimiento) {
@@ -131,10 +165,32 @@ export default function Inventario() {
     setLoteInicialFecha('');
     setImagenArchivo(null);
     setImagenPreview(null);
+    setMostrarNuevaCategoria(false);
+    setNombreNuevaCategoria('');
   };
 
   const cambiarCampo = (campo, valor) => {
     setForm((f) => ({ ...f, [campo]: valor }));
+  };
+
+  const crearCategoriaNueva = async () => {
+    if (!nombreNuevaCategoria.trim()) {
+      setMensaje({ tipo: 'error', texto: 'Escribe un nombre para la categoría.' });
+      return;
+    }
+    setCreandoCategoria(true);
+    try {
+      const nueva = await api.categoriaCrear({ nombre: nombreNuevaCategoria.trim() });
+      const categoriasActualizadas = await api.categorias();
+      setCategorias(categoriasActualizadas);
+      cambiarCampo('categoria_id', String(nueva.id));
+      setMostrarNuevaCategoria(false);
+      setNombreNuevaCategoria('');
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    } finally {
+      setCreandoCategoria(false);
+    }
   };
 
   const manejarSeleccionImagen = (e) => {
@@ -417,24 +473,62 @@ export default function Inventario() {
               </div>
               <div className="inv-campo">
                 <label>Categoría</label>
-                <select value={form.categoria_id} onChange={(e) => cambiarCampo('categoria_id', e.target.value)}>
-                  <option value="">Selecciona...</option>
-                  {categorias.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
+                {!mostrarNuevaCategoria ? (
+                  <>
+                    <select value={form.categoria_id} onChange={(e) => cambiarCampo('categoria_id', e.target.value)}>
+                      <option value="">Selecciona...</option>
+                      {categorias.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nombre}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="inv-boton-nueva-categoria"
+                      onClick={() => setMostrarNuevaCategoria(true)}
+                    >
+                      + Nueva categoría
+                    </button>
+                  </>
+                ) : (
+                  <div className="inv-nueva-categoria-fila">
+                    <input
+                      type="text"
+                      placeholder="Nombre de la categoría"
+                      value={nombreNuevaCategoria}
+                      onChange={(e) => setNombreNuevaCategoria(e.target.value)}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      className="inv-boton-guardar-categoria"
+                      onClick={crearCategoriaNueva}
+                      disabled={creandoCategoria}
+                    >
+                      {creandoCategoria ? '...' : 'Crear'}
+                    </button>
+                    <button
+                      type="button"
+                      className="inv-boton-cancelar-categoria"
+                      onClick={() => {
+                        setMostrarNuevaCategoria(false);
+                        setNombreNuevaCategoria('');
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="inv-campo">
                 <label>Unidad de medida</label>
                 <select value={form.unidad_medida} onChange={(e) => cambiarCampo('unidad_medida', e.target.value)}>
-                  <option value="UNIDAD">Unidad</option>
-                  <option value="KG">Kilogramo</option>
-                  <option value="GRAMO">Gramo</option>
-                  <option value="LITRO">Litro</option>
-                  <option value="ML">Mililitro</option>
-                  <option value="PAQUETE">Paquete</option>
+                  {UNIDADES_MEDIDA.map((u) => (
+                    <option key={u.valor} value={u.valor}>
+                      {u.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="inv-campo">
