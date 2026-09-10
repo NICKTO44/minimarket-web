@@ -49,11 +49,15 @@
   min-height: 0;
 }
 
+/* font-size en 16px, no 15px -- por debajo de 16px, iOS Safari hace
+   zoom automatico de toda la pagina al enfocar el campo. Este campo
+   ademas tiene autoFocus en POS.jsx, asi que el zoom se disparaba
+   apenas se entraba a la pantalla, antes de tocar nada. */
 .pos-buscador {
   padding: 13px 16px;
   border: 1.5px solid var(--pos-borde);
   border-radius: var(--pos-radio);
-  font-size: 15px;
+  font-size: 16px;
   background: var(--pos-superficie);
   outline: none;
   transition: border-color 0.15s;
@@ -243,12 +247,14 @@
   flex-shrink: 0;
 }
 
+/* font-size en 16px, no 14px -- mismo motivo que .pos-buscador: evita
+   el zoom automático de iOS al enfocar el campo de búsqueda de cliente. */
 .pos-cliente input {
   width: 100%;
   padding: 10px 12px;
   border: 1.5px solid var(--pos-borde);
   border-radius: var(--pos-radio-sm);
-  font-size: 14px;
+  font-size: 16px;
   outline: none;
 }
 
@@ -327,11 +333,13 @@
   margin: 0;
 }
 
+/* font-size en 16px, no 13px -- mismo motivo: evita zoom automático de
+   iOS al enfocar documento/nombre del cliente nuevo. */
 .pos-cliente-nuevo input {
   padding: 9px 10px;
   border: 1.5px solid var(--pos-borde);
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .pos-cliente-nuevo-error {
@@ -1065,11 +1073,7 @@
     display: none !important;
   }
 }
-/* ===== Envío por WhatsApp, en el modal de venta registrada =====
-   Antes estaba en fila (input + botón lado a lado) y el botón, con
-   texto largo y sin poder encogerse, se salía del modal en pantallas
-   angostas. Ahora el botón va siempre debajo del campo, a ancho
-   completo — no depende del ancho disponible. */
+/* ===== Envío por WhatsApp, en el modal de venta registrada ===== */
 .pos-venta-modal-whatsapp {
   display: flex;
   flex-direction: column;
@@ -1078,12 +1082,14 @@
   width: 100%;
 }
 
+/* font-size en 16px, no 13px -- mismo motivo que los demás inputs:
+   evita el zoom automático de iOS al enfocar el campo de WhatsApp. */
 .pos-venta-modal-whatsapp input {
   width: 100%;
   padding: 11px 12px;
   border: 1.5px solid #e4e6eb;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 16px;
   outline: none;
   box-sizing: border-box;
 }

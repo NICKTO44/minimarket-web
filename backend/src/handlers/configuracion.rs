@@ -12,7 +12,8 @@ pub async fn obtener_configuracion(
     let mut rows = conn
         .query(
             "SELECT id, nombre_tienda, direccion, telefono, email, ruc, moneda, iva_porcentaje,
-                    facturalibre_token, facturalibre_ruta, codigo_producto_sunat_generico
+                    facturalibre_token, facturalibre_ruta, codigo_producto_sunat_generico,
+                    serie_boleta, serie_factura
              FROM configuracion_tienda LIMIT 1",
             (),
         )
@@ -32,6 +33,8 @@ pub async fn obtener_configuracion(
             facturalibre_token: row.get(8).ok(),
             facturalibre_ruta: row.get(9).ok(),
             codigo_producto_sunat_generico: row.get(10).ok(),
+            serie_boleta: row.get(11).ok(),
+            serie_factura: row.get(12).ok(),
         })),
         None => Err(StatusCode::NOT_FOUND),
     }
@@ -46,11 +49,13 @@ pub async fn actualizar_configuracion(
     conn.execute(
         "UPDATE configuracion_tienda SET nombre_tienda=?1, direccion=?2, telefono=?3, email=?4,
             ruc=?5, moneda=?6, iva_porcentaje=?7, facturalibre_token=?8, facturalibre_ruta=?9,
-            codigo_producto_sunat_generico=?10, fecha_actualizacion = datetime('now','localtime')",
+            codigo_producto_sunat_generico=?10, serie_boleta=?11, serie_factura=?12,
+            fecha_actualizacion = datetime('now','localtime')",
         libsql::params![
             payload.nombre_tienda.clone(), payload.direccion.clone(), payload.telefono.clone(),
             payload.email.clone(), payload.ruc.clone(), payload.moneda.clone(), payload.iva_porcentaje,
-            payload.facturalibre_token.clone(), payload.facturalibre_ruta.clone(), payload.codigo_producto_sunat_generico.clone()
+            payload.facturalibre_token.clone(), payload.facturalibre_ruta.clone(),
+            payload.codigo_producto_sunat_generico.clone(), payload.serie_boleta.clone(), payload.serie_factura.clone()
         ],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al actualizar: {}", e)))?;
 

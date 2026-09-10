@@ -13,6 +13,8 @@ pub struct ConfiguracionTienda {
     pub facturalibre_token: Option<String>,
     pub facturalibre_ruta: Option<String>,
     pub codigo_producto_sunat_generico: Option<String>,
+    pub serie_boleta: Option<String>,
+    pub serie_factura: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -27,6 +29,8 @@ pub struct ActualizarConfiguracion {
     pub facturalibre_token: Option<String>,
     pub facturalibre_ruta: Option<String>,
     pub codigo_producto_sunat_generico: Option<String>,
+    pub serie_boleta: Option<String>,
+    pub serie_factura: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

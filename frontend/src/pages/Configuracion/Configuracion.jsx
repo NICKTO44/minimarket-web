@@ -61,7 +61,12 @@ export default function Configuracion() {
         iva_porcentaje: parseFloat(formConfig.iva_porcentaje) || 18,
         facturalibre_token: formConfig.facturalibre_token || null,
         facturalibre_ruta: formConfig.facturalibre_ruta || null,
-        codigo_producto_sunat_generico: null,
+        // Antes se mandaba `null` fijo aquí -- eso borraba el código
+        // SUNAT guardado cada vez que se guardaba cualquier otro campo
+        // de esta pantalla. Ahora se manda el valor real del formulario.
+        codigo_producto_sunat_generico: formConfig.codigo_producto_sunat_generico || null,
+        serie_boleta: formConfig.serie_boleta || null,
+        serie_factura: formConfig.serie_factura || null,
       });
       setMensaje({ tipo: 'exito', texto: 'Configuración guardada.' });
       cargarConfig();
@@ -214,7 +219,43 @@ export default function Configuracion() {
             />
           </div>
 
+          <div className="cfg-campo-fila">
+            <div className="cfg-campo">
+              <label>Serie de Boleta</label>
+              <input
+                value={formConfig.serie_boleta || ''}
+                onChange={(e) => setFormConfig({ ...formConfig, serie_boleta: e.target.value })}
+                placeholder="B001"
+              />
+            </div>
+            <div className="cfg-campo">
+              <label>Serie de Factura</label>
+              <input
+                value={formConfig.serie_factura || ''}
+                onChange={(e) => setFormConfig({ ...formConfig, serie_factura: e.target.value })}
+                placeholder="F001"
+              />
+            </div>
+          </div>
+          <p className="cfg-nota-moneda">
+            Deben coincidir exactamente con las series activas en tu cuenta de FacturaLibre. Si las dejas
+            vacías, el sistema usa B001/F001 por defecto.
+          </p>
 
+          <div className="cfg-campo">
+            <label>Código de producto SUNAT (genérico)</label>
+            <input
+              value={formConfig.codigo_producto_sunat_generico || ''}
+              onChange={(e) => setFormConfig({ ...formConfig, codigo_producto_sunat_generico: e.target.value })}
+              placeholder="50000000"
+            />
+          </div>
+          <p className="cfg-nota-moneda">
+            Código de 8 dígitos del Catálogo N° 25 de SUNAT que se aplica a todos tus productos. Solo es
+            obligatorio para categorías específicas de riesgo (combustibles, oro, insumos químicos, entre
+            otras) desde el 1 de enero de 2027 — si no vendes ese tipo de productos, puedes dejar el valor
+            por defecto.
+          </p>
 
           <button className="cfg-boton-guardar" onClick={guardarConfig} disabled={guardandoConfig}>
             {guardandoConfig ? 'Guardando...' : 'Guardar cambios'}
