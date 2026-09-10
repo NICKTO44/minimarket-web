@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/
 
 COPY --from=builder /app/target/release/minimarket-backend ./minimarket-backend
 COPY --from=builder /app/target/release/migrar ./migrar
+COPY --from=builder /app/target/release/licencias ./licencias
 COPY migraciones ./migraciones
 
 RUN mkdir -p uploads/productos
