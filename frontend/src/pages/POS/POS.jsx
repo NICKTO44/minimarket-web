@@ -54,6 +54,30 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
   const [pdfError, setPdfError] = useState(null);
   const pdfContenedorRef = useRef(null);
 
+  // Se consulta una sola vez al entrar al POS si FacturaLibre está
+  // configurado -- así, si el cajero elige Boleta/Factura sin token
+  // configurado, se avisa ANTES de crear la venta, en vez de crearla
+  // igual y descubrir la falla recién al intentar emitir el
+  // comprobante (lo que antes dejaba la venta ya registrada y el
+  // carrito vacío, con riesgo de duplicar la venta si se reintentaba).
+  const [facturacionConfigurada, setFacturacionConfigurada] = useState(true);
+
+  useEffect(() => {
+    api
+      .configuracionObtener()
+      .then((cfg) => {
+        const listo = !!(cfg.facturalibre_token?.trim() && cfg.facturalibre_ruta?.trim());
+        setFacturacionConfigurada(listo);
+      })
+      .catch(() => {
+        // Si falla la consulta, se asume que sí está configurado --
+        // no se quiere bloquear ventas por un problema de red al
+        // cargar la pantalla; el chequeo real de todas formas ocurre
+        // en procesarVenta antes de crear la venta.
+        setFacturacionConfigurada(true);
+      });
+  }, []);
+
   const [nuevoTipoDocumento, setNuevoTipoDocumento] = useState('DNI');
   const [nuevoDocumento, setNuevoDocumento] = useState('');
   const [nuevoNombre, setNuevoNombre] = useState('');
@@ -334,6 +358,13 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
     (metodoPago !== 'EFECTIVO' || parseFloat(montoRecibido) >= total);
 
   const procesarVenta = async () => {
+    if (tipoComprobante !== 'NINGUNO' && !facturacionConfigurada) {
+      setMensaje({
+        tipo: 'error',
+        texto: 'Falta configurar el Token y la URL de FacturaLibre en Configuración antes de emitir Boleta o Factura. Cambia a "Nota simple" para continuar con esta venta, o completa la configuración primero.',
+      });
+      return; // no se crea la venta -- el carrito queda intacto
+    }
     setProcesando(true);
     setMensaje(null);
     try {
