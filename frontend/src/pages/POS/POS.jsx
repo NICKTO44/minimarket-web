@@ -20,6 +20,14 @@ const REGLAS_DOCUMENTO = {
 };
 
 export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion, telefono, ruc, identificadorNegocio }) {
+  // El buscador solo se enfoca solo en desktop -- en celular, hacerlo
+  // abre el teclado apenas se entra a la pantalla y tapa la grilla de
+  // productos antes de que el usuario haya tocado nada. Se calcula una
+  // sola vez al montar (no reactivo a resize), que es lo esperado para
+  // un autoFocus: decide el comportamiento inicial de la pantalla.
+  const [autoFocoBuscador] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 900px)').matches
+  );
   const [productos, setProductos] = useState([]);
   const [imagenesFallidas, setImagenesFallidas] = useState(() => new Set());
   const [busqueda, setBusqueda] = useState('');
@@ -519,7 +527,7 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             onKeyDown={manejarEnterBusquedaProducto}
-            autoFocus
+            autoFocus={autoFocoBuscador}
           />
           <button
             type="button"
