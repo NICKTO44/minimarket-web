@@ -1,6 +1,10 @@
 .res-layout {
   padding: 24px 28px;
   height: 100vh;
+  height: 100dvh; /* recalcula en vivo según el espacio real visible —
+                      100vh solo puede quedarse "corto" en la práctica
+                      cuando la barra de direcciones del navegador está
+                      visible, cortando el scroll antes del final real */
   overflow-y: auto;
   box-sizing: border-box;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

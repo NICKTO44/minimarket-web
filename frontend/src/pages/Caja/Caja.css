@@ -2,11 +2,14 @@
   display: flex;
   justify-content: center;
   padding: 24px 16px;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
   background: var(--pos-bg, #f4f5f7);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
-
 .caja-cargando {
   color: var(--pos-texto-tenue, #6b7280);
   padding-top: 40px;
