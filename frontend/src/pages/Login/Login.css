@@ -329,3 +329,51 @@
   color: #4338ca;
   text-decoration: underline;
 }
+/* =========================================================
+   Mostrar/ocultar contraseña — mismo wrapper para ambos
+   formularios (login general y login de negocio). El botón se
+   posiciona sobre el input sin alterar su ancho ni su padding
+   original, y toma automáticamente el color de acento de cada
+   contexto (verde en login general, índigo en login de negocio)
+   heredándolo del propio formulario.
+   ========================================================= */
+
+.login-campo-password {
+  position: relative;
+  width: 100%;
+}
+
+.login-campo-password input {
+  padding-right: 42px;
+}
+
+.login-toggle-password {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: none;
+  color: var(--mp-gris-claro);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0;
+}
+
+.login-toggle-password:hover {
+  color: #16181d;
+  background: #f4f5f7;
+}
+
+.login-general-form .login-toggle-password:hover {
+  color: var(--mp-verde-oscuro);
+}
+
+.login-tienda-form .login-toggle-password:hover {
+  color: #4338ca;
+}
