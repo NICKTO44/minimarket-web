@@ -19,6 +19,13 @@ const REGLAS_DOCUMENTO = {
   RUC: { maxLength: 11, soloNumeros: true, label: 'RUC (11 dígitos)' },
 };
 
+// Opciones del selector "Ordenar por" encima de la grilla del POS.
+const OPCIONES_ORDEN = [
+  { valor: 'nombre', label: 'Nombre (A-Z)' },
+  { valor: 'precio-asc', label: 'Precio: menor a mayor' },
+  { valor: 'precio-desc', label: 'Precio: mayor a menor' },
+];
+
 export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion, telefono, ruc, identificadorNegocio }) {
   // El buscador solo se enfoca solo en desktop -- en celular, hacerlo
   // abre el teclado apenas se entra a la pantalla y tapa la grilla de
@@ -31,6 +38,7 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
   const [productos, setProductos] = useState([]);
   const [imagenesFallidas, setImagenesFallidas] = useState(() => new Set());
   const [busqueda, setBusqueda] = useState('');
+  const [ordenPrecio, setOrdenPrecio] = useState('nombre');
   const buscadorRef = useRef(null);
   const [carrito, setCarrito] = useState([]);
   const [carritoAbierto, setCarritoAbierto] = useState(false);
@@ -256,10 +264,22 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
   };
 
   const productosFiltrados = useMemo(() => {
-    if (!busqueda.trim()) return productos;
-    const q = busqueda.toLowerCase();
-    return productos.filter((p) => p.nombre.toLowerCase().includes(q) || p.codigo.includes(q));
-  }, [productos, busqueda]);
+    const q = busqueda.trim().toLowerCase();
+    const base = q
+      ? productos.filter((p) => p.nombre.toLowerCase().includes(q) || p.codigo.includes(q))
+      : productos;
+
+    // El orden por nombre ya viene del backend (ORDER BY p.nombre), así
+    // que para esa opción no hace falta reordenar en el frontend -- solo
+    // se reordena cuando el usuario elige un orden por precio.
+    if (ordenPrecio === 'precio-asc') {
+      return [...base].sort((a, b) => a.precio - b.precio);
+    }
+    if (ordenPrecio === 'precio-desc') {
+      return [...base].sort((a, b) => b.precio - a.precio);
+    }
+    return base;
+  }, [productos, busqueda, ordenPrecio]);
 
   const marcarImagenFallida = (id) => {
     setImagenesFallidas((prev) => {
@@ -572,6 +592,23 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
           >
             📷
           </button>
+        </div>
+        <div className="pos-orden-fila">
+          <label htmlFor="pos-orden-select" className="pos-orden-label">
+            Ordenar por
+          </label>
+          <select
+            id="pos-orden-select"
+            className="pos-orden-select"
+            value={ordenPrecio}
+            onChange={(e) => setOrdenPrecio(e.target.value)}
+          >
+            {OPCIONES_ORDEN.map((op) => (
+              <option key={op.valor} value={op.valor}>
+                {op.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="pos-grid">
           {productosFiltrados.map((p) => (

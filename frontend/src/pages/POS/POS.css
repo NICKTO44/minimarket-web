@@ -67,6 +67,36 @@
   border-color: var(--pos-primario);
 }
 
+.pos-orden-fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pos-orden-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pos-texto-tenue);
+  white-space: nowrap;
+}
+
+.pos-orden-select {
+  padding: 8px 10px;
+  border: 1.5px solid var(--pos-borde);
+  border-radius: var(--pos-radio-sm);
+  background: var(--pos-superficie);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pos-texto);
+  outline: none;
+  cursor: pointer;
+}
+
+.pos-orden-select:focus {
+  border-color: var(--pos-primario);
+}
+
 .pos-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
@@ -74,10 +104,22 @@
   overflow-y: auto;
   padding-bottom: 8px;
   align-content: start;
-  align-items: start;
   min-height: 0;
 }
 
+/* height FIJA (no min-height) -- los dos intentos anteriores (align-items
+   y overflow) dependían de que el navegador calculara automáticamente la
+   altura de la fila del grid a partir del contenido de cada tarjeta, y
+   ese cálculo resultó ser poco confiable en la práctica (un intento
+   arreglaba el precio recortado pero volvía a causar el solapamiento, el
+   otro arreglaba el solapamiento pero recortaba el precio -- reportado
+   2026-09-13). Con una altura fija y explícita, con margen de sobra para
+   imagen + nombre de 2 líneas + precio + stock + paddings, el navegador
+   ya no tiene que calcular nada: todas las tarjetas miden exactamente lo
+   mismo, así que ninguna fila del grid puede quedar más corta de lo que
+   necesita su contenido. Si se cambia el tamaño de fuente, el alto de
+   imagen, o el padding en algún breakpoint, este valor debe recalcularse
+   y ajustarse junto con esos cambios. */
 .pos-producto-card {
   background: var(--pos-superficie);
   border: 1px solid var(--pos-borde);
@@ -88,7 +130,7 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  min-height: 48px;
+  height: 196px;
   transition: transform 0.08s, box-shadow 0.15s, border-color 0.15s;
 }
 
@@ -830,7 +872,7 @@
   .pos-producto-card {
     padding: 12px 10px;
     gap: 5px;
-    min-height: 168px;
+    height: 190px;
   }
 
   .pos-producto-imagen,
