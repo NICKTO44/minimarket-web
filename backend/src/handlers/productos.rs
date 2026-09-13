@@ -211,15 +211,35 @@ pub async fn actualizar_producto(
 
     let lleva_vencimiento = payload.lleva_vencimiento.unwrap_or(false);
 
+    // Traemos el estado actual del producto una sola vez: sirve tanto para
+    // no desincronizar el stock de perecibles (ya existía) como para NO
+    // pisar imagen_url con NULL cuando el payload no trae una foto nueva
+    // (bug reportado 2026-09-13: al editar solo el nombre, se borraba la
+    // imagen porque el UPDATE siempre escribía payload.imagen_url tal cual,
+    // y el frontend no reenvía la imagen existente si el usuario no eligió
+    // una nueva).
+    let mut r_actual = conn.query(
+        "SELECT stock, imagen_url FROM productos WHERE id = ?1",
+        libsql::params![id],
+    ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let (stock_actual, imagen_actual): (f64, Option<String>) =
+        match r_actual.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+            Some(row) => (row.get(0).unwrap_or(0.0), row.get(1).ok()),
+            None => (0.0, None),
+        };
+
     let stock_a_guardar = if lleva_vencimiento {
-        let mut r = conn.query("SELECT stock FROM productos WHERE id = ?1", libsql::params![id])
-            .await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        match r.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-            Some(row) => row.get(0).unwrap_or(0.0),
-            None => 0.0,
-        }
+        stock_actual
     } else {
         payload.stock
+    };
+
+    // Solo reemplazamos la imagen si el payload trae una URL nueva y no
+    // vacía; si no, conservamos la que ya estaba guardada.
+    let imagen_a_guardar = match payload.imagen_url.clone() {
+        Some(nueva) if !nueva.trim().is_empty() => Some(nueva),
+        _ => imagen_actual,
     };
 
     conn.execute(
@@ -233,7 +253,7 @@ pub async fn actualizar_producto(
             payload.precio, stock_a_guardar, payload.stock_minimo, payload.unidad_medida.clone(),
             payload.categoria_id, payload.descuento_porcentaje.unwrap_or(0.0),
             if lleva_vencimiento { 1 } else { 0 },
-            payload.imagen_url.clone(), payload.precio_compra.unwrap_or(0.0), id
+            imagen_a_guardar, payload.precio_compra.unwrap_or(0.0), id
         ],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al actualizar: {}", e)))?;
 
