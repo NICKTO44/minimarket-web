@@ -21,9 +21,6 @@ import Registro from './pages/Registro/Registro';
 import BoletaPublica from './pages/BoletaPublica/BoletaPublica';
 
 const STORAGE_KEY = 'minimarket_sesion';
-// Aparte de la sesión: qué negocio pertenece a este dispositivo/navegador.
-// A propósito NO se borra al cerrar sesión — así el próximo login (mismo
-// admin u otro cajero) no tiene que volver a escribir el negocio.
 const TIENDA_STORAGE_KEY = 'minimarket_tienda';
 
 function App() {
@@ -32,19 +29,11 @@ function App() {
   const [pantalla, setPantalla] = useState('RESUMEN');
   const [configuracionTienda, setConfiguracionTienda] = useState(null);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
-  const [vistaAuth, setVistaAuth] = useState('login'); // 'login' | 'registro'
+  const [vistaAuth, setVistaAuth] = useState('login');
   const [tiendaRecordada, setTiendaRecordada] = useState(null);
 
-  // Modo lectura por suscripción no al día — viene del login (backend
-  // ya lo calcula y lo aplica de verdad en cada escritura vía el
-  // middleware; esto es solo para mostrarlo de entrada en el frontend
-  // sin esperar a que una acción falle con 402).
   const [modoLectura, setModoLectura] = useState(false);
   const [avisoSuscripcion, setAvisoSuscripcion] = useState(null);
-
-  // Estado completo de la suscripción (días restantes, fecha de
-  // vencimiento, etc.) — se usa en el sidebar (punto de aviso) y en la
-  // página dedicada de Suscripción.
   const [estadoSuscripcion, setEstadoSuscripcion] = useState(null);
 
   const cargarEstadoSuscripcion = () => {
@@ -82,9 +71,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Usado tanto por Login como por Registro (Registro hace login solo
-  // apenas crea el negocio) — así toda la lógica de guardar sesión vive
-  // en un solo lugar.
   const handleLoginExitoso = (data) => {
     const sesionUsuario = {
       id: data.usuario.id,
@@ -115,6 +101,25 @@ function App() {
     cargarEstadoSuscripcion();
   };
 
+  // Paso 1 del login en dos pasos. Se llama cuando el backend ya
+  // identificó a qué negocio pertenece el usuario escrito (con su logo
+  // y color), pero TODAVÍA no hay sesión. Solo recuerda el negocio.
+  const handleTiendaIdentificada = (tienda) => {
+    localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(tienda));
+    setTiendaRecordada(tienda);
+  };
+    // Se llama desde Configuración cuando el dueño cambia el logo o el
+  // color de acento -- actualiza tiendaRecordada al toque, sin esperar
+  // a que alguien vuelva a loguearse para que el cambio se vea.
+  const handleIdentidadActualizada = (cambios) => {
+    setTiendaRecordada((actual) => {
+      if (!actual) return actual;
+      const actualizada = { ...actual, ...cambios };
+      localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(actualizada));
+      return actualizada;
+    });
+  };
+
   const handleLogout = () => {
     setLogueado(false);
     setUsuarioActual(null);
@@ -124,7 +129,6 @@ function App() {
     setAvisoSuscripcion(null);
     setEstadoSuscripcion(null);
     localStorage.removeItem(STORAGE_KEY);
-    // TIENDA_STORAGE_KEY se queda — ver nota arriba.
   };
 
   const handleOlvidarTienda = () => {
@@ -132,12 +136,6 @@ function App() {
     setTiendaRecordada(null);
   };
 
-  // Se llama justo después de canjear un código de activación con
-  // éxito. Actualiza el estado en memoria Y lo que quedó guardado en
-  // localStorage — así, aunque recargues la página sin volver a
-  // loguearte, el sistema sigue sabiendo que ya no está en modo lectura.
-  // También recarga el estado completo (días restantes, fecha) para que
-  // el sidebar y la página de Suscripción se vean actualizados al toque.
   const handleSuscripcionActivada = () => {
     setModoLectura(false);
     setAvisoSuscripcion(null);
@@ -153,10 +151,6 @@ function App() {
     cargarEstadoSuscripcion();
   };
 
-  // Ruta pública, sin login — un cliente final llega aquí desde un link
-  // de WhatsApp, nunca inició sesión en el sistema. Se revisa después de
-  // declarar todos los hooks (regla de React), pero ANTES de cualquier
-  // lógica de sesión/login.
   const matchBoletaPublica = window.location.pathname.match(/^\/boleta\/([^/]+)\/(\d+)$/);
   if (matchBoletaPublica) {
     const [, identificadorUrl, comprobanteIdUrl] = matchBoletaPublica;
@@ -175,6 +169,7 @@ function App() {
       <Login
         tiendaRecordada={tiendaRecordada}
         onLoginExitoso={handleLoginExitoso}
+        onTiendaIdentificada={handleTiendaIdentificada}
         onIrARegistro={() => setVistaAuth('registro')}
         onOlvidarTienda={handleOlvidarTienda}
       />
@@ -233,6 +228,9 @@ function App() {
             onRecargar={cargarEstadoSuscripcion}
             onSuscripcionActivada={handleSuscripcionActivada}
           />
+        )}
+        {pantalla === 'CONFIGURACION' && (
+        <Configuracion onIdentidadActualizada={handleIdentidadActualizada} />
         )}
         {pantalla === 'CONFIGURACION' && <Configuracion />}
       </div>

@@ -10,10 +10,6 @@ function obtenerToken() {
   }
 }
 
-// Los endpoints públicos (login/registro/verificar-usuario) devuelven el
-// error a veces como JSON ({ message }) y a veces como texto plano, según
-// el tipo de StatusCode que use el handler en el backend. Esta función lee
-// cualquiera de los dos formatos sin romperse.
 async function leerRespuesta(res) {
   const isJson = res.headers.get('content-type')?.includes('application/json');
   return isJson ? res.json().catch(() => null) : res.text();
@@ -58,6 +54,19 @@ export const api = {
     }
     return data;
   },
+  identificarUsuario: async (usuario) => {
+    const res = await fetch(`${API_URL}/login/identificar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario }),
+    });
+    const data = await leerRespuesta(res);
+    if (!res.ok) {
+      const mensaje = typeof data === 'string' ? data : data?.message;
+      throw new Error(mensaje || 'Usuario o contraseña incorrectos');
+    }
+    return data;
+  },
   registro: async ({ nombre_negocio, nombre_completo, usuario, password, ruc }) => {
     const res = await fetch(`${API_URL}/registro`, {
       method: 'POST',
@@ -85,11 +94,6 @@ export const api = {
   clientesTodos: () => request('/clientes/todos'),
   clienteActualizar: (id, data) => request(`/clientes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   clienteDesactivar: (id) => request(`/clientes/${id}/desactivar`, { method: 'POST' }),
-  // Autocompletado de DNI/RUC en el formulario de cliente nuevo. Nunca
-  // lanza error hacia el llamador -- si Factiliza falla o no hay token
-  // configurado, el backend responde igual con existe: null, y aquí
-  // simplemente se propaga tal cual para que el formulario siga
-  // funcionando sin bloquear al cajero.
   documentoConsultar: (tipo, numero) => request(`/documentos/consultar?tipo=${tipo}&numero=${encodeURIComponent(numero)}`),
   ventaCrear: (venta) => request('/ventas', { method: 'POST', body: JSON.stringify(venta) }),
   cajaAbrir: (data) => request('/cajas/abrir', { method: 'POST', body: JSON.stringify(data) }),
@@ -121,13 +125,26 @@ export const api = {
   devolucionCrear: (data) => request('/devoluciones', { method: 'POST', body: JSON.stringify(data) }),
   configuracionObtener: () => request('/configuracion'),
   configuracionActualizar: (data) => request('/configuracion', { method: 'PUT', body: JSON.stringify(data) }),
+  configuracionSubirLogo: async (archivo) => {
+    const token = obtenerToken();
+    const formData = new FormData();
+    formData.append('logo', archivo);
+
+    const res = await fetch(`${API_URL}/configuracion/logo`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.message || 'Error al subir el logo');
+    return data;
+  },
   usuariosListar: () => request('/usuarios'),
   usuarioCrear: (data) => request('/usuarios', { method: 'POST', body: JSON.stringify(data) }),
   usuarioDesactivar: (id) => request(`/usuarios/${id}/desactivar`, { method: 'POST' }),
   canjearCodigo: (codigo) => request('/suscripcion/canjear-codigo', { method: 'POST', body: JSON.stringify({ codigo }) }),
   suscripcionEstado: () => request('/suscripcion/estado'),
-  // Sin autenticación a propósito -- la ve el cliente final desde un link
-  // de WhatsApp, nunca tiene sesión iniciada.
   comprobantePublico: async (identificador, id) => {
     const res = await fetch(`${API_URL}/publico/comprobante/${encodeURIComponent(identificador)}/${id}`);
     const data = await leerRespuesta(res);
@@ -144,8 +161,6 @@ export const api = {
     const params = new URLSearchParams(filtros).toString();
     return request(`/comprobantes${params ? `?${params}` : ''}`);
   },
-  // El <iframe> del PDF no puede mandar cabeceras — por eso el token va
-  // acá en la URL, en vez de como Authorization normal.
   comprobantePdfUrl: (id) => {
     const token = obtenerToken();
     return `${API_URL}/comprobantes/${id}/pdf${token ? `?token=${encodeURIComponent(token)}` : ''}`;
@@ -158,9 +173,6 @@ export const api = {
     const res = await fetch(`${API_URL}/productos/${id}/imagen`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
-      // OJO: no pongas 'Content-Type' aquí — el navegador lo arma solo
-      // con el "boundary" correcto para FormData; si lo fuerzas a JSON
-      // rompe la subida del archivo.
       body: formData,
     });
 

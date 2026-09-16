@@ -15,6 +15,8 @@ pub struct ConfiguracionTienda {
     pub codigo_producto_sunat_generico: Option<String>,
     pub serie_boleta: Option<String>,
     pub serie_factura: Option<String>,
+    pub logo_path: Option<String>,
+    pub color_acento: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,6 +33,7 @@ pub struct ActualizarConfiguracion {
     pub codigo_producto_sunat_generico: Option<String>,
     pub serie_boleta: Option<String>,
     pub serie_factura: Option<String>,
+    pub color_acento: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

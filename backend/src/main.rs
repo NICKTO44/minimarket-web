@@ -20,9 +20,6 @@ async fn main() {
 
     let db_url = std::env::var("TURSO_DATABASE_URL").expect("Falta TURSO_DATABASE_URL en .env");
     let db_token = std::env::var("TURSO_AUTH_TOKEN").expect("Falta TURSO_AUTH_TOKEN en .env");
-    // Antes solo se validaba que existiera y se descartaba el valor —
-    // ahora se guarda para pasarlo a AppState y que el middleware ya no
-    // tenga que leerlo del entorno en cada petición.
     let jwt_secret = std::env::var("JWT_SECRET").expect("Falta JWT_SECRET en .env (agrega una clave larga y aleatoria)");
     std::env::var("AGENTE_IMPRESION_TOKEN").expect("Falta AGENTE_IMPRESION_TOKEN en .env (token para el agente de impresión)");
 
@@ -63,9 +60,6 @@ async fn main() {
         jwt_secret,
     });
 
-    // Solo estos dos orígenes pueden llamar a la API — tu frontend real
-    // en Vercel, y tu entorno de desarrollo local. Cuando tengas dominio
-    // propio para minimarket-web, se agrega aquí.
     let origenes_permitidos = AllowOrigin::list([
         HeaderValue::from_static("https://frontend-sigma-three-23.vercel.app"),
         HeaderValue::from_static("http://localhost:5173"),
@@ -78,6 +72,7 @@ async fn main() {
 
     let rutas_autenticacion = Router::new()
         .route("/login", post(handlers::auth::login))
+        .route("/login/identificar", post(handlers::auth::identificar_usuario))
         .route("/registro", post(handlers::registro::registrar_negocio))
         .route("/registro/verificar-usuario", get(handlers::registro::verificar_usuario))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_intentos));
@@ -135,6 +130,7 @@ async fn main() {
         .route("/impresora/imprimir", post(handlers::impresora::imprimir_boleta))
         .route("/configuracion", get(handlers::configuracion::obtener_configuracion))
         .route("/configuracion", axum::routing::put(handlers::configuracion::actualizar_configuracion))
+        .route("/configuracion/logo", post(handlers::imagenes::subir_logo_tienda))
         .route("/usuarios", get(handlers::configuracion::listar_usuarios))
         .route("/usuarios", post(handlers::configuracion::crear_usuario))
         .route("/usuarios/:id/desactivar", post(handlers::configuracion::desactivar_usuario))

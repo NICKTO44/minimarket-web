@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../api/api';
+import { api, API_URL } from '../../api/api';
 import './Configuracion.css';
 
 const ROLES = [
@@ -8,11 +8,12 @@ const ROLES = [
   { id: 3, nombre: 'Inventario' },
 ];
 
-export default function Configuracion() {
+export default function Configuracion({ onIdentidadActualizada }) {
   const [vista, setVista] = useState('NEGOCIO');
 
   const [formConfig, setFormConfig] = useState(null);
   const [guardandoConfig, setGuardandoConfig] = useState(false);
+  const [subiendoLogo, setSubiendoLogo] = useState(false);
 
   const [usuarios, setUsuarios] = useState([]);
   const [cargandoUsuarios, setCargandoUsuarios] = useState(true);
@@ -61,19 +62,45 @@ export default function Configuracion() {
         iva_porcentaje: parseFloat(formConfig.iva_porcentaje) || 18,
         facturalibre_token: formConfig.facturalibre_token || null,
         facturalibre_ruta: formConfig.facturalibre_ruta || null,
-        // Antes se mandaba `null` fijo aquí -- eso borraba el código
-        // SUNAT guardado cada vez que se guardaba cualquier otro campo
-        // de esta pantalla. Ahora se manda el valor real del formulario.
         codigo_producto_sunat_generico: formConfig.codigo_producto_sunat_generico || null,
         serie_boleta: formConfig.serie_boleta || null,
         serie_factura: formConfig.serie_factura || null,
+        color_acento: formConfig.color_acento || null,
       });
       setMensaje({ tipo: 'exito', texto: 'Configuración guardada.' });
-      cargarConfig();
+      const actualizada = await api.configuracionObtener();
+      setFormConfig(actualizada);
+      onIdentidadActualizada?.({
+        logo_url: actualizada.logo_path,
+        color_acento: actualizada.color_acento,
+      });
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
     } finally {
       setGuardandoConfig(false);
+    }
+  };
+
+  const subirLogo = async (e) => {
+    const archivo = e.target.files[0];
+    if (!archivo) return;
+
+    setMensaje(null);
+    setSubiendoLogo(true);
+    try {
+      await api.configuracionSubirLogo(archivo);
+      setMensaje({ tipo: 'exito', texto: 'Logo actualizado.' });
+      const actualizada = await api.configuracionObtener();
+      setFormConfig(actualizada);
+      onIdentidadActualizada?.({
+        logo_url: actualizada.logo_path,
+        color_acento: actualizada.color_acento,
+      });
+    } catch (err) {
+      setMensaje({ tipo: 'error', texto: err.message });
+    } finally {
+      setSubiendoLogo(false);
+      e.target.value = '';
     }
   };
 
@@ -190,6 +217,36 @@ export default function Configuracion() {
                 onChange={(e) => setFormConfig({ ...formConfig, iva_porcentaje: e.target.value })}
               />
             </div>
+          </div>
+
+          <div className="cfg-separador-seccion"></div>
+          <h3 className="cfg-subtitulo-seccion">Identidad visual del login</h3>
+          <p className="cfg-nota-moneda">
+            El logo y el color se muestran en la pantalla donde tus cajeros inician sesión, antes de
+            escribir su contraseña.
+          </p>
+
+          <div className="cfg-campo">
+            <label>Logo del negocio</label>
+            {formConfig.logo_path && (
+              <img
+                src={`${API_URL}${formConfig.logo_path}?t=${Date.now()}`}
+                alt="Logo actual"
+                style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 12, marginBottom: 8, display: 'block' }}
+              />
+            )}
+            <input type="file" accept="image/*" onChange={subirLogo} disabled={subiendoLogo} />
+            {subiendoLogo && <p className="cfg-nota-moneda">Subiendo...</p>}
+          </div>
+
+          <div className="cfg-campo">
+            <label>Color de acento</label>
+            <input
+              type="color"
+              value={formConfig.color_acento || '#4338ca'}
+              onChange={(e) => setFormConfig({ ...formConfig, color_acento: e.target.value })}
+              style={{ width: 60, height: 36, padding: 2, cursor: 'pointer' }}
+            />
           </div>
 
           <div className="cfg-separador-seccion"></div>

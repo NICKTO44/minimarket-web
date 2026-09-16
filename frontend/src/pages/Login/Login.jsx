@@ -1,16 +1,22 @@
-import { useState } from 'react';
-import { api } from '../../api/api';
+
+import { useState, useRef } from 'react';
+import { api, API_URL } from '../../api/api';
 import './Login.css';
 
 // Número de WhatsApp de Monspeet Dev.
 // Formato: código de país + número, sin +, sin espacios
 const WHATSAPP_NUMERO = '51910372220';
+
 const WHATSAPP_MENSAJE =
   'Hola, estoy interesado en el sistema, quisiera más información.';
+
 const ENLACE_WHATSAPP = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(
   WHATSAPP_MENSAJE
 )}`;
 
+// ============================================================
+// ICONO WHATSAPP
+// ============================================================
 function IconoWhatsapp() {
   return (
     <svg
@@ -26,7 +32,101 @@ function IconoWhatsapp() {
   );
 }
 
-// Ojo abierto: contraseña visible
+function IconoCarrito() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      <circle cx="9" cy="20" r="1.4" />
+      <circle cx="18" cy="20" r="1.4" />
+      <path
+        d="M2.5 3h2l2.4 12.3a2 2 0 0 0 2 1.7h8.2a2 2 0 0 0 2-1.6L21 8H6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconoRayo() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      <path
+        d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function IconoArrastre() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+      <circle cx="8" cy="6" r="1.5" />
+      <circle cx="16" cy="6" r="1.5" />
+      <circle cx="8" cy="12" r="1.5" />
+      <circle cx="16" cy="12" r="1.5" />
+      <circle cx="8" cy="18" r="1.5" />
+      <circle cx="16" cy="18" r="1.5" />
+    </svg>
+  );
+}
+
+function IconoCaja() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      <path
+        d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3.5 7.5 12 12l8.5-4.5M12 12v9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconoDocumento() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      <path
+        d="M6 2.5h8l4 4V21a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M9 13h6M9 17h6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ============================================================
+// OJO ABIERTO: CONTRASEÑA VISIBLE
+// ============================================================
 function IconoOjo() {
   return (
     <svg
@@ -54,7 +154,9 @@ function IconoOjo() {
   );
 }
 
-// Ojo tachado: contraseña oculta
+// ============================================================
+// OJO TACHADO: CONTRASEÑA OCULTA
+// ============================================================
 function IconoOjoTachado() {
   return (
     <svg
@@ -83,9 +185,13 @@ function IconoOjoTachado() {
   );
 }
 
+// ============================================================
+// COMPONENTE LOGIN
+// ============================================================
 export default function Login({
   tiendaRecordada,
   onLoginExitoso,
+  onTiendaIdentificada,
   onIrARegistro,
   onOlvidarTienda,
 }) {
@@ -94,8 +200,43 @@ export default function Login({
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState('');
   const [mostrarPassword, setMostrarPassword] = useState(false);
+  // ============================================================
+  // ARRASTRAR EL MODAL DE LOGIN (solo desktop -- en mobile el
+  // CSS fuerza transform: none, así que esto no tiene efecto ahí)
+  // ============================================================
+  // ============================================================
+  // ARRASTRAR EL MODAL DE LOGIN (solo desktop -- en mobile el
+  // CSS fuerza transform: none, así que esto no tiene efecto ahí)
+  // ============================================================
+  const [posicion, setPosicion] = useState({ x: 0, y: 0 });
+  const arrastrando = useRef(false);
+  const offsetArrastre = useRef({ x: 0, y: 0 });
 
-  const handleSubmit = async (e) => {
+  const handleArrastreDown = (e) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    arrastrando.current = true;
+    offsetArrastre.current = {
+      x: e.clientX - posicion.x,
+      y: e.clientY - posicion.y,
+    };
+  };
+
+  const handleArrastreMove = (e) => {
+    if (!arrastrando.current) return;
+    setPosicion({
+      x: e.clientX - offsetArrastre.current.x,
+      y: e.clientY - offsetArrastre.current.y,
+    });
+  };
+
+  const handleArrastreUp = (e) => {
+    arrastrando.current = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+  // ============================================================
+  // LOGIN DE UN NEGOCIO YA IDENTIFICADO (PASO 2)
+  // ============================================================
+  const handleSubmitLogin = async (e) => {
     e.preventDefault();
 
     setCargando(true);
@@ -119,6 +260,28 @@ export default function Login({
   };
 
   // ============================================================
+  // PASO 1: IDENTIFICAR EL NEGOCIO POR USUARIO
+  // ============================================================
+  const handleSubmitIdentificar = async (e) => {
+    e.preventDefault();
+
+    setCargando(true);
+    setMensaje('');
+
+    try {
+      const data = await api.identificarUsuario(usuario);
+
+      if (data?.ok && data.tienda) {
+        onTiendaIdentificada(data.tienda);
+      }
+    } catch (err) {
+      setMensaje(err.message || 'No se pudo identificar el negocio');
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  // ============================================================
   // LOGIN DE UN NEGOCIO YA IDENTIFICADO
   // ============================================================
   if (tiendaRecordada) {
@@ -127,10 +290,31 @@ export default function Login({
       .charAt(0)
       .toUpperCase();
 
+    const colorAcento = tiendaRecordada.color_acento || '#4338ca';
+
     return (
       <div className="login-tienda-container">
-        <form className="login-tienda-form" onSubmit={handleSubmit}>
-          <div className="login-tienda-badge">{inicial}</div>
+        <form
+          className="login-tienda-form"
+          onSubmit={handleSubmitLogin}
+        >
+          {tiendaRecordada.logo_url ? (
+            <img
+              src={`${API_URL}${tiendaRecordada.logo_url}?t=${Date.now()}`}
+              alt={tiendaRecordada.nombre_negocio}
+              className="login-tienda-logo"
+            />
+          ) : (
+            <div
+              className="login-tienda-badge"
+              style={{
+                background: colorAcento,
+                color: '#fff',
+              }}
+            >
+              {inicial}
+            </div>
+          )}
 
           <h1 className="login-tienda-nombre">
             {tiendaRecordada.nombre_negocio}
@@ -154,12 +338,17 @@ export default function Login({
               placeholder="Contraseña"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              style={{
+                '--color-foco': colorAcento,
+              }}
             />
 
             <button
               type="button"
               className="login-toggle-password"
-              onClick={() => setMostrarPassword((v) => !v)}
+              onClick={() =>
+                setMostrarPassword((v) => !v)
+              }
               aria-label={
                 mostrarPassword
                   ? 'Ocultar contraseña'
@@ -167,7 +356,11 @@ export default function Login({
               }
               tabIndex={-1}
             >
-              {mostrarPassword ? <IconoOjoTachado /> : <IconoOjo />}
+              {mostrarPassword ? (
+                <IconoOjoTachado />
+              ) : (
+                <IconoOjo />
+              )}
             </button>
           </div>
 
@@ -175,6 +368,9 @@ export default function Login({
             type="submit"
             className="login-tienda-submit"
             disabled={cargando}
+            style={{
+              background: colorAcento,
+            }}
           >
             {cargando ? 'Ingresando...' : 'Ingresar'}
           </button>
@@ -189,6 +385,9 @@ export default function Login({
             type="button"
             className="login-tienda-cambiar"
             onClick={onOlvidarTienda}
+            style={{
+              '--color-hover': colorAcento,
+            }}
           >
             ¿No es tu negocio? Cambiar
           </button>
@@ -199,83 +398,96 @@ export default function Login({
 
   // ============================================================
   // LOGIN GENERAL DE LA PLATAFORMA
+  // PASO 1: IDENTIFICAR EL NEGOCIO
+  // Imagen a pantalla completa, marca a la izquierda, login como
+  // tarjeta flotante superpuesta sobre la imagen.
   // ============================================================
   return (
     <div className="login-general-container">
-      <aside className="login-general-marca">
-        <svg
-          className="login-general-decoracion"
-          viewBox="0 0 260 340"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M30 10h150v270l-15-12-15 12-15-12-15 12-15-12-15 12-15-12-15 12-15-12-15 12-15-12-15 12V10z"
-            stroke="currentColor"
-            strokeWidth="2"
-          />
+      <div className="login-general-marca-contenido">
+        <div className="login-general-logo">
+          <IconoCarrito />
 
-          <line
-            x1="55"
-            y1="55"
-            x2="155"
-            y2="55"
-            stroke="currentColor"
-            strokeWidth="2"
-          />
-
-          <line
-            x1="55"
-            y1="80"
-            x2="155"
-            y2="80"
-            stroke="currentColor"
-            strokeWidth="2"
-          />
-
-          <line
-            x1="55"
-            y1="105"
-            x2="120"
-            y2="105"
-            stroke="currentColor"
-            strokeWidth="2"
-          />
-        </svg>
-
-        <div className="login-general-marca-top">
           <p className="login-general-wordmark">
             Monspeet<span>POS</span>
           </p>
-
-          <p className="login-general-tagline">
-            Ventas, inventario y boletas electrónicas, todo en un solo sistema.
-          </p>
         </div>
 
-        <div className="login-general-marca-bottom">
-          {/* AQUÍ ESTABA EL ERROR: FALTABA LA ETIQUETA <a> */}
+        <h2 className="login-general-titulo">
+          Tu negocio, más simple,
+          <br />
+          <span>más rentable.</span>
+        </h2>
 
-          <a
-            className="login-whatsapp-boton"
-            href={ENLACE_WHATSAPP}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Escríbenos por WhatsApp"
-          >
-            <IconoWhatsapp />
-            Escríbenos por WhatsApp
-          </a>
+        <p className="login-general-tagline">
+          Sistema de punto de venta en la nube para tiendas, restaurantes
+          y todo tipo de negocios.
+        </p>
 
-          <p className="login-general-firma">
-            un producto de Monspeet Dev.
-          </p>
+        <div className="login-general-features">
+          <div className="login-general-feature">
+            <span className="login-general-feature-icono">
+              <IconoRayo />
+            </span>
+
+            <p>Ventas rápidas y simples</p>
+          </div>
+
+          <div className="login-general-feature">
+            <span className="login-general-feature-icono">
+              <IconoCaja />
+            </span>
+
+            <p>Control de inventario en tiempo real</p>
+          </div>
+
+          <div className="login-general-feature">
+            <span className="login-general-feature-icono">
+              <IconoDocumento />
+            </span>
+
+            <p>Boletas y facturas electrónicas SUNAT</p>
+          </div>
         </div>
-      </aside>
 
-      <div className="login-general-panel">
-        <form className="login-general-form" onSubmit={handleSubmit}>
-          <h1>Ingresa a tu negocio</h1>
+        <a
+          className="login-whatsapp-boton"
+          href={ENLACE_WHATSAPP}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Escríbenos por WhatsApp"
+        >
+          <IconoWhatsapp />
+          Escríbenos por WhatsApp
+        </a>
+
+        <p className="login-general-firma">
+          un producto de Monspeet Dev.
+        </p>
+      </div>
+      <div
+        className="login-general-flotante"
+        style={{
+          transform: `translate(calc(-50% + ${posicion.x}px), calc(-50% + ${posicion.y}px))`,
+        }}
+      >
+        <div
+          className="login-general-arrastre"
+          onPointerDown={handleArrastreDown}
+          onPointerMove={handleArrastreMove}
+          onPointerUp={handleArrastreUp}
+          aria-hidden="true"
+        >
+          <IconoArrastre />
+        </div>
+
+        <form
+          className="login-general-form"
+          onSubmit={handleSubmitIdentificar}
+        >
+          <h1>
+            Ingresa a tu negocio
+          </h1>
 
           <input
             type="text"
@@ -285,31 +497,11 @@ export default function Login({
             autoFocus
           />
 
-          <div className="login-campo-password">
-            <input
-              type={mostrarPassword ? 'text' : 'password'}
-              placeholder="Contraseña"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-
-            <button
-              type="button"
-              className="login-toggle-password"
-              onClick={() => setMostrarPassword((v) => !v)}
-              aria-label={
-                mostrarPassword
-                  ? 'Ocultar contraseña'
-                  : 'Mostrar contraseña'
-              }
-              tabIndex={-1}
-            >
-              {mostrarPassword ? <IconoOjoTachado /> : <IconoOjo />}
-            </button>
-          </div>
-
-          <button type="submit" disabled={cargando}>
-            {cargando ? 'Ingresando...' : 'Ingresar'}
+          <button
+            type="submit"
+            disabled={cargando}
+          >
+            {cargando ? 'Buscando...' : 'Continuar'}
           </button>
 
           {mensaje && (
@@ -323,10 +515,12 @@ export default function Login({
             className="login-enlace"
             onClick={onIrARegistro}
           >
-            ¿Tu negocio no está registrado todavía? Regístrate
+            ¿Tu negocio no está registrado todavía?
+            Regístrate
           </button>
         </form>
       </div>
     </div>
   );
 }
+

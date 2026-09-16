@@ -1,0 +1,1 @@
+ALTER TABLE configuracion_tienda ADD COLUMN color_acento TEXT DEFAULT '#4338ca';
