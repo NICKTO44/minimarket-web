@@ -6,6 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::AppState;
 use crate::licencias_logica::hoy;
 
+use std::path::Path;
+use crate::migraciones;
 /// Cuántos días de prueba gratis recibe un negocio nuevo al registrarse,
 /// antes de pasar a modo lectura si no se activa con un código.
 const DIAS_PRUEBA_GRATIS: i64 = 15;
@@ -304,6 +306,28 @@ async fn registrar_negocio_interno(
         )
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // NUEVO: apenas se crea la base nueva con el schema.sql base, se le
+    // aplican de inmediato todas las migraciones pendientes de
+    // migraciones/ -- el mismo runner que usa el binario `migrar` para
+    // los tenants existentes. Así ningún negocio nuevo puede quedar
+    // desactualizado si schema.sql no refleja todavía la última
+    // migración: la migración misma se encarga de ponerlo al día en el
+    // momento de nacer, sin depender de que alguien se acuerde de
+    // actualizar schema.sql a mano.
+    let tienda_recien_creada = crate::tenants::TiendaConexion {
+        id: 0, // no se usa dentro de aplicar_migraciones_a_tienda
+        nombre_negocio: payload.nombre_negocio.clone(),
+        identificador: identificador.to_string(),
+        db_url: db_url.clone(),
+        db_token: db_token.clone(),
+        estado: "ACTIVO".to_string(),
+        fecha_vencimiento: None,
+    };
+
+    migraciones::aplicar_migraciones_a_tienda(&tienda_recien_creada, Path::new("migraciones"))
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error aplicando migraciones al negocio nuevo: {}", e)))?;
 
     // 6. Guardar el negocio + el índice de usuario en la base central.
     //    El token se cifra antes de guardarlo — nunca queda en texto

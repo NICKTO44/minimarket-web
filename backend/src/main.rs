@@ -56,7 +56,8 @@ async fn main() {
         db,
         tiendas: tenants::RegistroTiendas::nuevo(central_db, clave_cifrado),
         estado_impresion: estado_impresion::EstadoImpresion::nuevo(),
-        limitador_login: rate_limit::LimitadorIntentos::nuevo(),
+        limitador_login: rate_limit::LimitadorIntentos::estricto(),
+        limitador_verificar: rate_limit::LimitadorIntentos::laxo(),
         jwt_secret,
     });
 
@@ -70,13 +71,17 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let rutas_autenticacion = Router::new()
-        .route("/login", post(handlers::auth::login))
-        .route("/login/identificar", post(handlers::auth::identificar_usuario))
-        .route("/registro", post(handlers::registro::registrar_negocio))
-        .route("/registro/verificar-usuario", get(handlers::registro::verificar_usuario))
-        .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_intentos));
+ let rutas_sensibles = Router::new()
+    .route("/login", post(handlers::auth::login))
+    .route("/login/identificar", post(handlers::auth::identificar_usuario))
+    .route("/registro", post(handlers::registro::registrar_negocio))
+    .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_login));
 
+let rutas_verificacion = Router::new()
+    .route("/registro/verificar-usuario", get(handlers::registro::verificar_usuario))
+    .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_verificar));
+
+let rutas_autenticacion = rutas_sensibles.merge(rutas_verificacion);
     let rutas_publicas = Router::new()
         .route("/", get(health))
         .route("/agente-impresion/ws", get(handlers::agente_impresion::agente_websocket))
