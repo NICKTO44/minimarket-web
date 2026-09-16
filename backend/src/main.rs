@@ -8,7 +8,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer, Any};
 use tower_http::services::ServeDir;
 use libsql::Builder;
 
-use minimarket_backend::{crypto, estado_impresion, handlers, middleware_auth, rate_limit, tenants, AppState};
+use minimarket_backend::{crypto, estado_impresion, handlers, middleware_auth, migraciones, rate_limit, tenants, AppState};
 
 async fn health() -> &'static str {
     "minimarket-backend OK"
@@ -61,6 +61,48 @@ async fn main() {
         jwt_secret,
     });
 
+    // Migraciones automáticas para TODOS los negocios ya existentes --
+    // corre en segundo plano, sin bloquear el arranque del servidor ni
+    // el chequeo de salud de deploy.sh. Cada vez que el contenedor se
+    // reconstruye (cada deploy), cualquier negocio que ya exista queda
+    // al día solo con las migraciones nuevas que haya en migraciones/
+    // -- ya no hace falta correr ./migrar a mano, ni para negocios
+    // viejos ni para los que se registren después (esos ya quedan al
+    // día en el momento de crearse, en registro.rs).
+    {
+        let state_migraciones = state.clone();
+        tokio::spawn(async move {
+            println!("🔄 Aplicando migraciones pendientes a los negocios existentes...");
+            match state_migraciones.tiendas.listar_todas().await {
+                Ok(tiendas) => {
+                    let mut ok = 0;
+                    let mut fallos = 0;
+                    for tienda in &tiendas {
+                        match migraciones::aplicar_migraciones_a_tienda(tienda, std::path::Path::new("migraciones")).await {
+                            Ok(aplicadas) if aplicadas.is_empty() => ok += 1,
+                            Ok(aplicadas) => {
+                                println!(
+                                    "  ✅ {} ({}) — {} migración(es) nueva(s): {}",
+                                    tienda.nombre_negocio,
+                                    tienda.identificador,
+                                    aplicadas.len(),
+                                    aplicadas.join(", ")
+                                );
+                                ok += 1;
+                            }
+                            Err(e) => {
+                                eprintln!("  ❌ {} ({}) — FALLÓ: {}", tienda.nombre_negocio, tienda.identificador, e);
+                                fallos += 1;
+                            }
+                        }
+                    }
+                    println!("🔄 Migraciones automáticas: {} al día, {} con error(es).", ok, fallos);
+                }
+                Err(e) => eprintln!("⚠️  No se pudo listar los negocios para aplicar migraciones automáticas: {}", e),
+            }
+        });
+    }
+
     let origenes_permitidos = AllowOrigin::list([
         HeaderValue::from_static("https://frontend-sigma-three-23.vercel.app"),
         HeaderValue::from_static("http://localhost:5173"),
@@ -71,17 +113,18 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
- let rutas_sensibles = Router::new()
-    .route("/login", post(handlers::auth::login))
-    .route("/login/identificar", post(handlers::auth::identificar_usuario))
-    .route("/registro", post(handlers::registro::registrar_negocio))
-    .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_login));
+    let rutas_sensibles = Router::new()
+        .route("/login", post(handlers::auth::login))
+        .route("/login/identificar", post(handlers::auth::identificar_usuario))
+        .route("/registro", post(handlers::registro::registrar_negocio))
+        .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_login));
 
-let rutas_verificacion = Router::new()
-    .route("/registro/verificar-usuario", get(handlers::registro::verificar_usuario))
-    .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_verificar));
+    let rutas_verificacion = Router::new()
+        .route("/registro/verificar-usuario", get(handlers::registro::verificar_usuario))
+        .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_verificar));
 
-let rutas_autenticacion = rutas_sensibles.merge(rutas_verificacion);
+    let rutas_autenticacion = rutas_sensibles.merge(rutas_verificacion);
+
     let rutas_publicas = Router::new()
         .route("/", get(health))
         .route("/agente-impresion/ws", get(handlers::agente_impresion::agente_websocket))
