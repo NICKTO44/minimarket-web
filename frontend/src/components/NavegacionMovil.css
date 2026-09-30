@@ -330,3 +330,19 @@
     animation: none;
   }
 }
+
+/* Número sobre una pestaña (ej. pedidos listos para entregar) */
+.navm-insignia {
+  position: absolute;
+  top: -5px;
+  right: -9px;
+  min-width: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 17px;
+  text-align: center;
+}

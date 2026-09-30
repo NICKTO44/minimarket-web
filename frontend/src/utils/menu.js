@@ -15,12 +15,16 @@ import {
   Settings,
   Users,
   CreditCard,
+  UtensilsCrossed,
+  ChefHat,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
   {
     titulo: 'Operación',
     items: [
+      { id: 'MESAS', label: 'Mesas', icono: UtensilsCrossed, soloRestaurante: true },
+      { id: 'PREPARACION', label: 'Preparación', icono: ChefHat, soloRestaurante: true },
       { id: 'POS', label: 'Punto de Venta', icono: ScanBarcode },
       { id: 'RESUMEN', label: 'Resumen', icono: LayoutGrid },
       { id: 'CAJA', label: 'Caja y Turnos', icono: Wallet },
@@ -48,12 +52,43 @@ export const GRUPOS_MENU = [
   },
 ];
 
-/** Grupos con solo los módulos que ese usuario puede ver. */
-export function gruposParaUsuario(usuario) {
+/** true si el usuario es Mesero (su id de rol puede variar entre negocios). */
+export function esMesero(usuario) {
+  return usuario?.rol_nombre === 'MESERO';
+}
+
+/** true si el usuario es de barra/cocina: solo marca pedidos listos. */
+export function esPreparacion(usuario) {
+  return usuario?.rol_nombre === 'PREPARACION';
+}
+
+/** Nombre del rol para mostrar en el menú. */
+export function etiquetaRol(usuario) {
+  if (usuario?.rol_id === 1) return 'Administrador';
+  if (esMesero(usuario)) return 'Mesero';
+  if (esPreparacion(usuario)) return 'Barra / Cocina';
+  return 'Cajero';
+}
+
+/**
+ * Grupos con solo los módulos que ese usuario puede ver.
+ * restaurante: el negocio atiende en mesas (muestra "Mesas").
+ * El mesero solo ve Mesas: toma pedidos, no cobra ni maneja caja.
+ * Barra/Cocina solo ve Preparación: marca los pedidos listos.
+ */
+export function gruposParaUsuario(usuario, { restaurante = false } = {}) {
   const esAdmin = usuario?.rol_id === 1;
-  return GRUPOS_MENU.map((g) => ({ ...g, items: g.items.filter((i) => esAdmin || !i.soloAdmin) })).filter(
-    (g) => g.items.length > 0
-  );
+  const mesero = restaurante && esMesero(usuario);
+  const preparacion = restaurante && esPreparacion(usuario);
+  return GRUPOS_MENU.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => {
+      if (i.soloRestaurante && !restaurante) return false;
+      if (mesero) return i.id === 'MESAS';
+      if (preparacion) return i.id === 'PREPARACION';
+      return esAdmin || !i.soloAdmin;
+    }),
+  })).filter((g) => g.items.length > 0);
 }
 
 /**

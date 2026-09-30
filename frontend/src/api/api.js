@@ -67,11 +67,18 @@ export const api = {
     }
     return data;
   },
-  registro: async ({ nombre_negocio, nombre_completo, usuario, password, ruc }) => {
+  registro: async ({ nombre_negocio, nombre_completo, usuario, password, ruc, modo_negocio }) => {
     const res = await fetch(`${API_URL}/registro`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre_negocio, nombre_completo, usuario, password, ruc: ruc || null }),
+      body: JSON.stringify({
+        nombre_negocio,
+        nombre_completo,
+        usuario,
+        password,
+        ruc: ruc || null,
+        modo_negocio: modo_negocio || 'TIENDA',
+      }),
     });
     const data = await leerRespuesta(res);
     if (!res.ok) {
@@ -148,6 +155,39 @@ export const api = {
   usuarioCrear: (data) => request('/usuarios', { method: 'POST', body: JSON.stringify(data) }),
   usuarioDesactivar: (id) => request(`/usuarios/${id}/desactivar`, { method: 'POST' }),
   usuarioReactivar: (id) => request(`/usuarios/${id}/reactivar`, { method: 'POST' }),
+  roles: () => request('/roles'),
+  modoNegocioCambiar: (modo_negocio) =>
+    request('/configuracion/modo-negocio', { method: 'PUT', body: JSON.stringify({ modo_negocio }) }),
+  // --- Cafetería / Restaurante (atención en mesas) ---
+  mesas: () => request('/mesas'),
+  mesaCrear: (data) => request('/mesas', { method: 'POST', body: JSON.stringify(data) }),
+  mesaActualizar: (id, data) => request(`/mesas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  mesaQuitar: (id) => request(`/mesas/${id}/desactivar`, { method: 'POST' }),
+  pedidosAbiertos: () => request('/pedidos/abiertos'),
+  pedidoAbrir: (data) => request('/pedidos', { method: 'POST', body: JSON.stringify(data) }),
+  pedido: (id) => request(`/pedidos/${id}`),
+  pedidoAgregarItems: (id, items) => request(`/pedidos/${id}/items`, { method: 'POST', body: JSON.stringify({ items }) }),
+  // nota: undefined = no tocarla; '' = borrarla.
+  pedidoCambiarCantidad: (id, itemId, cantidad, nota) =>
+    request(`/pedidos/${id}/items/${itemId}`, {
+      method: 'PUT',
+      body: JSON.stringify(nota === undefined ? { cantidad } : { cantidad, nota }),
+    }),
+  pedidoQuitarItem: (id, itemId, motivo) =>
+    request(`/pedidos/${id}/items/${itemId}/quitar`, { method: 'POST', body: JSON.stringify({ motivo: motivo || null }) }),
+  pedidoEnviar: (id) => request(`/pedidos/${id}/enviar`, { method: 'POST' }),
+  pedidoMover: (id, mesa_id) => request(`/pedidos/${id}/mover`, { method: 'POST', body: JSON.stringify({ mesa_id }) }),
+  pedidoAnular: (id, motivo) => request(`/pedidos/${id}/anular`, { method: 'POST', body: JSON.stringify({ motivo: motivo || null }) }),
+  // Barra / cocina: lo que está en preparación o listo sin entregar.
+  preparacion: () => request('/preparacion'),
+  preparacionListo: (item_ids, listo = true) =>
+    request('/preparacion/listo', { method: 'POST', body: JSON.stringify({ item_ids, listo }) }),
+  preparacionEntregado: (item_ids) =>
+    request('/preparacion/entregado', { method: 'POST', body: JSON.stringify({ item_ids }) }),
+  modificadores: () => request('/modificadores'),
+  modificadorCrear: (data) => request('/modificadores', { method: 'POST', body: JSON.stringify(data) }),
+  modificadorActualizar: (id, data) => request(`/modificadores/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  modificadorQuitar: (id) => request(`/modificadores/${id}/desactivar`, { method: 'POST' }),
   canjearCodigo: (codigo) => request('/suscripcion/canjear-codigo', { method: 'POST', body: JSON.stringify({ codigo }) }),
   suscripcionEstado: () => request('/suscripcion/estado'),
   comprobantePublico: async (identificador, id) => {

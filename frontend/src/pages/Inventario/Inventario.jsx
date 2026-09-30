@@ -15,7 +15,12 @@ const FORM_VACIO = {
   categoria_id: '',
   lleva_vencimiento: false,
   precio_compra: '',
+  controla_stock: true,
 };
+
+// Stock bajo solo aplica a productos que controlan stock (un café
+// preparado al momento no tiene stock que reponer).
+const tieneStockBajo = (p) => p.controla_stock !== false && p.stock <= p.stock_minimo;
 
 // Misma lista que UNIDADES_VALIDAS en el backend (src/handlers/productos.rs)
 // -- si se agrega una unidad nueva allá, hay que agregarla aquí también.
@@ -42,7 +47,7 @@ const UNIDADES_MEDIDA = [
   { valor: 'TONELADA', label: 'Tonelada' },
 ];
 
-export default function Inventario() {
+export default function Inventario({ restaurante = false }) {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [busqueda, setBusqueda] = useState('');
@@ -107,7 +112,7 @@ export default function Inventario() {
       lista = lista.filter((p) => String(p.categoria_id) === filtroCategoria);
     }
     if (soloStockBajo && !verDesactivados) {
-      lista = lista.filter((p) => p.stock <= p.stock_minimo);
+      lista = lista.filter(tieneStockBajo);
     }
     return lista;
   }, [productos, desactivados, verDesactivados, busqueda, filtroCategoria, soloStockBajo]);
@@ -157,6 +162,7 @@ export default function Inventario() {
       categoria_id: String(p.categoria_id),
       lleva_vencimiento: p.lleva_vencimiento,
       precio_compra: String(p.precio_compra || ''),
+      controla_stock: p.controla_stock !== false,
     });
     setImagenArchivo(null);
     setImagenPreview(p.imagen_url ? `${API_URL}${p.imagen_url}?t=${Date.now()}` : null);
@@ -265,7 +271,12 @@ export default function Inventario() {
       return;
     }
 
-    if (!form.lleva_vencimiento) {
+    // Preparado al momento (cafetería): no pide stock.
+    const sinControlStock = restaurante && !form.controla_stock;
+
+    if (sinControlStock) {
+      // nada que validar
+    } else if (!form.lleva_vencimiento) {
       const stock = parseFloat(form.stock);
       if (isNaN(stock) || stock < 0) {
         setMensaje({ tipo: 'error', texto: 'El stock no puede ser negativo.' });
@@ -286,12 +297,15 @@ export default function Inventario() {
       nombre: form.nombre.trim(),
       descripcion: form.descripcion.trim() || null,
       precio,
-      stock: form.lleva_vencimiento ? 0 : parseFloat(form.stock),
+      stock: form.lleva_vencimiento ? 0 : sinControlStock ? parseFloat(form.stock) || 0 : parseFloat(form.stock),
       stock_minimo: parseFloat(form.stock_minimo) || 0,
       unidad_medida: form.unidad_medida,
       categoria_id: parseInt(form.categoria_id, 10),
-      lleva_vencimiento: form.lleva_vencimiento,
+      lleva_vencimiento: sinControlStock ? false : form.lleva_vencimiento,
       precio_compra: form.precio_compra ? parseFloat(form.precio_compra) : 0,
+      // Solo se manda en cafetería/restaurante; en una tienda el backend
+      // deja el valor que ya tenía (controla stock, como siempre).
+      ...(restaurante ? { controla_stock: form.controla_stock } : {}),
     };
 
     setGuardando(true);
@@ -303,7 +317,7 @@ export default function Inventario() {
       } else {
         const creado = await api.productoCrear(payload);
         idParaImagen = creado.producto_id;
-        if (form.lleva_vencimiento && creado.producto_id) {
+        if (form.lleva_vencimiento && !sinControlStock && creado.producto_id) {
           await api.loteCrear({
             producto_id: creado.producto_id,
             cantidad: parseFloat(loteInicialCantidad),
@@ -364,7 +378,7 @@ export default function Inventario() {
     }
   };
 
-  const stockBajoCantidad = productos.filter((p) => p.stock <= p.stock_minimo).length;
+  const stockBajoCantidad = productos.filter(tieneStockBajo).length;
 
   return (
     <div className="inv-layout">
@@ -441,7 +455,7 @@ export default function Inventario() {
                 <tr
                   key={p.id}
                   className={
-                    verDesactivados ? 'inv-fila-desactivada' : p.stock <= p.stock_minimo ? 'inv-fila-alerta' : ''
+                    verDesactivados ? 'inv-fila-desactivada' : tieneStockBajo(p) ? 'inv-fila-alerta' : ''
                   }
                 >
                   <td>
@@ -458,8 +472,14 @@ export default function Inventario() {
                   </td>
                   <td>{p.categoria_nombre || '—'}</td>
                   <td>S/ {p.precio.toFixed(2)}</td>
-                  <td className={!verDesactivados && p.stock <= p.stock_minimo ? 'inv-stock-bajo' : ''}>
-                    {p.stock} {!verDesactivados && p.stock <= p.stock_minimo && '⚠'}
+                  <td className={!verDesactivados && tieneStockBajo(p) ? 'inv-stock-bajo' : ''}>
+                    {p.controla_stock === false ? (
+                      <span className="inv-badge-preparado">preparado</span>
+                    ) : (
+                      <>
+                        {p.stock} {!verDesactivados && tieneStockBajo(p) && '⚠'}
+                      </>
+                    )}
                   </td>
                   <td>{p.unidad_medida}</td>
                   <td>
@@ -612,35 +632,52 @@ export default function Inventario() {
                 />
               </div>
 
-              {!form.lleva_vencimiento && (
+              {restaurante && (
+                <div className="inv-campo inv-campo-checkbox">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={!form.controla_stock}
+                      onChange={(e) => cambiarCampo('controla_stock', !e.target.checked)}
+                    />
+                    Preparado al momento (café, jugo, plato): se vende sin controlar stock
+                  </label>
+                </div>
+              )}
+
+              {!form.lleva_vencimiento && (!restaurante || form.controla_stock) && (
                 <div className="inv-campo">
                   <label>Stock {editandoId ? '' : 'inicial'}</label>
                   <input type="number" value={form.stock} onChange={(e) => cambiarCampo('stock', e.target.value)} />
                 </div>
               )}
 
-              <div className="inv-campo">
-                <label>Stock mínimo (alerta)</label>
-                <input
-                  type="number"
-                  value={form.stock_minimo}
-                  onChange={(e) => cambiarCampo('stock_minimo', e.target.value)}
-                />
-              </div>
+              {(!restaurante || form.controla_stock) && (
+                <>
+                  <div className="inv-campo">
+                    <label>Stock mínimo (alerta)</label>
+                    <input
+                      type="number"
+                      value={form.stock_minimo}
+                      onChange={(e) => cambiarCampo('stock_minimo', e.target.value)}
+                    />
+                  </div>
 
-              <div className="inv-campo inv-campo-checkbox">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={form.lleva_vencimiento}
-                    onChange={(e) => cambiarCampo('lleva_vencimiento', e.target.checked)}
-                  />
-                  Es perecible (maneja lotes con fecha de vencimiento)
-                </label>
-              </div>
+                  <div className="inv-campo inv-campo-checkbox">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={form.lleva_vencimiento}
+                        onChange={(e) => cambiarCampo('lleva_vencimiento', e.target.checked)}
+                      />
+                      Es perecible (maneja lotes con fecha de vencimiento)
+                    </label>
+                  </div>
+                </>
+              )}
             </div>
 
-            {form.lleva_vencimiento && !editandoId && (
+            {form.lleva_vencimiento && !editandoId && (!restaurante || form.controla_stock) && (
               <div className="inv-lote-caja">
                 <p className="inv-lote-titulo">Primer lote de este producto</p>
                 <p className="inv-lote-nota">

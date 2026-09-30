@@ -8,6 +8,7 @@ import '../../components/Recibo.css';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
 import { ChevronRight, ShoppingCart } from 'lucide-react';
 import { METODOS_OTRO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
+import { tituloPedido } from '../../utils/mesas';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -41,6 +42,21 @@ function etiquetaStock(producto) {
 
 const redondear2 = (n) => Math.round(n * 100) / 100;
 
+// Líneas de un pedido de mesa convertidas en carrito del POS. Cada línea
+// es independiente (el mismo café puede ir con opciones distintas), por
+// eso lleva su propia clave; "detalle" son las opciones elegidas.
+function carritoDePedido(pedido) {
+  return pedido.items.map((i) => ({
+    id: i.producto_id,
+    clave: `pedido-${i.id}`,
+    nombre: i.nombre_producto,
+    precio: i.precio_unitario,
+    cantidad: i.cantidad,
+    descuentoMonto: 0,
+    detalle: i.opciones || null,
+  }));
+}
+
 // Opciones del selector "Ordenar por" encima de la grilla del POS.
 const OPCIONES_ORDEN = [
   { valor: 'nombre', label: 'Nombre (A-Z)' },
@@ -48,7 +64,20 @@ const OPCIONES_ORDEN = [
   { valor: 'precio-desc', label: 'Precio: mayor a menor' },
 ];
 
-export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion, telefono, ruc, identificadorNegocio }) {
+export default function POS({
+  usuario,
+  nombreTienda = 'Mi Minimarket',
+  direccion,
+  telefono,
+  ruc,
+  identificadorNegocio,
+  // Cafetería / Restaurante: pedido de una mesa que se está cobrando.
+  pedidoACobrar = null,
+  onCancelarCobroPedido,
+  onPedidoCobrado,
+  onVolverAMesas,
+}) {
+  const cobrandoPedido = !!pedidoACobrar;
   // El buscador solo se enfoca solo en desktop -- en celular, hacerlo
   // abre el teclado apenas se entra a la pantalla y tapa la grilla de
   // productos antes de que el usuario haya tocado nada. Se calcula una
@@ -62,7 +91,7 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
   const [busqueda, setBusqueda] = useState('');
   const [ordenPrecio, setOrdenPrecio] = useState('nombre');
   const buscadorRef = useRef(null);
-  const [carrito, setCarrito] = useState([]);
+  const [carrito, setCarrito] = useState(() => (pedidoACobrar ? carritoDePedido(pedidoACobrar) : []));
   const [carritoAbierto, setCarritoAbierto] = useState(false);
   const [metodoPago, setMetodoPago] = useState('EFECTIVO');
   const [montoRecibido, setMontoRecibido] = useState('');
@@ -317,6 +346,13 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
   };
 
   const agregarAlCarrito = (producto) => {
+    if (cobrandoPedido) {
+      setMensaje({
+        tipo: 'error',
+        texto: `Estás cobrando ${tituloPedido(pedidoACobrar)}. Para agregar algo, vuelve a la mesa y agrégalo al pedido.`,
+      });
+      return;
+    }
     setCarrito((prev) => {
       const existe = prev.find((i) => i.id === producto.id);
       if (existe) {
@@ -446,6 +482,7 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
           precio: i.precio,
           cantidad: i.cantidad,
           descuentoMonto: i.descuentoMonto || 0,
+          detalle: i.detalle || null,
         })),
         total,
         metodo_pago: metodoPago,
@@ -457,6 +494,7 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
         pago_efectivo: esMixto ? mixtoEfectivo : null,
         pago_otro: esMixto ? mixtoOtro : null,
         pago_otro_metodo: esMixto ? mixtoOtroMetodo : null,
+        pedido_id: pedidoACobrar?.id || null,
       });
 
       let comprobante = null;
@@ -485,10 +523,18 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
           pagoOtro: esMixto ? mixtoOtro : null,
           pagoOtroMetodo: esMixto ? mixtoOtroMetodo : null,
         },
-        items: carrito.map((i) => ({ nombre: i.nombre, cantidad: i.cantidad, precio: i.precio })),
+        items: carrito.map((i) => ({
+          nombre: i.detalle ? `${i.nombre} (${i.detalle})` : i.nombre,
+          cantidad: i.cantidad,
+          precio: i.precio,
+        })),
         comprobante,
         cliente,
+        deMesa: cobrandoPedido,
       };
+
+      // El pedido quedó cobrado y su mesa libre.
+      if (cobrandoPedido) onPedidoCobrado?.();
 
       setUltimaVentaParaImprimir(datosVenta);
 
@@ -691,12 +737,14 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
                 <span className="pos-producto-precio">S/ {p.precio.toFixed(2)}</span>
                 {/* Rojo con el mismo criterio que el reporte de stock bajo
                     (stock <= stock_minimo, ver productos.rs). */}
-                <span
-                  className={`pos-producto-stock${p.stock <= p.stock_minimo ? ' pos-producto-stock-bajo' : ''}`}
-                  title={`Stock: ${p.stock}`}
-                >
-                  {etiquetaStock(p)}
-                </span>
+                {p.controla_stock !== false && (
+                  <span
+                    className={`pos-producto-stock${p.stock <= p.stock_minimo ? ' pos-producto-stock-bajo' : ''}`}
+                    title={`Stock: ${p.stock}`}
+                  >
+                    {etiquetaStock(p)}
+                  </span>
+                )}
               </span>
             </button>
           ))}
@@ -743,6 +791,18 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
             ×
           </button>
         </div>
+
+        {cobrandoPedido && (
+          <div className="pos-cobro-pedido">
+            <div>
+              <span className="pos-cobro-pedido-etiqueta">Cobrando</span>
+              <strong>{tituloPedido(pedidoACobrar)}</strong>
+            </div>
+            <button type="button" onClick={onCancelarCobroPedido}>
+              Volver a la mesa
+            </button>
+          </div>
+        )}
 
         <div className="pos-comprobante">
           <span className="pos-comprobante-label">Comprobante</span>
@@ -873,17 +933,22 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
         <div className="pos-carrito-items">
           {carrito.length === 0 && <p className="pos-carrito-vacio">Carrito vacío</p>}
           {carrito.map((item) => (
-            <div key={item.id} className="pos-carrito-item">
+            <div key={item.clave || item.id} className="pos-carrito-item">
               <div className="pos-carrito-item-info">
                 <span className="pos-carrito-item-nombre">{item.nombre}</span>
-                <span className="pos-carrito-item-precio">S/ {item.precio.toFixed(2)} c/u</span>
+                {item.detalle && <span className="pos-carrito-item-detalle">{item.detalle}</span>}
+                <span className="pos-carrito-item-precio">
+                  {cobrandoPedido ? `${item.cantidad} × ` : ''}S/ {item.precio.toFixed(2)} c/u
+                </span>
               </div>
-              <div className="pos-carrito-item-controles">
-                <button onClick={() => cambiarCantidad(item.id, -1)}>−</button>
-                <span>{item.cantidad}</span>
-                <button onClick={() => cambiarCantidad(item.id, 1)}>+</button>
-                <button className="pos-quitar" onClick={() => quitarDelCarrito(item.id)}>🗑</button>
-              </div>
+              {!cobrandoPedido && (
+                <div className="pos-carrito-item-controles">
+                  <button onClick={() => cambiarCantidad(item.id, -1)}>−</button>
+                  <span>{item.cantidad}</span>
+                  <button onClick={() => cambiarCantidad(item.id, 1)}>+</button>
+                  <button className="pos-quitar" onClick={() => quitarDelCarrito(item.id)}>🗑</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -1102,10 +1167,14 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
                 onClick={() => {
                   setMostrarModalVenta(false);
                   setCarritoAbierto(false);
+                  if (ultimaVentaParaImprimir.deMesa && onVolverAMesas) {
+                    onVolverAMesas();
+                    return;
+                  }
                   buscadorRef.current?.focus();
                 }}
               >
-                Nueva venta
+                {ultimaVentaParaImprimir.deMesa && onVolverAMesas ? 'Volver a mesas' : 'Nueva venta'}
               </button>
             </div>
           </div>

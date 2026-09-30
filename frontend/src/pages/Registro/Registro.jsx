@@ -1,9 +1,27 @@
 import { useState, useEffect } from 'react';
+import { Coffee, Store } from 'lucide-react';
 import { api } from '../../api/api';
 import '../Login/Login.css';
 import './Registro.css';
 
 const DEBOUNCE_MS = 500;
+
+// Tipo de negocio: decide qué módulos se activan. Se puede cambiar
+// después en Configuración, así que no es una decisión para siempre.
+const TIPOS_NEGOCIO = [
+  {
+    valor: 'TIENDA',
+    titulo: 'Tienda',
+    detalle: 'Bodega, minimarket, ferretería, farmacia...',
+    Icono: Store,
+  },
+  {
+    valor: 'RESTAURANTE',
+    titulo: 'Cafetería / Restaurante',
+    detalle: 'Atención en mesas, pedidos y comandas',
+    Icono: Coffee,
+  },
+];
 
 export default function Registro({ onRegistroExitoso, onIrALogin }) {
   const [nombreNegocio, setNombreNegocio] = useState('');
@@ -11,6 +29,7 @@ export default function Registro({ onRegistroExitoso, onIrALogin }) {
   const [usuario, setUsuario] = useState('');
   const [password, setPassword] = useState('');
   const [ruc, setRuc] = useState('');
+  const [modoNegocio, setModoNegocio] = useState('TIENDA');
 
   const [disponible, setDisponible] = useState(null); // null = sin chequear todavía
   const [verificando, setVerificando] = useState(false);
@@ -55,6 +74,7 @@ export default function Registro({ onRegistroExitoso, onIrALogin }) {
         usuario: usuario.trim(),
         password,
         ruc: ruc.trim() || null,
+        modo_negocio: modoNegocio,
       });
 
       // El negocio ya existe con este usuario como súper admin — entra
@@ -71,9 +91,26 @@ export default function Registro({ onRegistroExitoso, onIrALogin }) {
   };
 
   return (
-    <div className="login-container">
+    <div className="login-container registro-container">
       <form className="login-form registro-form" onSubmit={handleSubmit}>
         <h1>Registra tu negocio</h1>
+
+        <div className="registro-tipos" role="radiogroup" aria-label="Tipo de negocio">
+          {TIPOS_NEGOCIO.map(({ valor, titulo, detalle, Icono }) => (
+            <button
+              key={valor}
+              type="button"
+              role="radio"
+              aria-checked={modoNegocio === valor}
+              className={`registro-tipo${modoNegocio === valor ? ' activo' : ''}`}
+              onClick={() => setModoNegocio(valor)}
+            >
+              <Icono size={22} strokeWidth={2} />
+              <strong>{titulo}</strong>
+              <span>{detalle}</span>
+            </button>
+          ))}
+        </div>
 
         <input
           type="text"

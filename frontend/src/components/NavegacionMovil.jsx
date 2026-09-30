@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { House, LayoutGrid, LogOut, Package, ScanBarcode, Store, Wallet } from 'lucide-react';
+import { ChefHat, House, LayoutGrid, LogOut, Package, ScanBarcode, Store, UtensilsCrossed, Wallet } from 'lucide-react';
 import { API_URL } from '../api/api';
-import { gruposParaUsuario, nivelAvisoSuscripcion } from '../utils/menu';
+import { esMesero, esPreparacion, etiquetaRol, gruposParaUsuario, nivelAvisoSuscripcion } from '../utils/menu';
 import './NavegacionMovil.css';
 
 // ============================================================
@@ -12,8 +12,13 @@ import './NavegacionMovil.css';
 // En computadora esto no se muestra (se usa el Sidebar).
 // ============================================================
 
-// Las 4 secciones fijas de la barra (el resto va en "Más").
-const TABS_FIJAS = ['RESUMEN', 'CAJA', 'POS', 'PRODUCTOS'];
+// Las 4 secciones fijas de la barra (el resto va en "Más"). En una
+// cafetería/restaurante, "Mesas" reemplaza a "Inicio"; el mesero solo
+// tiene Mesas.
+const TABS_TIENDA = ['RESUMEN', 'CAJA', 'POS', 'PRODUCTOS'];
+const TABS_RESTAURANTE = ['MESAS', 'CAJA', 'POS', 'PRODUCTOS'];
+const TABS_MESERO = ['MESAS'];
+const TABS_PREPARACION = ['PREPARACION'];
 
 // Detecta si el teclado del celular está abierto (el alto visible baja
 // mucho) para ocultar la barra inferior y que no quede encima del teclado.
@@ -33,7 +38,7 @@ function useTecladoAbierto() {
   return abierto;
 }
 
-function Tab({ id, label, Icono, pantalla, onIr }) {
+function Tab({ id, label, Icono, pantalla, onIr, insignia = 0 }) {
   return (
     <button
       type="button"
@@ -43,6 +48,7 @@ function Tab({ id, label, Icono, pantalla, onIr }) {
     >
       <span className="navm-tab-icono">
         <Icono size={20} strokeWidth={2} />
+        {insignia > 0 && <span className="navm-insignia">{insignia}</span>}
       </span>
       {label}
     </button>
@@ -58,13 +64,24 @@ export default function NavegacionMovil({
   diasRestantesSuscripcion,
   logoUrl,
   versionLogo,
+  restaurante = false,
+  insignias = {},
 }) {
   const [masAbierto, setMasAbierto] = useState(false);
   const [logoFallido, setLogoFallido] = useState(null);
   const tecladoAbierto = useTecladoAbierto();
 
   const esAdmin = usuario.rol_id === 1;
-  const rolLabel = esAdmin ? 'Administrador' : 'Cajero';
+  const rolLabel = etiquetaRol(usuario);
+  const mesero = restaurante && esMesero(usuario);
+  const preparacion = restaurante && esPreparacion(usuario);
+  const tabsFijas = preparacion
+    ? TABS_PREPARACION
+    : mesero
+      ? TABS_MESERO
+      : restaurante
+        ? TABS_RESTAURANTE
+        : TABS_TIENDA;
   const srcLogo = logoUrl ? `${API_URL}${logoUrl}?v=${versionLogo}` : null;
   const mostrarLogo = !!srcLogo && logoFallido !== srcLogo;
 
@@ -72,10 +89,10 @@ export default function NavegacionMovil({
   const nivelAviso = esAdmin ? nivelAvisoSuscripcion(diasRestantesSuscripcion) : null;
 
   // "Más" = todos los módulos que ese usuario puede ver, menos los fijos.
-  const gruposMas = gruposParaUsuario(usuario)
-    .map((g) => ({ ...g, items: g.items.filter((i) => !TABS_FIJAS.includes(i.id)) }))
+  const gruposMas = gruposParaUsuario(usuario, { restaurante })
+    .map((g) => ({ ...g, items: g.items.filter((i) => !tabsFijas.includes(i.id)) }))
     .filter((g) => g.items.length > 0);
-  const masActivo = !TABS_FIJAS.includes(pantalla);
+  const masActivo = !tabsFijas.includes(pantalla);
 
   useEffect(() => {
     if (!masAbierto) return undefined;
@@ -108,20 +125,30 @@ export default function NavegacionMovil({
       </header>
 
       <nav className={`navm-inferior${tecladoAbierto ? ' navm-oculta' : ''}`} aria-label="Navegación principal">
-        <Tab id="RESUMEN" label="Inicio" Icono={House} pantalla={pantalla} onIr={ir} />
-        <Tab id="CAJA" label="Caja" Icono={Wallet} pantalla={pantalla} onIr={ir} />
-        <button
-          type="button"
-          className={`navm-vender${pantalla === 'POS' ? ' activo' : ''}`}
-          onClick={() => ir('POS')}
-          aria-current={pantalla === 'POS' ? 'page' : undefined}
-        >
-          <span className="navm-vender-circulo">
-            <ScanBarcode size={26} strokeWidth={2} />
-          </span>
-          Vender
-        </button>
-        <Tab id="PRODUCTOS" label="Productos" Icono={Package} pantalla={pantalla} onIr={ir} />
+        {preparacion ? (
+          <Tab id="PREPARACION" label="Preparación" Icono={ChefHat} pantalla={pantalla} onIr={ir} />
+        ) : restaurante ? (
+          <Tab id="MESAS" label="Mesas" Icono={UtensilsCrossed} pantalla={pantalla} onIr={ir} insignia={insignias.MESAS} />
+        ) : (
+          <Tab id="RESUMEN" label="Inicio" Icono={House} pantalla={pantalla} onIr={ir} />
+        )}
+        {!mesero && !preparacion && (
+          <>
+            <Tab id="CAJA" label="Caja" Icono={Wallet} pantalla={pantalla} onIr={ir} />
+            <button
+              type="button"
+              className={`navm-vender${pantalla === 'POS' ? ' activo' : ''}`}
+              onClick={() => ir('POS')}
+              aria-current={pantalla === 'POS' ? 'page' : undefined}
+            >
+              <span className="navm-vender-circulo">
+                <ScanBarcode size={26} strokeWidth={2} />
+              </span>
+              Vender
+            </button>
+            <Tab id="PRODUCTOS" label="Productos" Icono={Package} pantalla={pantalla} onIr={ir} />
+          </>
+        )}
         <button
           type="button"
           className={`navm-tab${masActivo || masAbierto ? ' activo' : ''}`}

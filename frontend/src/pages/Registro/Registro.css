@@ -25,3 +25,65 @@
 .registro-usuario-estado.ocupado {
   color: #b91c1c;
 }
+/* El formulario puede ser más alto que la pantalla del celular: se
+   desplaza en vez de cortarse, y sigue centrado cuando entra completo. */
+.registro-container {
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  align-items: flex-start;
+}
+
+.registro-container .registro-form {
+  margin: auto 0;
+}
+
+/* Tipo de negocio (Tienda / Cafetería-Restaurante) */
+.registro-tipos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.login-form .registro-tipo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-height: 0;
+  padding: 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 12px;
+  background: #fff;
+  color: #16181d;
+  text-align: left;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.login-form .registro-tipo svg {
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+
+.login-form .registro-tipo strong {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.login-form .registro-tipo span {
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: #6b7280;
+}
+
+.login-form .registro-tipo.activo {
+  border-color: #16a34a;
+  background: #e8f6ed;
+  box-shadow: inset 0 0 0 1px #16a34a;
+}
+
+.login-form .registro-tipo.activo svg {
+  color: #16a34a;
+}

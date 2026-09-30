@@ -21,6 +21,10 @@ import HistorialCaja from './pages/Caja/HistorialCaja';
 import Login from './pages/Login/Login';
 import Registro from './pages/Registro/Registro';
 import BoletaPublica from './pages/BoletaPublica/BoletaPublica';
+import Mesas from './pages/Mesas/Mesas';
+import Preparacion from './pages/Preparacion/Preparacion';
+import AvisosListos from './components/AvisosListos';
+import { esMesero, esPreparacion } from './utils/menu';
 
 const STORAGE_KEY = 'minimarket_sesion';
 const TIENDA_STORAGE_KEY = 'minimarket_tienda';
@@ -40,6 +44,12 @@ function App() {
   // Cambia cuando el negocio sube un logo nuevo, para que el navegador
   // no siga mostrando la imagen anterior guardada en caché.
   const [versionLogo, setVersionLogo] = useState(() => Date.now());
+  // Cafetería / Restaurante: pedido que se está cobrando en el POS, y el
+  // pedido que se debe abrir en Mesas (al cancelar un cobro o desde un
+  // aviso de "listo"). n cambia en cada pedido de apertura.
+  const [pedidoACobrar, setPedidoACobrar] = useState(null);
+  const [abrirPedido, setAbrirPedido] = useState(null);
+  const [pedidosListos, setPedidosListos] = useState(0);
 
   const cargarEstadoSuscripcion = () => {
     api.suscripcionEstado().then(setEstadoSuscripcion).catch(() => {});
@@ -52,6 +62,14 @@ function App() {
         const sesion = JSON.parse(guardado);
         if (sesion?.token && sesion?.usuario) {
           setUsuarioActual(sesion.usuario);
+          try {
+            const tienda = JSON.parse(localStorage.getItem(TIENDA_STORAGE_KEY) || 'null');
+            if (tienda?.modo_negocio === 'RESTAURANTE') {
+              setPantalla(esPreparacion(sesion.usuario) ? 'PREPARACION' : 'MESAS');
+            }
+          } catch {
+            // sin negocio recordado: se queda en Resumen
+          }
           setLogueado(true);
           setModoLectura(!!sesion.modoLectura);
           setAvisoSuscripcion(sesion.aviso || null);
@@ -82,7 +100,16 @@ function App() {
       nombre: data.usuario.nombre_completo,
       username: data.usuario.username,
       rol_id: data.usuario.rol_id,
+      rol_nombre: data.usuario.rol_nombre || null,
     };
+    // En una cafetería/restaurante se entra directo al mapa de mesas.
+    setPantalla(
+      data.tienda?.modo_negocio !== 'RESTAURANTE'
+        ? 'RESUMEN'
+        : sesionUsuario.rol_nombre === 'PREPARACION'
+          ? 'PREPARACION'
+          : 'MESAS'
+    );
     setUsuarioActual(sesionUsuario);
     setLogueado(true);
     setModoLectura(!!data.modo_lectura);
@@ -142,6 +169,9 @@ function App() {
     setUsuarioActual(null);
     setPantalla('RESUMEN');
     setConfiguracionTienda(null);
+    setPedidoACobrar(null);
+    setAbrirPedido(null);
+    setPedidosListos(0);
     setModoLectura(false);
     setAvisoSuscripcion(null);
     setEstadoSuscripcion(null);
@@ -218,10 +248,54 @@ function App() {
 
   const nombreTienda = configuracionTienda?.nombre_tienda || tiendaRecordada?.nombre_negocio || 'Mi Minimarket';
 
+  // ¿El negocio atiende en mesas? Mientras llega la configuración del
+  // servidor se usa lo que dijo el login.
+  const restaurante = (configuracionTienda?.modo_negocio ?? tiendaRecordada?.modo_negocio) === 'RESTAURANTE';
+  // El mesero solo toma pedidos (siempre ve Mesas) y barra/cocina solo
+  // ve Preparación.
+  const soloMesas = restaurante && esMesero(usuarioActual);
+  const soloPreparacion = restaurante && esPreparacion(usuarioActual);
+  const pantallaVisible = soloPreparacion
+    ? 'PREPARACION'
+    : soloMesas
+      ? 'MESAS'
+      : ['MESAS', 'PREPARACION'].includes(pantalla) && !restaurante
+        ? 'RESUMEN'
+        : pantalla;
+
+  const irAPedido = (id) => {
+    setAbrirPedido((actual) => ({ id, n: (actual?.n || 0) + 1 }));
+    setPantalla('MESAS');
+  };
+
+  const handleCobrarPedido = (pedido) => {
+    setPedidoACobrar(pedido);
+    setPantalla('POS');
+  };
+
+  const handleCancelarCobroPedido = () => {
+    const id = pedidoACobrar?.id;
+    setPedidoACobrar(null);
+    if (id) irAPedido(id);
+    else setPantalla('MESAS');
+  };
+
+  const handleModoNegocioCambiado = (modo) => {
+    setConfiguracionTienda((actual) => (actual ? { ...actual, modo_negocio: modo } : actual));
+    setTiendaRecordada((actual) => {
+      if (!actual) return actual;
+      const actualizada = { ...actual, modo_negocio: modo };
+      localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(actualizada));
+      return actualizada;
+    });
+  };
+
   return (
     <div className="app-shell">
       <Sidebar
-        pantalla={pantalla}
+        pantalla={pantallaVisible}
+        restaurante={restaurante}
+        insignias={{ MESAS: pedidosListos }}
         onCambiarPantalla={setPantalla}
         usuario={usuarioActual}
         onLogout={handleLogout}
@@ -232,7 +306,17 @@ function App() {
         versionLogo={versionLogo}
       />
       <div className="app-contenido">
-        {pantalla === 'POS' &&
+        {pantallaVisible === 'MESAS' && (
+          <Mesas
+            usuario={usuarioActual}
+            nombreTienda={nombreTienda}
+            onCobrar={handleCobrarPedido}
+            abrirPedido={abrirPedido}
+            onAbrirPedidoUsado={() => setAbrirPedido(null)}
+          />
+        )}
+        {pantallaVisible === 'PREPARACION' && restaurante && <Preparacion />}
+        {pantallaVisible === 'POS' &&
           (modoLectura ? (
             <PosBloqueado aviso={avisoSuscripcion} />
           ) : (
@@ -243,17 +327,21 @@ function App() {
               telefono={configuracionTienda?.telefono}
               ruc={configuracionTienda?.ruc}
               identificadorNegocio={tiendaRecordada?.identificador}
+              pedidoACobrar={pedidoACobrar}
+              onCancelarCobroPedido={handleCancelarCobroPedido}
+              onPedidoCobrado={() => setPedidoACobrar(null)}
+              onVolverAMesas={restaurante ? () => setPantalla('MESAS') : null}
             />
           ))}
-        {pantalla === 'RESUMEN' && <Resumen onIrA={setPantalla} />}
-        {pantalla === 'CAJA' && <Caja usuario={usuarioActual} />}
-        {pantalla === 'HISTORIAL_CAJA' && <HistorialCaja />}
-        {pantalla === 'PRODUCTOS' && <Inventario />}
-        {pantalla === 'STOCK' && <StockLotes />}
-        {pantalla === 'PROVEEDORES' && <Proveedores />}
-        {pantalla === 'DEVOLUCIONES' && <Devoluciones usuario={usuarioActual} />}
-        {pantalla === 'CLIENTES' && <Clientes />}
-        {pantalla === 'COMPROBANTES' && (
+        {pantallaVisible === 'RESUMEN' && <Resumen onIrA={setPantalla} />}
+        {pantallaVisible === 'CAJA' && <Caja usuario={usuarioActual} />}
+        {pantallaVisible === 'HISTORIAL_CAJA' && <HistorialCaja />}
+        {pantallaVisible === 'PRODUCTOS' && <Inventario restaurante={restaurante} />}
+        {pantallaVisible === 'STOCK' && <StockLotes />}
+        {pantallaVisible === 'PROVEEDORES' && <Proveedores />}
+        {pantallaVisible === 'DEVOLUCIONES' && <Devoluciones usuario={usuarioActual} />}
+        {pantallaVisible === 'CLIENTES' && <Clientes />}
+        {pantallaVisible === 'COMPROBANTES' && (
           <Comprobantes
             usuario={usuarioActual}
             nombreTienda={nombreTienda}
@@ -263,21 +351,31 @@ function App() {
             identificadorNegocio={tiendaRecordada?.identificador}
           />
         )}
-        {pantalla === 'REPORTES' && <Reportes />}
-        {pantalla === 'SUSCRIPCION' && usuarioActual?.rol_id === 1 && (
+        {pantallaVisible === 'REPORTES' && <Reportes />}
+        {pantallaVisible === 'SUSCRIPCION' && usuarioActual?.rol_id === 1 && (
           <Suscripcion
             estadoSuscripcion={estadoSuscripcion}
             onRecargar={cargarEstadoSuscripcion}
             onSuscripcionActivada={handleSuscripcionActivada}
           />
         )}
-        {pantalla === 'CONFIGURACION' && usuarioActual?.rol_id === 1 && (
-          <Configuracion onIdentidadActualizada={handleIdentidadActualizada} usuarioActualId={usuarioActual.id} />
+        {pantallaVisible === 'CONFIGURACION' && usuarioActual?.rol_id === 1 && (
+          <Configuracion
+            onIdentidadActualizada={handleIdentidadActualizada}
+            usuarioActualId={usuarioActual.id}
+            onModoNegocioCambiado={handleModoNegocioCambiado}
+          />
         )}
       </div>
       {/* Solo se ve en celular (<= 899px): barra superior + barra inferior */}
+      {/* Avisos "pedido listo" para mozo y cajero, en cualquier pantalla */}
+      {restaurante && !soloPreparacion && (
+        <AvisosListos usuario={usuarioActual} onAbrirPedido={irAPedido} onConteo={setPedidosListos} />
+      )}
       <NavegacionMovil
-        pantalla={pantalla}
+        pantalla={pantallaVisible}
+        restaurante={restaurante}
+        insignias={{ MESAS: pedidosListos }}
         onCambiarPantalla={setPantalla}
         usuario={usuarioActual}
         onLogout={handleLogout}

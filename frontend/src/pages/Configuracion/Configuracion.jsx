@@ -3,6 +3,8 @@ import { api, API_URL } from '../../api/api';
 import { COLOR_MONSPEET, normalizarAcento } from '../../utils/tema';
 import './Configuracion.css';
 import { confirmar } from '../../utils/confirmar';
+import { Coffee, Store } from 'lucide-react';
+import ConfiguracionRestaurante from './ConfiguracionRestaurante';
 
 const ROLES = [
   { id: 1, nombre: 'Administrador' },
@@ -10,7 +12,19 @@ const ROLES = [
   { id: 3, nombre: 'Inventario' },
 ];
 
-export default function Configuracion({ onIdentidadActualizada, usuarioActualId }) {
+// Nombre para mostrar de cada rol que manda el servidor (/roles). El id
+// del Mesero puede variar entre negocios, por eso la lista viene de ahí.
+const NOMBRE_ROL = {
+  ADMIN: 'Administrador',
+  CAJERO: 'Cajero',
+  INVENTARIO: 'Inventario',
+  MESERO: 'Mesero (toma pedidos, no cobra)',
+  PREPARACION: 'Barra / Cocina (marca los pedidos listos)',
+};
+
+export default function Configuracion({ onIdentidadActualizada, usuarioActualId, onModoNegocioCambiado }) {
+  const [roles, setRoles] = useState(ROLES);
+  const [cambiandoModo, setCambiandoModo] = useState(false);
   const [vista, setVista] = useState('NEGOCIO');
 
   const [formConfig, setFormConfig] = useState(null);
@@ -41,10 +55,51 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId 
       .finally(() => setCargandoUsuarios(false));
   };
 
+  const cargarRoles = () => {
+    api
+      .roles()
+      .then((lista) => setRoles(lista.map((r) => ({ id: r.id, nombre: NOMBRE_ROL[r.nombre] || r.nombre }))))
+      .catch(() => {});
+  };
+
   useEffect(() => {
     cargarConfig();
     cargarUsuarios();
+    cargarRoles();
   }, []);
+
+  const restaurante = formConfig?.modo_negocio === 'RESTAURANTE';
+
+  // Activa o desactiva la atención en mesas (Cafetería / Restaurante).
+  const cambiarModo = async (modo) => {
+    if (modo === formConfig.modo_negocio || cambiandoModo) return;
+    const activar = modo === 'RESTAURANTE';
+    const ok = await confirmar({
+      titulo: activar ? '¿Activar atención en mesas?' : '¿Volver al modo Tienda?',
+      mensaje: activar
+        ? 'Se agrega "Mesas" al menú, el rol Mesero y las opciones de productos (tamaño, tipo de leche...). Tus ventas, caja e inventario siguen igual. Si no hay mesas, se crean 6 de ejemplo.'
+        : 'Se ocultan Mesas y las opciones de productos. No se borra nada: si lo vuelves a activar, todo sigue ahí.',
+      textoConfirmar: activar ? 'Activar' : 'Volver a Tienda',
+      icono: 'aviso',
+    });
+    if (!ok) return;
+    setCambiandoModo(true);
+    setMensaje(null);
+    try {
+      await api.modoNegocioCambiar(modo);
+      setFormConfig((actual) => ({ ...actual, modo_negocio: modo }));
+      onModoNegocioCambiado?.(modo);
+      cargarRoles();
+      setMensaje({
+        tipo: 'exito',
+        texto: activar ? 'Atención en mesas activada. Revisa tus mesas en "Mesas y opciones".' : 'Modo Tienda activado.',
+      });
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    } finally {
+      setCambiandoModo(false);
+    }
+  };
 
   const guardarConfig = async () => {
     setMensaje(null);
@@ -184,10 +239,48 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId 
           <button className={vista === 'USUARIOS' ? 'activo' : ''} onClick={() => setVista('USUARIOS')}>
             Usuarios
           </button>
+          {restaurante && (
+            <button className={vista === 'RESTAURANTE' ? 'activo' : ''} onClick={() => setVista('RESTAURANTE')}>
+              Mesas y opciones
+            </button>
+          )}
         </div>
       </div>
 
       {mensaje && <p className={`cfg-mensaje cfg-mensaje-${mensaje.tipo}`}>{mensaje.texto}</p>}
+
+      {vista === 'NEGOCIO' && (
+        <div className="cfg-card cfg-card-tipo">
+          <h3 className="cfg-subtitulo-seccion">Tipo de negocio</h3>
+          <p className="cfg-nota-moneda">
+            Elige cómo atiendes. Puedes cambiarlo cuando quieras; no se borra nada.
+          </p>
+          <div className="cfg-tipos">
+            <button
+              type="button"
+              className={`cfg-tipo${!restaurante ? ' activo' : ''}`}
+              onClick={() => cambiarModo('TIENDA')}
+              disabled={cambiandoModo}
+            >
+              <Store size={22} />
+              <strong>Tienda</strong>
+              <span>Venta directa en el punto de venta: bodega, minimarket, ferretería...</span>
+            </button>
+            <button
+              type="button"
+              className={`cfg-tipo${restaurante ? ' activo' : ''}`}
+              onClick={() => cambiarModo('RESTAURANTE')}
+              disabled={cambiandoModo}
+            >
+              <Coffee size={22} />
+              <strong>Cafetería / Restaurante</strong>
+              <span>Mesas, pedidos abiertos, comandas a barra/cocina y opciones por producto.</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {vista === 'RESTAURANTE' && restaurante && <ConfiguracionRestaurante />}
 
       {vista === 'NEGOCIO' && (
         <div className="cfg-card">
@@ -442,7 +535,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId 
                     value={formUsuario.rol_id}
                     onChange={(e) => setFormUsuario({ ...formUsuario, rol_id: parseInt(e.target.value, 10) })}
                   >
-                    {ROLES.map((r) => (
+                    {roles.map((r) => (
                       <option key={r.id} value={r.id}>
                         {r.nombre}
                       </option>

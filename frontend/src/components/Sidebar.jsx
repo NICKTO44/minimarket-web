@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { API_URL } from '../api/api';
 import { Store, LogOut } from 'lucide-react';
-import { gruposParaUsuario, nivelAvisoSuscripcion } from '../utils/menu';
+import { etiquetaRol, gruposParaUsuario, nivelAvisoSuscripcion } from '../utils/menu';
 import './Sidebar.css';
 
 // Sidebar de computadora/tablet grande. En celular (<= 899px) se oculta y
@@ -17,6 +17,9 @@ export default function Sidebar({
   diasRestantesSuscripcion,
   logoUrl,
   versionLogo,
+  restaurante = false,
+  // Números sobre un módulo (p. ej. { MESAS: 2 } = 2 pedidos listos).
+  insignias = {},
 }) {
   // Si la imagen del logo no carga (archivo borrado, sin conexión...),
   // se vuelve al ícono de tienda en lugar de mostrar una imagen rota.
@@ -25,8 +28,7 @@ export default function Sidebar({
 
   const seleccionar = (id) => onCambiarPantalla(id);
 
-  const esAdmin = usuario.rol_id === 1;
-  const rolLabel = esAdmin ? 'Administrador' : 'Cajero';
+  const rolLabel = etiquetaRol(usuario);
 
   // Solo se muestra un aviso cuando de verdad importa: pocos días o ya
   // vencido. Si tiene vencimiento indefinido (null) o le queda tiempo de
@@ -57,7 +59,7 @@ export default function Sidebar({
         </div>
 
         <nav className="sidebar-nav">
-          {gruposParaUsuario(usuario).map((grupo) => (
+          {gruposParaUsuario(usuario, { restaurante }).map((grupo) => (
             <div className="sidebar-grupo" key={grupo.titulo}>
               <span className="sidebar-grupo-titulo">{grupo.titulo}</span>
               {grupo.items.map((item) => {
@@ -71,6 +73,7 @@ export default function Sidebar({
                   >
                     <Icono size={18} strokeWidth={2} />
                     <span className="sidebar-item-label">{item.label}</span>
+                    {insignias[item.id] > 0 && <span className="sidebar-insignia">{insignias[item.id]}</span>}
                     {item.id === 'SUSCRIPCION' && claseAvisoSuscripcion && (
                       <span className={`sidebar-punto-aviso ${claseAvisoSuscripcion}`} />
                     )}
