@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api, API_URL } from '../../api/api';
 import { COLOR_MONSPEET, normalizarAcento } from '../../utils/tema';
 import './Configuracion.css';
+import { confirmar } from '../../utils/confirmar';
 
 const ROLES = [
   { id: 1, nombre: 'Administrador' },
@@ -9,7 +10,7 @@ const ROLES = [
   { id: 3, nombre: 'Inventario' },
 ];
 
-export default function Configuracion({ onIdentidadActualizada }) {
+export default function Configuracion({ onIdentidadActualizada, usuarioActualId }) {
   const [vista, setVista] = useState('NEGOCIO');
 
   const [formConfig, setFormConfig] = useState(null);
@@ -129,8 +130,32 @@ export default function Configuracion({ onIdentidadActualizada }) {
     }
   };
 
+  const reactivarUsuario = async (u) => {
+    const confirmado = await confirmar({
+      titulo: `¿Reactivar a "${u.nombre_completo}"?`,
+      mensaje: `Podrá volver a iniciar sesión con su usuario "${u.username}" y su misma contraseña.`,
+      textoConfirmar: 'Reactivar',
+      tipo: 'normal',
+      icono: 'reactivar',
+    });
+    if (!confirmado) return;
+    try {
+      await api.usuarioReactivar(u.id);
+      setMensaje({ tipo: 'exito', texto: 'Usuario reactivado.' });
+      cargarUsuarios();
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    }
+  };
+
   const desactivarUsuario = async (u) => {
-    if (!confirm(`¿Desactivar a "${u.nombre_completo}"? Ya no podrá iniciar sesión.`)) return;
+    const confirmado = await confirmar({
+      titulo: `¿Desactivar a "${u.nombre_completo}"?`,
+      mensaje: 'Ya no podrá iniciar sesión. Sus ventas y cierres de caja se conservan.',
+      textoConfirmar: 'Desactivar',
+      icono: 'usuario',
+    });
+    if (!confirmado) return;
     try {
       await api.usuarioDesactivar(u.id);
       setMensaje({ tipo: 'exito', texto: 'Usuario desactivado.' });
@@ -365,9 +390,15 @@ export default function Configuracion({ onIdentidadActualizada }) {
                         </span>
                       </td>
                       <td>
-                        {u.activo && (
+                        {u.activo && u.id !== usuarioActualId && (
                           <button className="cfg-boton-desactivar" onClick={() => desactivarUsuario(u)}>
                             Desactivar
+                          </button>
+                        )}
+                        {u.activo && u.id === usuarioActualId && <span className="cfg-tu-usuario">Tu usuario</span>}
+                        {!u.activo && (
+                          <button className="cfg-boton-reactivar" onClick={() => reactivarUsuario(u)}>
+                            Reactivar
                           </button>
                         )}
                       </td>

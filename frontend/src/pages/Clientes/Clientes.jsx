@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../../api/api';
 import './Clientes.css';
+import { confirmar } from '../../utils/confirmar';
 
 const REGLAS_DOCUMENTO = {
   DNI: { maxLength: 8, soloNumeros: true, label: 'DNI (8 dígitos)' },
@@ -21,6 +22,8 @@ const FORM_VACIO = {
 
 export default function Clientes() {
   const [clientes, setClientes] = useState([]);
+  const [desactivados, setDesactivados] = useState([]);
+  const [verDesactivados, setVerDesactivados] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState(null);
@@ -37,6 +40,8 @@ export default function Clientes() {
       .then(setClientes)
       .catch((e) => setMensaje({ tipo: 'error', texto: e.message }))
       .finally(() => setCargando(false));
+    // Aparte y sin bloquear: si fallara, la lista principal igual se muestra.
+    api.clientesDesactivados().then(setDesactivados).catch(() => setDesactivados([]));
   };
 
   useEffect(() => {
@@ -44,14 +49,33 @@ export default function Clientes() {
   }, []);
 
   const clientesFiltrados = useMemo(() => {
-    if (!busqueda.trim()) return clientes;
+    const lista = verDesactivados ? desactivados : clientes;
+    if (!busqueda.trim()) return lista;
     const q = busqueda.toLowerCase();
-    return clientes.filter(
+    return lista.filter(
       (c) =>
         c.nombre_razon_social.toLowerCase().includes(q) ||
         (c.numero_documento || '').includes(busqueda)
     );
-  }, [clientes, busqueda]);
+  }, [clientes, desactivados, verDesactivados, busqueda]);
+
+  const reactivar = async (c) => {
+    const confirmado = await confirmar({
+      titulo: `¿Reactivar a "${c.nombre_razon_social}"?`,
+      mensaje: 'Volverá a aparecer en las búsquedas del POS, con su mismo historial.',
+      textoConfirmar: 'Reactivar',
+      tipo: 'normal',
+      icono: 'reactivar',
+    });
+    if (!confirmado) return;
+    try {
+      await api.clienteReactivar(c.id);
+      setMensaje({ tipo: 'exito', texto: 'Cliente reactivado.' });
+      cargarClientes();
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    }
+  };
 
   const abrirNuevo = () => {
     setEditandoId(null);
@@ -136,7 +160,13 @@ export default function Clientes() {
   };
 
   const desactivar = async (c) => {
-    if (!confirm(`¿Desactivar a "${c.nombre_razon_social}"? Ya no aparecerá en las búsquedas del POS.`)) return;
+    const confirmado = await confirmar({
+      titulo: `¿Desactivar a "${c.nombre_razon_social}"?`,
+      mensaje: 'Ya no aparecerá en las búsquedas del POS. Sus compras anteriores se conservan.',
+      textoConfirmar: 'Desactivar cliente',
+      icono: 'usuario',
+    });
+    if (!confirmado) return;
     try {
       await api.clienteDesactivar(c.id);
       setMensaje({ tipo: 'exito', texto: 'Cliente desactivado.' });
@@ -152,10 +182,27 @@ export default function Clientes() {
     <div className="cli-layout">
       <div className="cli-header">
         <h1>Clientes</h1>
-        <button className="cli-boton-nuevo" onClick={abrirNuevo}>
-          + Nuevo cliente
-        </button>
+        <div className="cli-header-acciones">
+          {(desactivados.length > 0 || verDesactivados) && (
+            <button
+              className={`cli-filtro-desactivados ${verDesactivados ? 'activo' : ''}`}
+              onClick={() => setVerDesactivados((v) => !v)}
+            >
+              {verDesactivados ? '← Volver a activos' : `Desactivados (${desactivados.length})`}
+            </button>
+          )}
+          <button className="cli-boton-nuevo" onClick={abrirNuevo}>
+            + Nuevo cliente
+          </button>
+        </div>
       </div>
+
+      {verDesactivados && (
+        <p className="cli-aviso-desactivados">
+          Estos clientes no aparecen en las búsquedas del POS. Sus compras anteriores se conservan. Puedes
+          reactivarlos cuando quieras.
+        </p>
+      )}
 
       <input
         className="cli-buscador"
@@ -184,7 +231,7 @@ export default function Clientes() {
             </thead>
             <tbody>
               {clientesFiltrados.map((c) => (
-                <tr key={c.id}>
+                <tr key={c.id} className={verDesactivados ? 'cli-fila-desactivada' : ''}>
                   <td>{c.nombre_razon_social}</td>
                   <td>
                     {c.numero_documento ? (
@@ -197,15 +244,25 @@ export default function Clientes() {
                   </td>
                   <td>{c.telefono || '—'}</td>
                   <td>
-                    <button className="cli-boton-editar" onClick={() => abrirEdicion(c)}>Editar</button>
-                    <button className="cli-boton-eliminar" onClick={() => desactivar(c)}>Desactivar</button>
+                    {verDesactivados ? (
+                      <button className="cli-boton-reactivar" onClick={() => reactivar(c)}>Reactivar</button>
+                    ) : (
+                      <>
+                        <button className="cli-boton-editar" onClick={() => abrirEdicion(c)}>Editar</button>
+                        <button className="cli-boton-eliminar" onClick={() => desactivar(c)}>Desactivar</button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
               {clientesFiltrados.length === 0 && (
                 <tr>
                   <td colSpan={4} className="cli-sin-resultados">
-                    {busqueda ? 'No hay clientes que coincidan.' : 'Aún no hay clientes registrados.'}
+                    {verDesactivados
+                      ? 'No hay clientes desactivados.'
+                      : busqueda
+                        ? 'No hay clientes que coincidan.'
+                        : 'Aún no hay clientes registrados.'}
                   </td>
                 </tr>
               )}

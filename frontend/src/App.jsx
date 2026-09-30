@@ -182,6 +182,14 @@ function App() {
     }
   }, [logueado, identidadNegocio.color]);
 
+  // Título de la pestaña: "Monspeet POS" fuera de sesión y, dentro, el
+  // nombre del negocio que inició sesión ("Bodega Juan · Monspeet POS"),
+  // para que cada cliente vea su propio negocio en el navegador.
+  const nombreNegocioTitulo = configuracionTienda?.nombre_tienda || tiendaRecordada?.nombre_negocio;
+  useEffect(() => {
+    document.title = logueado && nombreNegocioTitulo ? `${nombreNegocioTitulo} · Monspeet POS` : 'Monspeet POS';
+  }, [logueado, nombreNegocioTitulo]);
+
   const matchBoletaPublica = window.location.pathname.match(/^\/boleta\/([^/]+)\/(\d+)$/);
   if (matchBoletaPublica) {
     const [, identificadorUrl, comprobanteIdUrl] = matchBoletaPublica;
@@ -255,15 +263,15 @@ function App() {
           />
         )}
         {pantalla === 'REPORTES' && <Reportes />}
-        {pantalla === 'SUSCRIPCION' && (
+        {pantalla === 'SUSCRIPCION' && usuarioActual?.rol_id === 1 && (
           <Suscripcion
             estadoSuscripcion={estadoSuscripcion}
             onRecargar={cargarEstadoSuscripcion}
             onSuscripcionActivada={handleSuscripcionActivada}
           />
         )}
-        {pantalla === 'CONFIGURACION' && (
-          <Configuracion onIdentidadActualizada={handleIdentidadActualizada} />
+        {pantalla === 'CONFIGURACION' && usuarioActual?.rol_id === 1 && (
+          <Configuracion onIdentidadActualizada={handleIdentidadActualizada} usuarioActualId={usuarioActual.id} />
         )}
       </div>
     </div>

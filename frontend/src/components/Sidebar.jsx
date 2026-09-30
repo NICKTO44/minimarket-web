@@ -45,8 +45,8 @@ const GRUPOS = [
     items: [
       { id: 'COMPROBANTES', label: 'Comprobantes', icono: Receipt },
       { id: 'REPORTES', label: 'Reportes', icono: BarChart3 },
-      { id: 'SUSCRIPCION', label: 'Suscripción', icono: CreditCard },
-      { id: 'CONFIGURACION', label: 'Configuración', icono: Settings },
+      { id: 'SUSCRIPCION', label: 'Suscripción', icono: CreditCard, soloAdmin: true },
+      { id: 'CONFIGURACION', label: 'Configuración', icono: Settings, soloAdmin: true },
     ],
   },
 ];
@@ -73,7 +73,8 @@ export default function Sidebar({
     setAbierto(false);
   };
 
-  const rolLabel = usuario.rol_id === 1 ? 'Administrador' : 'Cajero';
+  const esAdmin = usuario.rol_id === 1;
+  const rolLabel = esAdmin ? 'Administrador' : 'Cajero';
 
   // Solo se muestra un aviso cuando de verdad importa: pocos días o ya
   // vencido. Si tiene vencimiento indefinido (null) o le queda tiempo de
@@ -118,7 +119,7 @@ export default function Sidebar({
           {GRUPOS.map((grupo) => (
             <div className="sidebar-grupo" key={grupo.titulo}>
               <span className="sidebar-grupo-titulo">{grupo.titulo}</span>
-              {grupo.items.map((item) => {
+              {grupo.items.filter((item) => esAdmin || !item.soloAdmin).map((item) => {
                 const Icono = item.icono;
                 return (
                   <button

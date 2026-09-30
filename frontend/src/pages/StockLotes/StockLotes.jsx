@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/api';
 import './StockLotes.css';
+import { confirmar } from '../../utils/confirmar';
 
 const HORIZONTES = [
   { dias: 7, label: '7 días' },
@@ -29,9 +30,14 @@ export default function StockLotes() {
 
   const descartar = async (lote) => {
     const razon = lote.dias_restantes < 0 ? 'ya venció' : `vence en ${lote.dias_restantes} día(s)`;
-    if (!confirm(`¿Descartar este lote de "${lote.producto_nombre}" (${razon})? Esto retira ${lote.cantidad} unidades del stock.`)) {
-      return;
-    }
+    const confirmado = await confirmar({
+      titulo: '¿Descartar este lote?',
+      mensaje: `El lote de "${lote.producto_nombre}" ${razon}. Se retirará del stock.`,
+      detalle: { etiqueta: 'Unidades que salen del stock', valor: String(lote.cantidad) },
+      textoConfirmar: 'Descartar lote',
+      icono: 'tiempo',
+    });
+    if (!confirmado) return;
     try {
       await api.loteDescartar(lote.lote_id);
       setMensaje({ tipo: 'exito', texto: 'Lote descartado y stock actualizado.' });

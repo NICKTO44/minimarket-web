@@ -105,7 +105,8 @@
 }
 
 .cli-boton-editar,
-.cli-boton-eliminar {
+.cli-boton-eliminar,
+.cli-boton-reactivar {
   padding: 6px 10px;
   border: none;
   border-radius: 6px;
@@ -283,6 +284,14 @@
     padding: 12px;
   }
 
+  .cli-header-acciones {
+    width: 100%;
+  }
+
+  .cli-filtro-desactivados {
+    width: 100%;
+  }
+
   .cli-buscador {
     max-width: 100%;
   }
@@ -299,4 +308,49 @@
     padding: 18px;
     border-radius: 14px;
   }
+}
+
+/* ===== Clientes desactivados ===== */
+.cli-header-acciones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.cli-filtro-desactivados {
+  padding: 10px 14px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: white;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cli-filtro-desactivados.activo {
+  background: #16181d;
+  border-color: #16181d;
+  color: white;
+}
+
+.cli-aviso-desactivados {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #f1f2f4;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.cli-fila-desactivada td {
+  color: #6b7280;
+}
+
+.cli-boton-reactivar {
+  background: var(--color-primario);
+  color: var(--color-sobre-primario);
 }

@@ -184,6 +184,23 @@
   color: #6b7280;
 }
 
+.cfg-boton-reactivar {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-primario);
+  color: var(--color-sobre-primario);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cfg-tu-usuario {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
 .cfg-boton-desactivar {
   padding: 6px 12px;
   border: none;

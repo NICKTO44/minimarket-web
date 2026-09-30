@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { api, API_URL } from '../../api/api';
 import './Inventario.css';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
+import { confirmar } from '../../utils/confirmar';
 
 const FORM_VACIO = {
   codigo: '',
@@ -47,6 +48,10 @@ export default function Inventario() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
   const [soloStockBajo, setSoloStockBajo] = useState(false);
+  // Productos desactivados ("archivados" porque ya tenían ventas o compras):
+  // se ven aparte y se pueden reactivar.
+  const [desactivados, setDesactivados] = useState([]);
+  const [verDesactivados, setVerDesactivados] = useState(false);
   const [cargando, setCargando] = useState(true);
 
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -84,6 +89,8 @@ export default function Inventario() {
       })
       .catch((e) => setMensaje({ tipo: 'error', texto: e.message }))
       .finally(() => setCargando(false));
+    // Aparte y sin bloquear: si fallara, el inventario igual se muestra.
+    api.productosDesactivados().then(setDesactivados).catch(() => setDesactivados([]));
   };
 
   useEffect(() => {
@@ -91,7 +98,7 @@ export default function Inventario() {
   }, []);
 
   const productosFiltrados = useMemo(() => {
-    let lista = productos;
+    let lista = verDesactivados ? desactivados : productos;
     if (busqueda.trim()) {
       const q = busqueda.toLowerCase();
       lista = lista.filter((p) => p.nombre.toLowerCase().includes(q) || p.codigo.includes(q));
@@ -99,11 +106,29 @@ export default function Inventario() {
     if (filtroCategoria) {
       lista = lista.filter((p) => String(p.categoria_id) === filtroCategoria);
     }
-    if (soloStockBajo) {
+    if (soloStockBajo && !verDesactivados) {
       lista = lista.filter((p) => p.stock <= p.stock_minimo);
     }
     return lista;
-  }, [productos, busqueda, filtroCategoria, soloStockBajo]);
+  }, [productos, desactivados, verDesactivados, busqueda, filtroCategoria, soloStockBajo]);
+
+  const reactivarProducto = async (p) => {
+    const confirmado = await confirmar({
+      titulo: `¿Reactivar "${p.nombre}"?`,
+      mensaje: 'Volverá a aparecer en el POS y en el inventario con su mismo código, precio, stock e historial.',
+      textoConfirmar: 'Reactivar',
+      tipo: 'normal',
+      icono: 'reactivar',
+    });
+    if (!confirmado) return;
+    try {
+      await api.productoReactivar(p.id);
+      setMensaje({ tipo: 'exito', texto: `"${p.nombre}" reactivado. Ya aparece en el POS.` });
+      cargarTodo();
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    }
+  };
 
   const abrirNuevo = () => {
     setEditandoId(null);
@@ -308,11 +333,24 @@ export default function Inventario() {
   };
 
   const eliminarOProducto = async (p) => {
-    if (!confirm(`¿Eliminar "${p.nombre}"?`)) return;
+    const confirmado = await confirmar({
+      titulo: `¿Eliminar "${p.nombre}"?`,
+      mensaje: 'Se borrará del inventario. Esta acción no se puede deshacer.',
+      textoConfirmar: 'Eliminar',
+      icono: 'eliminar',
+    });
+    if (!confirmado) return;
     try {
       const resultado = await api.productoEliminar(p.id);
       if (!resultado.success) {
-        if (confirm(`${resultado.message}\n\n¿Deseas desactivarlo en su lugar? (dejará de aparecer en el POS)`)) {
+        const desactivar = await confirmar({
+          titulo: 'No se puede eliminar',
+          mensaje: `"${p.nombre}" ya tiene ventas o compras registradas, por eso no se puede borrar. Si lo desactivas, dejará de aparecer en el POS, pero su historial se conserva.`,
+          textoConfirmar: 'Desactivar',
+          tipo: 'normal',
+          icono: 'aviso',
+        });
+        if (desactivar) {
           await api.productoDesactivar(p.id);
           setMensaje({ tipo: 'exito', texto: 'Producto desactivado.' });
           cargarTodo();
@@ -352,13 +390,30 @@ export default function Inventario() {
             </option>
           ))}
         </select>
-        <button
-          className={`inv-filtro-stock ${soloStockBajo ? 'activo' : ''}`}
-          onClick={() => setSoloStockBajo((v) => !v)}
-        >
-          ⚠ Stock bajo {stockBajoCantidad > 0 && `(${stockBajoCantidad})`}
-        </button>
+        {!verDesactivados && (
+          <button
+            className={`inv-filtro-stock ${soloStockBajo ? 'activo' : ''}`}
+            onClick={() => setSoloStockBajo((v) => !v)}
+          >
+            ⚠ Stock bajo {stockBajoCantidad > 0 && `(${stockBajoCantidad})`}
+          </button>
+        )}
+        {(desactivados.length > 0 || verDesactivados) && (
+          <button
+            className={`inv-filtro-desactivados ${verDesactivados ? 'activo' : ''}`}
+            onClick={() => setVerDesactivados((v) => !v)}
+          >
+            {verDesactivados ? '← Volver a activos' : `Desactivados (${desactivados.length})`}
+          </button>
+        )}
       </div>
+
+      {verDesactivados && (
+        <p className="inv-aviso-desactivados">
+          Estos productos no aparecen en el POS. Se desactivaron porque ya tenían ventas o compras; su historial se
+          conserva. Puedes reactivarlos cuando quieras.
+        </p>
+      )}
 
       {mensaje && !mostrarForm && (
         <p className={`inv-mensaje inv-mensaje-${mensaje.tipo}`}>{mensaje.texto}</p>
@@ -383,7 +438,12 @@ export default function Inventario() {
             </thead>
             <tbody>
               {productosFiltrados.map((p) => (
-                <tr key={p.id} className={p.stock <= p.stock_minimo ? 'inv-fila-alerta' : ''}>
+                <tr
+                  key={p.id}
+                  className={
+                    verDesactivados ? 'inv-fila-desactivada' : p.stock <= p.stock_minimo ? 'inv-fila-alerta' : ''
+                  }
+                >
                   <td>
                     {p.imagen_url ? (
                       <img className="inv-miniatura" src={`${API_URL}${p.imagen_url}`} alt={p.nombre} />
@@ -398,24 +458,32 @@ export default function Inventario() {
                   </td>
                   <td>{p.categoria_nombre || '—'}</td>
                   <td>S/ {p.precio.toFixed(2)}</td>
-                  <td className={p.stock <= p.stock_minimo ? 'inv-stock-bajo' : ''}>
-                    {p.stock} {p.stock <= p.stock_minimo && '⚠'}
+                  <td className={!verDesactivados && p.stock <= p.stock_minimo ? 'inv-stock-bajo' : ''}>
+                    {p.stock} {!verDesactivados && p.stock <= p.stock_minimo && '⚠'}
                   </td>
                   <td>{p.unidad_medida}</td>
                   <td>
-                    <button className="inv-boton-editar" onClick={() => abrirEdicion(p)}>
-                      Editar
-                    </button>
-                    <button className="inv-boton-eliminar" onClick={() => eliminarOProducto(p)}>
-                      Eliminar
-                    </button>
+                    {verDesactivados ? (
+                      <button className="inv-boton-reactivar" onClick={() => reactivarProducto(p)}>
+                        Reactivar
+                      </button>
+                    ) : (
+                      <>
+                        <button className="inv-boton-editar" onClick={() => abrirEdicion(p)}>
+                          Editar
+                        </button>
+                        <button className="inv-boton-eliminar" onClick={() => eliminarOProducto(p)}>
+                          Eliminar
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
               {productosFiltrados.length === 0 && (
                 <tr>
                   <td colSpan={8} className="inv-sin-resultados">
-                    No hay productos que coincidan.
+                    {verDesactivados ? 'No hay productos desactivados.' : 'No hay productos que coincidan.'}
                   </td>
                 </tr>
               )}
