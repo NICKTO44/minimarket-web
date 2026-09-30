@@ -136,11 +136,14 @@ pub async fn procesar_venta(
     let (pago_efectivo, pago_otro, pago_otro_metodo) =
         validar_pago(&payload).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 
-    // 2. Validar stock disponible por producto (perecible o no)
+    // 2. Validar stock disponible por producto (perecible o no). De paso
+    // se toma el nombre y la unidad REALES del producto (no los que manda
+    // el frontend) para guardarlos en la venta tal como son hoy.
+    let mut datos_producto: std::collections::HashMap<i64, (String, String)> = std::collections::HashMap::new();
     for p in &payload.productos {
         let mut rows = conn
             .query(
-                "SELECT stock, lleva_vencimiento FROM productos WHERE id = ?1",
+                "SELECT stock, lleva_vencimiento, nombre, unidad_medida FROM productos WHERE id = ?1",
                 libsql::params![p.id],
             )
             .await
@@ -148,6 +151,9 @@ pub async fn procesar_venta(
 
         if let Some(row) = rows.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
             let stock: f64 = row.get(0).unwrap_or(0.0);
+            let nombre_actual: String = row.get(2).unwrap_or_else(|_| p.nombre.clone());
+            let unidad_actual: String = row.get(3).unwrap_or_else(|_| "UNIDAD".to_string());
+            datos_producto.insert(p.id, (nombre_actual, unidad_actual));
             if stock < p.cantidad {
                 return Err((StatusCode::BAD_REQUEST, format!(
                     "Stock insuficiente para {} (disponible: {}, solicitado: {})",
@@ -222,10 +228,19 @@ pub async fn procesar_venta(
                 .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
         }
 
+        // Nombre y unidad congelados al momento de la venta (migración 0005):
+        // si después se renombra el producto, esta venta sigue mostrando
+        // el nombre con el que se vendió, igual que su comprobante SUNAT.
+        let (nombre_venta, unidad_venta) = datos_producto
+            .get(&p.id)
+            .cloned()
+            .unwrap_or_else(|| (p.nombre.clone(), "UNIDAD".to_string()));
+
         conn.execute(
-            "INSERT INTO detalles_venta (venta_id, producto_id, cantidad, precio_unitario, subtotal, descuento_linea, total_linea)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            libsql::params![venta_id, p.id, p.cantidad, p.precio, sub, desc, total_linea],
+            "INSERT INTO detalles_venta (venta_id, producto_id, cantidad, precio_unitario, subtotal, descuento_linea, total_linea,
+                                         nombre_producto, unidad_medida)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            libsql::params![venta_id, p.id, p.cantidad, p.precio, sub, desc, total_linea, nombre_venta, unidad_venta],
         )
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar detalle: {}", e)))?;

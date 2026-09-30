@@ -69,7 +69,7 @@ pub async fn buscar_venta_para_devolucion(
 
     let mut rows_det = conn
         .query(
-            "SELECT dv.id, dv.producto_id, p.nombre, dv.cantidad, dv.precio_unitario, dv.total_linea
+            "SELECT dv.id, dv.producto_id, COALESCE(dv.nombre_producto, p.nombre), dv.cantidad, dv.precio_unitario, dv.total_linea
              FROM detalles_venta dv JOIN productos p ON dv.producto_id = p.id
              WHERE dv.venta_id = ?1 ORDER BY dv.id",
             libsql::params![venta_id],

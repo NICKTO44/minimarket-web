@@ -90,7 +90,7 @@ pub async fn ver_comprobante_publico(
 
     let mut ri = conn
         .query(
-            "SELECT p.nombre, dv.cantidad, dv.precio_unitario
+            "SELECT COALESCE(dv.nombre_producto, p.nombre), dv.cantidad, dv.precio_unitario
              FROM detalles_venta dv JOIN productos p ON p.id = dv.producto_id
              WHERE dv.venta_id = ?1",
             libsql::params![venta_id],

@@ -26,7 +26,8 @@ pub async fn emitir_comprobante(
 
     let mut ri = conn
         .query(
-            "SELECT p.nombre, dv.cantidad, dv.precio_unitario, p.unidad_medida
+            "SELECT COALESCE(dv.nombre_producto, p.nombre), dv.cantidad, dv.precio_unitario,
+                    COALESCE(dv.unidad_medida, p.unidad_medida)
              FROM detalles_venta dv JOIN productos p ON p.id = dv.producto_id
              WHERE dv.venta_id = ?1",
             libsql::params![payload.venta_id],

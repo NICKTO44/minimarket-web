@@ -21,6 +21,19 @@ fn unidad_valida(unidad: &str) -> bool {
 pub async fn listar_productos(
     Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Result<Json<Vec<Producto>>, StatusCode> {
+    consultar_productos(&tenant, 1).await.map(Json)
+}
+
+/// Productos desactivados (activo = 0): los que se "archivaron" porque ya
+/// tenían ventas o compras. Se listan aparte en Inventario para poder
+/// reactivarlos.
+pub async fn listar_productos_desactivados(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+) -> Result<Json<Vec<Producto>>, StatusCode> {
+    consultar_productos(&tenant, 0).await.map(Json)
+}
+
+async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Producto>, StatusCode> {
     let conn = tenant.0.connect().map_err(|e| {
         eprintln!("❌ Error conectando en listar_productos: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
@@ -33,9 +46,9 @@ pub async fn listar_productos(
                     p.lleva_vencimiento, p.imagen_url, p.activo, p.precio_compra
              FROM productos p
              LEFT JOIN categorias c ON p.categoria_id = c.id
-             WHERE p.activo = 1
+             WHERE p.activo = ?1
              ORDER BY p.nombre",
-            (),
+            libsql::params![activo],
         )
         .await
         .map_err(|e| {
@@ -64,7 +77,7 @@ pub async fn listar_productos(
         });
     }
 
-    Ok(Json(productos))
+    Ok(productos)
 }
 
 pub async fn productos_stock_bajo(
@@ -168,6 +181,27 @@ pub async fn agregar_producto(
     }
 
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Código repetido: mensaje claro en vez del error técnico de la base.
+    // Si pertenece a un producto desactivado, lo correcto es reactivarlo
+    // (conserva su historial) en lugar de crear un duplicado.
+    let mut r_codigo = conn
+        .query("SELECT nombre, activo FROM productos WHERE codigo = ?1", libsql::params![payload.codigo.clone()])
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if let Some(fila) = r_codigo.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        let nombre_existente: String = fila.get(0).unwrap_or_default();
+        let activo: i64 = fila.get(1).unwrap_or(1);
+        let mensaje = if activo == 0 {
+            format!(
+                "El código {} pertenece a \"{}\", que está desactivado. Reactívalo desde Inventario → Desactivados en lugar de crear uno nuevo.",
+                payload.codigo, nombre_existente
+            )
+        } else {
+            format!("Ya existe un producto con el código {}: \"{}\".", payload.codigo, nombre_existente)
+        };
+        return Err((StatusCode::CONFLICT, mensaje));
+    }
 
     let lleva_vencimiento = payload.lleva_vencimiento.unwrap_or(false);
     let stock_inicial = if lleva_vencimiento { 0.0 } else { payload.stock };
@@ -319,6 +353,30 @@ pub async fn desactivar_producto(
     Ok(Json(ProductoResponse {
         success: true,
         message: "Producto desactivado".into(),
+        producto_id: Some(id),
+    }))
+}
+
+/// Vuelve a activar un producto desactivado: reaparece en el POS y en el
+/// inventario con su mismo código, stock e historial.
+pub async fn reactivar_producto(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Path(id): Path<i64>,
+) -> Result<Json<ProductoResponse>, (StatusCode, String)> {
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let filas = conn.execute(
+        "UPDATE productos SET activo = 1, fecha_actualizacion = datetime('now','localtime') WHERE id = ?1 AND activo = 0",
+        libsql::params![id],
+    ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al reactivar: {}", e)))?;
+
+    if filas == 0 {
+        return Err((StatusCode::NOT_FOUND, "El producto no existe o ya está activo".into()));
+    }
+
+    Ok(Json(ProductoResponse {
+        success: true,
+        message: "Producto reactivado".into(),
         producto_id: Some(id),
     }))
 }
