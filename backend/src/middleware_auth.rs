@@ -166,7 +166,11 @@ fn ruta_permitida(rol: &str, metodo: &Method, ruta: &str) -> bool {
                 || (lectura
                     && matches!(ruta, "/mesas" | "/productos" | "/categorias" | "/modificadores" | "/preparacion"))
         }
-        "PREPARACION" => basico || (lectura && ruta == "/preparacion") || ruta == "/preparacion/listo",
+        // También puede marcar "entregado": en local chico la barra entrega
+        // en el mostrador, y así limpia lo que quedó pendiente.
+        "PREPARACION" => {
+            basico || (lectura && ruta == "/preparacion") || ruta == "/preparacion/listo" || ruta == "/preparacion/entregado"
+        }
         _ => true,
     }
 }
@@ -191,6 +195,7 @@ mod pruebas {
         assert!(!ruta_permitida("PREPARACION", &g, "/mesas"));
         assert!(!ruta_permitida("PREPARACION", &g, "/productos"));
         assert!(!ruta_permitida("PREPARACION", &p, "/pedidos/5/items"));
+        assert!(ruta_permitida("PREPARACION", &p, "/preparacion/entregado"));
         assert!(ruta_permitida("PREPARACION", &g, "/configuracion"));
         assert!(!ruta_permitida("PREPARACION", &axum::http::Method::PUT, "/configuracion"));
         assert!(ruta_permitida("CAJERO", &p, "/ventas"));

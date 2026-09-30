@@ -339,6 +339,22 @@ pub async fn procesar_venta(
         )
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        // Si una MESA paga, lo que barra/cocina ya tenía LISTO se da por
+        // entregado (ya lo consumieron). Lo que aún se prepara sigue en
+        // Preparación y el mozo recibe su aviso. En para llevar/delivery no
+        // se toca: ahí se paga antes y se entrega después.
+        // La venta ya está registrada: si esto falla (p. ej. la base aún no
+        // tiene la migración 0008) no se revierte nada, solo se ignora.
+        let _ = conn
+            .execute(
+                "UPDATE pedido_items SET fecha_entregado = datetime('now', 'localtime')
+                 WHERE pedido_id = ?1 AND estado = 'ENVIADO' AND fecha_listo IS NOT NULL
+                   AND fecha_entregado IS NULL
+                   AND (SELECT tipo FROM pedidos WHERE id = ?1) = 'MESA'",
+                libsql::params![pedido_id],
+            )
+            .await;
     }
 
     Ok(Json(VentaResult { venta_id, folio }))
