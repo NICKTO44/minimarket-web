@@ -531,7 +531,6 @@
 @media (max-width: 640px) {
   .prov-layout {
     padding: 16px;
-    padding-top: 52px; /* espacio para el botón de menú fijo arriba */
   }
 
   .prov-header {

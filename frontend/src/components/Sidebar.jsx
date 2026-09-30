@@ -1,55 +1,11 @@
 import { useState } from 'react';
 import { API_URL } from '../api/api';
-import {
-  ScanBarcode,
-  LayoutGrid,
-  Wallet,
-  History,
-  Package,
-  Boxes,
-  Truck,
-  Undo2,
-  Receipt,
-  BarChart3,
-  Settings,
-  Store,
-  LogOut,
-  Menu,
-  Users,
-  CreditCard,
-} from 'lucide-react';
+import { Store, LogOut } from 'lucide-react';
+import { gruposParaUsuario, nivelAvisoSuscripcion } from '../utils/menu';
 import './Sidebar.css';
 
-const GRUPOS = [
-  {
-    titulo: 'Operación',
-    items: [
-      { id: 'POS', label: 'Punto de Venta', icono: ScanBarcode },
-      { id: 'RESUMEN', label: 'Resumen', icono: LayoutGrid },
-      { id: 'CAJA', label: 'Caja y Turnos', icono: Wallet },
-      { id: 'HISTORIAL_CAJA', label: 'Historial de Caja', icono: History },
-      { id: 'CLIENTES', label: 'Clientes', icono: Users },
-    ],
-  },
-  {
-    titulo: 'Inventario',
-    items: [
-      { id: 'PRODUCTOS', label: 'Productos', icono: Package },
-      { id: 'STOCK', label: 'Stock y Lotes', icono: Boxes },
-      { id: 'PROVEEDORES', label: 'Proveedores', icono: Truck },
-      { id: 'DEVOLUCIONES', label: 'Devoluciones', icono: Undo2 },
-    ],
-  },
-  {
-    titulo: 'Administración',
-    items: [
-      { id: 'COMPROBANTES', label: 'Comprobantes', icono: Receipt },
-      { id: 'REPORTES', label: 'Reportes', icono: BarChart3 },
-      { id: 'SUSCRIPCION', label: 'Suscripción', icono: CreditCard, soloAdmin: true },
-      { id: 'CONFIGURACION', label: 'Configuración', icono: Settings, soloAdmin: true },
-    ],
-  },
-];
+// Sidebar de computadora/tablet grande. En celular (<= 899px) se oculta y
+// la navegación la hace NavegacionMovil (barra inferior + panel "Más").
 
 export default function Sidebar({
   pantalla,
@@ -62,16 +18,12 @@ export default function Sidebar({
   logoUrl,
   versionLogo,
 }) {
-  const [abierto, setAbierto] = useState(false);
   // Si la imagen del logo no carga (archivo borrado, sin conexión...),
   // se vuelve al ícono de tienda en lugar de mostrar una imagen rota.
   const [logoFallido, setLogoFallido] = useState(null);
   const mostrarLogo = !!logoUrl && logoFallido !== `${logoUrl}?v=${versionLogo}`;
 
-  const seleccionar = (id) => {
-    onCambiarPantalla(id);
-    setAbierto(false);
-  };
+  const seleccionar = (id) => onCambiarPantalla(id);
 
   const esAdmin = usuario.rol_id === 1;
   const rolLabel = esAdmin ? 'Administrador' : 'Cajero';
@@ -79,23 +31,12 @@ export default function Sidebar({
   // Solo se muestra un aviso cuando de verdad importa: pocos días o ya
   // vencido. Si tiene vencimiento indefinido (null) o le queda tiempo de
   // sobra, no se distrae al usuario con nada.
-  const claseAvisoSuscripcion = (() => {
-    if (diasRestantesSuscripcion == null) return null;
-    if (diasRestantesSuscripcion < 0) return 'sidebar-punto-vencido';
-    if (diasRestantesSuscripcion <= 7) return 'sidebar-punto-critico';
-    if (diasRestantesSuscripcion <= 15) return 'sidebar-punto-alerta';
-    return null;
-  })();
+  const nivelAviso = nivelAvisoSuscripcion(diasRestantesSuscripcion);
+  const claseAvisoSuscripcion = nivelAviso ? `sidebar-punto-${nivelAviso}` : null;
 
   return (
     <>
-      <button className="sidebar-toggle-movil" onClick={() => setAbierto(true)}>
-        <Menu size={20} />
-      </button>
-
-      {abierto && <div className="sidebar-overlay" onClick={() => setAbierto(false)} />}
-
-      <aside className={`sidebar ${abierto ? 'sidebar-abierto' : ''}`}>
+      <aside className="sidebar">
         <div className="sidebar-marca">
           {mostrarLogo ? (
             <img
@@ -116,10 +57,10 @@ export default function Sidebar({
         </div>
 
         <nav className="sidebar-nav">
-          {GRUPOS.map((grupo) => (
+          {gruposParaUsuario(usuario).map((grupo) => (
             <div className="sidebar-grupo" key={grupo.titulo}>
               <span className="sidebar-grupo-titulo">{grupo.titulo}</span>
-              {grupo.items.filter((item) => esAdmin || !item.soloAdmin).map((item) => {
+              {grupo.items.map((item) => {
                 const Icono = item.icono;
                 return (
                   <button

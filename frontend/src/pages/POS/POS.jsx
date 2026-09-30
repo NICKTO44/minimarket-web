@@ -6,6 +6,7 @@ import './POS.css';
 import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
+import { ChevronRight, ShoppingCart } from 'lucide-react';
 import { METODOS_OTRO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -705,21 +706,27 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
         </div>
       </div>
 
-      <button
-        type="button"
-        className="pos-fab-carrito"
-        onClick={() => {
-          setMensaje(null);
-          setCarritoAbierto(true);
-        }}
-        aria-label="Abrir carrito"
-      >
-        <span className="pos-fab-carrito-icono">🛒</span>
-        <span className="pos-fab-carrito-total">S/ {total.toFixed(2)}</span>
-        {carrito.length > 0 && (
+      {/* Solo en celular: barra del carrito encima de la navegación inferior.
+          Aparece cuando hay productos; al tocarla se abre la pantalla de cobro. */}
+      {carrito.length > 0 && (
+        <button
+          type="button"
+          className="pos-fab-carrito"
+          onClick={() => {
+            setMensaje(null);
+            setCarritoAbierto(true);
+          }}
+          aria-label="Abrir carrito para cobrar"
+        >
+          <ShoppingCart size={18} strokeWidth={2} />
           <span className="pos-fab-carrito-badge">{carrito.length}</span>
-        )}
-      </button>
+          <span className="pos-fab-carrito-texto">{carrito.length === 1 ? 'producto' : 'productos'}</span>
+          <span className="pos-fab-carrito-total">
+            S/ {total.toFixed(2)} · Cobrar
+            <ChevronRight size={16} strokeWidth={2.5} />
+          </span>
+        </button>
+      )}
 
       <div className={`pos-carrito${carritoAbierto ? ' pos-carrito-abierto' : ''}`}>
         <div className="pos-carrito-header-movil">

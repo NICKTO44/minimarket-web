@@ -1,0 +1,332 @@
+/* Navegación en celular (ver NavegacionMovil.jsx). En pantallas de
+   900px o más no se muestra nada de esto: navega el Sidebar. */
+.navm-superior,
+.navm-inferior {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  /* ---------- Barra superior: el negocio ---------- */
+  .navm-superior {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    order: -1;
+    flex-shrink: 0;
+    padding: 8px 14px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    background: #ffffff;
+    border-bottom: 1px solid #eceef1;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .navm-logo {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    object-fit: contain;
+    background: #ffffff;
+    border: 1px solid #eceef1;
+    flex-shrink: 0;
+  }
+
+  .navm-logo-icono {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: var(--sb-menta);
+    color: var(--sb-menta-texto);
+  }
+
+  .navm-negocio {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .navm-negocio strong {
+    font-size: 15px;
+    color: #16181d;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .navm-negocio span {
+    font-size: 11.5px;
+    color: #6b7280;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ---------- Barra inferior ---------- */
+  .navm-inferior {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-end;
+    order: 2;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 150;
+    padding: 6px 4px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    background: #ffffff;
+    border-top: 1px solid #e4e6eb;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Con el teclado abierto la barra se esconde para no quedar encima. */
+  .navm-inferior.navm-oculta {
+    display: none;
+  }
+
+  .navm-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .navm-tab-icono {
+    position: relative;
+    width: 52px;
+    height: 30px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+  }
+
+  .navm-tab.activo {
+    color: var(--color-primario-texto);
+  }
+
+  .navm-tab.activo .navm-tab-icono {
+    background: var(--color-primario-suave);
+  }
+
+  /* Botón central "Vender": sobresale por encima de la barra */
+  .navm-vender {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    margin-top: -26px;
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-primario-texto);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .navm-vender-circulo {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-primario);
+    color: var(--color-sobre-primario);
+    border: 4px solid #ffffff;
+    box-shadow: 0 6px 16px rgba(var(--color-primario-rgb), 0.4);
+    transition: transform 0.1s;
+  }
+
+  .navm-vender:active .navm-vender-circulo {
+    transform: scale(0.94);
+  }
+
+  .navm-punto {
+    position: absolute;
+    top: 2px;
+    right: 12px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1.5px solid #ffffff;
+  }
+
+  .navm-punto-alerta {
+    background: #f59e0b;
+  }
+
+  .navm-punto-critico,
+  .navm-punto-vencido {
+    background: #ef4444;
+  }
+
+  /* ---------- Panel "Más" ---------- */
+  .navm-velo {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(16, 24, 20, 0.45);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    animation: navm-aparecer 0.12s ease-out;
+  }
+
+  .navm-panel {
+    width: 100%;
+    max-height: 85dvh;
+    overflow-y: auto;
+    padding: 10px 14px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    border-radius: 20px 20px 0 0;
+    background: #ffffff;
+    animation: navm-subir 0.18s ease-out;
+  }
+
+  .navm-asa {
+    width: 40px;
+    height: 4px;
+    margin: 0 auto 6px;
+    border-radius: 9px;
+    background: #d1d5db;
+  }
+
+  .navm-grupo-titulo {
+    display: block;
+    margin: 12px 2px 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6b7280;
+  }
+
+  .navm-grilla {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .navm-modulo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-height: 76px;
+    padding: 12px 4px;
+    border: 1.5px solid transparent;
+    border-radius: 12px;
+    background: #f4f5f7;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: center;
+    color: #374151;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .navm-modulo.activo {
+    border-color: var(--color-primario-borde);
+    background: var(--color-primario-suave);
+    color: var(--color-primario-texto);
+  }
+
+  .navm-modulo-icono {
+    position: relative;
+    display: flex;
+    color: var(--color-primario-texto);
+  }
+
+  .navm-modulo-icono .navm-punto {
+    top: -3px;
+    right: -6px;
+  }
+
+  .navm-usuario {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #f4f5f7;
+  }
+
+  .navm-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--sb-menta);
+    color: var(--sb-menta-texto);
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .navm-usuario-texto {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .navm-usuario-texto strong {
+    font-size: 13.5px;
+    color: #16181d;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .navm-usuario-texto span {
+    font-size: 11.5px;
+    color: #6b7280;
+  }
+
+  .navm-salir {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: #b91c1c;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+}
+
+@keyframes navm-aparecer {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes navm-subir {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navm-velo,
+  .navm-panel {
+    animation: none;
+  }
+}

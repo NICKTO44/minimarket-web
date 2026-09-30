@@ -70,3 +70,28 @@
   overflow: auto;
   min-width: 0;
 }
+
+/* ===== Celular (<= 899px): barra superior + contenido + barra inferior =====
+   El Sidebar se oculta y navega NavegacionMovil. Cada pantalla mide
+   100vh en computadora; aquí ocupa solo el espacio entre las dos barras
+   (por eso .app-shell .app-contenido > * gana en especificidad). */
+@media (max-width: 899px) {
+  .app-shell {
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .app-contenido {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+    order: 1;
+  }
+
+  .app-shell .app-contenido > * {
+    height: 100%;
+    /* el botón central "Vender" sobresale ~26px sobre el contenido */
+    padding-bottom: 34px;
+  }
+}

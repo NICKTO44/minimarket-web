@@ -5,6 +5,7 @@ import POS from './pages/POS/POS';
 import PosBloqueado from './components/PosBloqueado';
 import Caja from './pages/Caja/Caja';
 import Sidebar from './components/Sidebar';
+import NavegacionMovil from './components/NavegacionMovil';
 import './App.css';
 import Inventario from './pages/Inventario/Inventario';
 import StockLotes from './pages/StockLotes/StockLotes';
@@ -274,6 +275,17 @@ function App() {
           <Configuracion onIdentidadActualizada={handleIdentidadActualizada} usuarioActualId={usuarioActual.id} />
         )}
       </div>
+      {/* Solo se ve en celular (<= 899px): barra superior + barra inferior */}
+      <NavegacionMovil
+        pantalla={pantalla}
+        onCambiarPantalla={setPantalla}
+        usuario={usuarioActual}
+        onLogout={handleLogout}
+        nombreTienda={nombreTienda}
+        diasRestantesSuscripcion={estadoSuscripcion?.dias_restantes ?? null}
+        logoUrl={identidadNegocio.logo}
+        versionLogo={versionLogo}
+      />
     </div>
   );
 }

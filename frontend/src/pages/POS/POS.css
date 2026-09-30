@@ -1031,17 +1031,20 @@
     height: 100%;
   }
 
+  /* Barra del carrito: ancho completo, encima de la navegación inferior
+     (deja libre el botón central "Vender", que sobresale ~26px). */
   .pos-fab-carrito {
     display: flex;
     align-items: center;
     gap: 8px;
-    position: fixed;
-    right: 16px;
-    bottom: 16px;
-    z-index: 200;
-    padding: 14px 18px;
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 34px;
+    z-index: 120;
+    padding: 12px 14px;
     border: none;
-    border-radius: 999px;
+    border-radius: 14px;
     background: var(--pos-primario);
     color: white;
     font-size: 14px;
@@ -1050,9 +1053,17 @@
     cursor: pointer;
   }
 
-  .pos-fab-carrito-icono {
-    font-size: 18px;
-    line-height: 1;
+  .pos-fab-carrito-total {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  /* Que la última fila de productos no quede debajo de la barra del carrito */
+  .pos-grid {
+    padding-bottom: 76px;
   }
 
   .pos-fab-carrito-badge {
