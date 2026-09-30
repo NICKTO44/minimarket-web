@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { API_URL } from '../api/api';
 import {
   ScanBarcode,
   LayoutGrid,
@@ -58,8 +59,14 @@ export default function Sidebar({
   nombreTienda = 'Mi Minimarket',
   ruc,
   diasRestantesSuscripcion,
+  logoUrl,
+  versionLogo,
 }) {
   const [abierto, setAbierto] = useState(false);
+  // Si la imagen del logo no carga (archivo borrado, sin conexión...),
+  // se vuelve al ícono de tienda en lugar de mostrar una imagen rota.
+  const [logoFallido, setLogoFallido] = useState(null);
+  const mostrarLogo = !!logoUrl && logoFallido !== `${logoUrl}?v=${versionLogo}`;
 
   const seleccionar = (id) => {
     onCambiarPantalla(id);
@@ -89,9 +96,18 @@ export default function Sidebar({
 
       <aside className={`sidebar ${abierto ? 'sidebar-abierto' : ''}`}>
         <div className="sidebar-marca">
-          <div className="sidebar-marca-icono">
-            <Store size={20} />
-          </div>
+          {mostrarLogo ? (
+            <img
+              className="sidebar-marca-logo"
+              src={`${API_URL}${logoUrl}?v=${versionLogo}`}
+              alt={nombreTienda}
+              onError={() => setLogoFallido(`${logoUrl}?v=${versionLogo}`)}
+            />
+          ) : (
+            <div className="sidebar-marca-icono">
+              <Store size={20} />
+            </div>
+          )}
           <div className="sidebar-marca-texto">
             <span className="sidebar-marca-nombre">{nombreTienda}</span>
             {ruc && <span className="sidebar-marca-ruc">RUC {ruc}</span>}

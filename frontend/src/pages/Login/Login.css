@@ -432,14 +432,14 @@
 }
 
 .login-tienda-form input:focus {
-  border-color: var(--color-foco, #4338ca);
+  border-color: var(--color-foco, var(--color-primario));
 }
 
 .login-tienda-submit {
   padding: 13px;
   border: none;
   border-radius: 10px;
-  background: #4338ca;
+  background: var(--color-primario);
   color: white;
   font-size: 15px;
   font-weight: 700;
@@ -465,7 +465,7 @@
 }
 
 .login-tienda-cambiar:hover {
-  color: var(--color-hover, #4338ca);
+  color: var(--color-hover, var(--color-primario));
   text-decoration: underline;
 }
 
@@ -511,5 +511,5 @@
 }
 
 .login-tienda-form .login-toggle-password:hover {
-  color: #4338ca;
+  color: var(--color-primario-texto);
 }

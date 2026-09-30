@@ -41,7 +41,7 @@
   background: white;
   font-size: 13px;
   font-weight: 600;
-  color: #4338ca;
+  color: var(--color-primario-texto);
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
@@ -133,12 +133,12 @@
 }
 
 .rep-tarjeta-destacada {
-  background: #eef2ff;
-  border-color: #c7d2fe;
+  background: var(--color-primario-suave);
+  border-color: var(--color-primario-borde);
 }
 
 .rep-tarjeta-destacada .rep-tarjeta-valor {
-  color: #4338ca;
+  color: var(--color-primario-texto);
 }
 
 .rep-seccion {

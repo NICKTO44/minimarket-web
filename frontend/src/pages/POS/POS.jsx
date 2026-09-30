@@ -6,6 +6,7 @@ import './POS.css';
 import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
+import { METODOS_OTRO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -18,6 +19,26 @@ const REGLAS_DOCUMENTO = {
   PASAPORTE: { maxLength: 12, soloNumeros: false, label: 'Pasaporte' },
   RUC: { maxLength: 11, soloNumeros: true, label: 'RUC (11 dígitos)' },
 };
+
+// Abreviaturas de unidad para la etiqueta de stock de cada tarjeta
+// (mismas unidades que UNIDADES_VALIDAS en backend/src/handlers/productos.rs).
+const ABREVIATURA_UNIDAD = {
+  UNIDAD: 'und', KG: 'kg', GRAMO: 'g', LITRO: 'L', ML: 'ml', PAQUETE: 'paq',
+  CAJA: 'caja', DOCENA: 'doc', PAR: 'par', METRO: 'm', GALON: 'gal', BOLSA: 'bolsa',
+  ONZA: 'oz', LIBRA: 'lb', ROLLO: 'rollo', YARDA: 'yd', MILLAR: 'mill', JUEGO: 'jgo',
+  SACO: 'saco', TONELADA: 't',
+};
+
+// "26 und", "2.5 kg" -- el stock puede tener decimales (productos por peso).
+function etiquetaStock(producto) {
+  const cantidad = Number.isInteger(producto.stock)
+    ? producto.stock
+    : Number(producto.stock.toFixed(2));
+  const unidad = ABREVIATURA_UNIDAD[producto.unidad_medida] || (producto.unidad_medida || 'und').toLowerCase();
+  return `${cantidad} ${unidad}`;
+}
+
+const redondear2 = (n) => Math.round(n * 100) / 100;
 
 // Opciones del selector "Ordenar por" encima de la grilla del POS.
 const OPCIONES_ORDEN = [
@@ -44,6 +65,10 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
   const [carritoAbierto, setCarritoAbierto] = useState(false);
   const [metodoPago, setMetodoPago] = useState('EFECTIVO');
   const [montoRecibido, setMontoRecibido] = useState('');
+  // Pago MIXTO = efectivo + un medio digital. El cajero escribe cuánto se
+  // pagó por el medio digital; la parte en efectivo se calcula sola.
+  const [mixtoOtroMetodo, setMixtoOtroMetodo] = useState('YAPE_PLIN');
+  const [mixtoMontoOtro, setMixtoMontoOtro] = useState('');
   const [cliente, setCliente] = useState(null);
   const [mostrarBusquedaCliente, setMostrarBusquedaCliente] = useState(false);
   const [busquedaCliente, setBusquedaCliente] = useState('');
@@ -363,10 +388,34 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
     [carrito]
   );
 
+  const esMixto = metodoPago === 'MIXTO';
+  const recibidoNum = parseFloat(montoRecibido) || 0;
+  const mixtoOtro = redondear2(parseFloat(mixtoMontoOtro) || 0);
+  const mixtoEfectivo = redondear2(Math.max(0, total - mixtoOtro));
+
   const cambio = useMemo(() => {
     const recibido = parseFloat(montoRecibido) || 0;
-    return metodoPago === 'EFECTIVO' ? Math.max(0, recibido - total) : 0;
-  }, [montoRecibido, total, metodoPago]);
+    if (metodoPago === 'EFECTIVO') return Math.max(0, recibido - total);
+    if (metodoPago === 'MIXTO') return redondear2(Math.max(0, recibido - mixtoEfectivo));
+    return 0;
+  }, [montoRecibido, total, metodoPago, mixtoEfectivo]);
+
+  // Estado del pago mixto: null = listo para cobrar; si no, un texto
+  // que explica qué falta (solo se muestra como error cuando ya hay
+  // algo escrito, para no regañar antes de tiempo).
+  const estadoMixto = (() => {
+    if (!esMixto) return { listo: true, error: null };
+    const nombreOtro = nombreMetodo(mixtoOtroMetodo);
+    if (mixtoOtro <= 0) return { listo: false, error: null };
+    if (mixtoOtro >= total) {
+      return { listo: false, error: `El monto por ${nombreOtro} debe ser menor al total. Si pagó todo por ${nombreOtro}, usa ese botón.` };
+    }
+    if (montoRecibido === '') return { listo: false, error: null };
+    if (recibidoNum + 0.005 < mixtoEfectivo) {
+      return { listo: false, error: `Faltan S/ ${(mixtoEfectivo - recibidoNum).toFixed(2)} en efectivo para completar el pago.` };
+    }
+    return { listo: true, error: null };
+  })();
 
   const clienteEsObligatorio = tipoComprobante === 'BOLETA' || tipoComprobante === 'FACTURA';
   const clienteEsOpcionalVisible = tipoComprobante === 'NINGUNO';
@@ -375,7 +424,8 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
     carrito.length > 0 &&
     !procesando &&
     (!clienteEsObligatorio || cliente) &&
-    (metodoPago !== 'EFECTIVO' || parseFloat(montoRecibido) >= total);
+    (metodoPago !== 'EFECTIVO' || parseFloat(montoRecibido) >= total) &&
+    estadoMixto.listo;
 
   const procesarVenta = async () => {
     if (tipoComprobante !== 'NINGUNO' && !facturacionConfigurada) {
@@ -398,10 +448,14 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
         })),
         total,
         metodo_pago: metodoPago,
-        monto_recibido: metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || total : null,
-        cambio: metodoPago === 'EFECTIVO' ? cambio : null,
+        monto_recibido:
+          metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || total : esMixto ? recibidoNum : null,
+        cambio: metodoPago === 'EFECTIVO' || esMixto ? cambio : null,
         usuario_id: usuario.id,
         cliente_id: cliente?.id || null,
+        pago_efectivo: esMixto ? mixtoEfectivo : null,
+        pago_otro: esMixto ? mixtoOtro : null,
+        pago_otro_metodo: esMixto ? mixtoOtroMetodo : null,
       });
 
       let comprobante = null;
@@ -423,8 +477,12 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
         venta: {
           folio: resultado.folio,
           total,
-          montoRecibido: metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || total : null,
-          cambio: metodoPago === 'EFECTIVO' ? cambio : null,
+          montoRecibido:
+            metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || total : esMixto ? recibidoNum : null,
+          cambio: metodoPago === 'EFECTIVO' || esMixto ? cambio : null,
+          metodoPago,
+          pagoOtro: esMixto ? mixtoOtro : null,
+          pagoOtroMetodo: esMixto ? mixtoOtroMetodo : null,
         },
         items: carrito.map((i) => ({ nombre: i.nombre, cantidad: i.cantidad, precio: i.precio })),
         comprobante,
@@ -442,6 +500,10 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
 
       setCarrito([]);
       setMontoRecibido('');
+      // Un pago mixto es excepcional: la siguiente venta vuelve a Efectivo
+      // para que nadie cobre en mixto por accidente.
+      setMixtoMontoOtro('');
+      setMetodoPago((actual) => (actual === 'MIXTO' ? 'EFECTIVO' : actual));
       setCliente(null);
       setMostrarBusquedaCliente(false);
       setBusquedaCliente('');
@@ -624,8 +686,17 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
                 <div className="pos-producto-imagen pos-producto-imagen-vacia">📦</div>
               )}
               <span className="pos-producto-nombre">{p.nombre}</span>
-              <span className="pos-producto-precio">S/ {p.precio.toFixed(2)}</span>
-              <span className="pos-producto-stock">Stock: {p.stock}</span>
+              <span className="pos-producto-fila">
+                <span className="pos-producto-precio">S/ {p.precio.toFixed(2)}</span>
+                {/* Rojo con el mismo criterio que el reporte de stock bajo
+                    (stock <= stock_minimo, ver productos.rs). */}
+                <span
+                  className={`pos-producto-stock${p.stock <= p.stock_minimo ? ' pos-producto-stock-bajo' : ''}`}
+                  title={`Stock: ${p.stock}`}
+                >
+                  {etiquetaStock(p)}
+                </span>
+              </span>
             </button>
           ))}
           {productosFiltrados.length === 0 && (
@@ -810,7 +881,7 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
           ))}
         </div>
 
-        <div className="pos-resumen">
+        <div className={`pos-resumen${esMixto ? ' pos-resumen-mixto' : ''}`}>
           <div className="pos-total-row">
             <span>Total</span>
             <span className="pos-total-monto">S/ {total.toFixed(2)}</span>
@@ -826,7 +897,124 @@ export default function POS({ usuario, nombreTienda = 'Mi Minimarket', direccion
                 {m.replace('_', '/')}
               </button>
             ))}
+            <button
+              className={`pos-metodo-mixto${esMixto ? ' activo' : ''}`}
+              onClick={() => setMetodoPago('MIXTO')}
+            >
+              {esMixto ? 'MIXTO · EFECTIVO + OTRO' : '+ MIXTO · EFECTIVO + OTRO'}
+            </button>
           </div>
+
+          {esMixto && (
+            <div className="pos-mixto">
+              <span className="pos-mixto-titulo">Pago mixto</span>
+
+              <div className="pos-mixto-paso">
+                <span className="pos-mixto-label">1. ¿Con qué pagó la otra parte?</span>
+                <div className="pos-mixto-chips">
+                  {METODOS_OTRO_MIXTO.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={mixtoOtroMetodo === m ? 'activo' : ''}
+                      onClick={() => setMixtoOtroMetodo(m)}
+                    >
+                      {nombreMetodo(m)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pos-mixto-paso">
+                <span className="pos-mixto-label">
+                  <span>2. Monto por {nombreMetodo(mixtoOtroMetodo)}</span>
+                  <button
+                    type="button"
+                    className="pos-mixto-rapido"
+                    onClick={() => setMixtoMontoOtro((Math.round(total * 50) / 100).toFixed(2))}
+                  >
+                    Mitad
+                  </button>
+                </span>
+                <div className={`pos-mixto-campo${mixtoOtro >= total && mixtoOtro > 0 ? ' error' : ''}`}>
+                  <span>S/</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={mixtoMontoOtro}
+                    onChange={(e) => setMixtoMontoOtro(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="pos-mixto-calculado">
+                <span>
+                  3. Parte en efectivo <small>(automático)</small>
+                </span>
+                <strong>S/ {mixtoEfectivo.toFixed(2)}</strong>
+              </div>
+
+              <div className="pos-mixto-paso">
+                <span className="pos-mixto-label">
+                  <span>4. Efectivo que entregó el cliente</span>
+                  <button
+                    type="button"
+                    className="pos-mixto-rapido"
+                    onClick={() => setMontoRecibido(mixtoEfectivo.toFixed(2))}
+                    disabled={mixtoOtro <= 0 || mixtoOtro >= total}
+                  >
+                    Exacto
+                  </button>
+                </span>
+                <div
+                  className={`pos-mixto-campo${
+                    montoRecibido !== '' && recibidoNum + 0.005 < mixtoEfectivo ? ' error' : ''
+                  }`}
+                >
+                  <span>S/</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={montoRecibido}
+                    onChange={(e) => setMontoRecibido(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {cambio > 0 && <span className="pos-cambio">Cambio: S/ {cambio.toFixed(2)}</span>}
+
+              {total > 0 && mixtoOtro > 0 && mixtoOtro < total && (
+                <>
+                  <div className="pos-mixto-barra">
+                    <div className="pos-mixto-barra-otro" style={{ width: `${(mixtoOtro / total) * 100}%` }} />
+                    <div
+                      className="pos-mixto-barra-efectivo"
+                      style={{ width: `${(Math.min(recibidoNum, mixtoEfectivo) / total) * 100}%` }}
+                    />
+                  </div>
+                  <div className="pos-mixto-leyenda">
+                    <span>
+                      <i className="pos-mixto-punto-otro" />
+                      {nombreMetodo(mixtoOtroMetodo)} S/ {mixtoOtro.toFixed(2)}
+                    </span>
+                    <span>
+                      <i className="pos-mixto-punto-efectivo" />
+                      Efectivo S/ {mixtoEfectivo.toFixed(2)}
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {estadoMixto.error && <p className="pos-mixto-error">{estadoMixto.error}</p>}
+              {estadoMixto.listo && <p className="pos-mixto-ok">✓ Cuadra con el total</p>}
+            </div>
+          )}
 
           {metodoPago === 'EFECTIVO' && (
             <div className="pos-efectivo">

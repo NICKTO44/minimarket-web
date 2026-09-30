@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api, API_URL } from '../../api/api';
+import { COLOR_MONSPEET, normalizarAcento } from '../../utils/tema';
 import './Configuracion.css';
 
 const ROLES = [
@@ -220,10 +221,10 @@ export default function Configuracion({ onIdentidadActualizada }) {
           </div>
 
           <div className="cfg-separador-seccion"></div>
-          <h3 className="cfg-subtitulo-seccion">Identidad visual del login</h3>
+          <h3 className="cfg-subtitulo-seccion">Identidad visual del negocio</h3>
           <p className="cfg-nota-moneda">
-            El logo y el color se muestran en la pantalla donde tus cajeros inician sesión, antes de
-            escribir su contraseña.
+            El logo y el color se aplican en todo tu sistema: menú lateral, botones, pantalla de inicio de
+            sesión de tus cajeros y demás pantallas. Solo afectan a tu negocio.
           </p>
 
           <div className="cfg-campo">
@@ -241,12 +242,24 @@ export default function Configuracion({ onIdentidadActualizada }) {
 
           <div className="cfg-campo">
             <label>Color de acento</label>
-            <input
-              type="color"
-              value={formConfig.color_acento || '#4338ca'}
-              onChange={(e) => setFormConfig({ ...formConfig, color_acento: e.target.value })}
-              style={{ width: 60, height: 36, padding: 2, cursor: 'pointer' }}
-            />
+            <div className="cfg-color-fila">
+              <input
+                type="color"
+                value={normalizarAcento(formConfig.color_acento)}
+                onChange={(e) => setFormConfig({ ...formConfig, color_acento: e.target.value })}
+                style={{ width: 60, height: 36, padding: 2, cursor: 'pointer' }}
+              />
+              {normalizarAcento(formConfig.color_acento) !== COLOR_MONSPEET && (
+                <button
+                  type="button"
+                  className="cfg-boton-color-original"
+                  onClick={() => setFormConfig({ ...formConfig, color_acento: COLOR_MONSPEET })}
+                >
+                  Usar verde Monspeet
+                </button>
+              )}
+            </div>
+            <p className="cfg-nota-moneda">Se aplica al presionar «Guardar cambios».</p>
           </div>
 
           <div className="cfg-separador-seccion"></div>

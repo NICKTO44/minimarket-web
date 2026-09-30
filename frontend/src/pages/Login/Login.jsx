@@ -1,6 +1,7 @@
 
 import { useState, useRef } from 'react';
 import { api, API_URL } from '../../api/api';
+import { calcularTema } from '../../utils/tema';
 import './Login.css';
 
 // Número de WhatsApp de Monspeet Dev.
@@ -290,7 +291,9 @@ export default function Login({
       .charAt(0)
       .toUpperCase();
 
-    const colorAcento = tiendaRecordada.color_acento || '#4338ca';
+    // Mismo color que verá el negocio dentro del sistema (ajustado para
+    // que el texto blanco del botón siempre se lea).
+    const colorAcento = calcularTema(tiendaRecordada.color_acento)['--color-primario'];
 
     return (
       <div className="login-tienda-container">

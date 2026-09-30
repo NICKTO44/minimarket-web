@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/api';
 import './Reportes.css';
+import { describirPago } from '../../utils/metodoPago';
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 
@@ -153,7 +154,7 @@ export default function Reportes() {
                       <td>{v.folio}</td>
                       <td>{new Date(v.fecha_hora).toLocaleString('es-PE')}</td>
                       <td>{v.cajero}</td>
-                      <td>{v.metodo_pago.replace('_', '/')}</td>
+                      <td>{describirPago(v)}</td>
                       <td>
                         <span className={`rep-badge rep-badge-${v.estado.toLowerCase()}`}>{v.estado}</span>
                       </td>

@@ -41,8 +41,8 @@
 }
 
 .caja-badge {
-  background: #eef2ff;
-  color: var(--pos-primario, #4338ca);
+  background: var(--color-primario-suave);
+  color: var(--color-primario);
   font-size: 12px;
   font-weight: 700;
   padding: 4px 10px;
@@ -78,7 +78,7 @@
 
 .caja-card input:focus,
 .caja-card textarea:focus {
-  border-color: var(--pos-primario, #4338ca);
+  border-color: var(--color-primario);
 }
 
 .caja-card textarea {
@@ -162,7 +162,7 @@
   padding: 14px;
   border: none;
   border-radius: 10px;
-  background: var(--pos-primario, #4338ca);
+  background: var(--color-primario);
   color: white;
   font-size: 15px;
   font-weight: 700;

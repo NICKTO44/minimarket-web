@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../../api/api';
+import { describirPago, nombreMetodo } from '../../utils/metodoPago';
 import './Devoluciones.css';
 
 export default function Devoluciones({ usuario }) {
@@ -10,6 +11,8 @@ export default function Devoluciones({ usuario }) {
   const [motivo, setMotivo] = useState('');
   const [procesando, setProcesando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
+  // Solo para ventas MIXTO: cómo se le devuelve el dinero al cliente.
+  const [metodoReembolso, setMetodoReembolso] = useState('EFECTIVO');
 
   const buscar = async () => {
     if (!busqueda.trim()) return;
@@ -19,6 +22,7 @@ export default function Devoluciones({ usuario }) {
     try {
       const resultado = await api.ventaParaDevolucion(busqueda.trim());
       setVenta(resultado);
+      setMetodoReembolso('EFECTIVO');
       setItems(
         resultado.productos.map((p) => ({
           detalle_id: p.detalle_id,
@@ -88,6 +92,7 @@ export default function Devoluciones({ usuario }) {
         productos: productosADevolver,
         motivo: motivo.trim(),
         usuario_id: usuario.id,
+        metodo_reembolso: venta.metodo_pago === 'MIXTO' ? metodoReembolso : null,
       });
       setMensaje({ tipo: 'exito', texto: `Devolución ${resultado.folio_devolucion || ''} procesada correctamente. Stock actualizado.` });
       setVenta(null);
@@ -138,7 +143,7 @@ export default function Devoluciones({ usuario }) {
             </div>
             <span className="dev-venta-fecha">{new Date(venta.fecha_hora).toLocaleString('es-PE')}</span>
           </div>
-          <div className="dev-venta-total">Total original: S/ {venta.total.toFixed(2)} — {venta.metodo_pago}</div>
+          <div className="dev-venta-total">Total original: S/ {venta.total.toFixed(2)} — {describirPago(venta)}</div>
 
           <div className="dev-items">
             {items.map((it, idx) => (
@@ -172,6 +177,16 @@ export default function Devoluciones({ usuario }) {
             <label>Motivo de la devolución</label>
             <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej: cliente se arrepintió, producto en mal estado..." />
           </div>
+
+          {venta.metodo_pago === 'MIXTO' && venta.pago_otro_metodo && (
+            <div className="dev-campo">
+              <label>¿Cómo le devuelves el dinero?</label>
+              <select value={metodoReembolso} onChange={(e) => setMetodoReembolso(e.target.value)}>
+                <option value="EFECTIVO">En efectivo (sale de la caja)</option>
+                <option value={venta.pago_otro_metodo}>Por {nombreMetodo(venta.pago_otro_metodo)}</option>
+              </select>
+            </div>
+          )}
 
           <div className="dev-total-row">
             <span>Total a devolver</span>

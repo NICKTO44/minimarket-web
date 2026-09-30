@@ -26,7 +26,7 @@
   padding: 10px 18px;
   border: none;
   border-radius: 10px;
-  background: #4338ca;
+  background: var(--color-primario);
   color: white;
   font-size: 14px;
   font-weight: 700;
@@ -96,8 +96,8 @@
 .cli-badge-tipo {
   font-size: 10.5px;
   font-weight: 700;
-  background: #eef2ff;
-  color: #4338ca;
+  background: var(--color-primario-suave);
+  color: var(--color-primario-texto);
   padding: 2px 6px;
   border-radius: 999px;
   margin-right: 4px;
@@ -116,8 +116,8 @@
 }
 
 .cli-boton-editar {
-  background: #eef2ff;
-  color: #4338ca;
+  background: var(--color-primario-suave);
+  color: var(--color-primario-texto);
 }
 
 .cli-boton-eliminar {
@@ -224,9 +224,9 @@
 }
 
 .cli-tipo-opciones button.activo {
-  background: #4338ca;
+  background: var(--color-primario);
   color: white;
-  border-color: #4338ca;
+  border-color: var(--color-primario);
 }
 
 .cli-modal-acciones {
@@ -251,7 +251,7 @@
   padding: 12px;
   border: none;
   border-radius: 10px;
-  background: #4338ca;
+  background: var(--color-primario);
   color: white;
   font-size: 14px;
   font-weight: 700;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from './api/api';
+import { aplicarTema, limpiarTema } from './utils/tema';
 import POS from './pages/POS/POS';
 import PosBloqueado from './components/PosBloqueado';
 import Caja from './pages/Caja/Caja';
@@ -35,6 +36,9 @@ function App() {
   const [modoLectura, setModoLectura] = useState(false);
   const [avisoSuscripcion, setAvisoSuscripcion] = useState(null);
   const [estadoSuscripcion, setEstadoSuscripcion] = useState(null);
+  // Cambia cuando el negocio sube un logo nuevo, para que el navegador
+  // no siga mostrando la imagen anterior guardada en caché.
+  const [versionLogo, setVersionLogo] = useState(() => Date.now());
 
   const cargarEstadoSuscripcion = () => {
     api.suscripcionEstado().then(setEstadoSuscripcion).catch(() => {});
@@ -95,6 +99,12 @@ function App() {
     if (data.tienda) {
       localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(data.tienda));
       setTiendaRecordada(data.tienda);
+    } else {
+      // Sin datos del negocio (p. ej. recién registrado): no se reutiliza
+      // el negocio recordado de otra cuenta en este navegador, para que
+      // su logo o color no aparezcan ni por un instante.
+      localStorage.removeItem(TIENDA_STORAGE_KEY);
+      setTiendaRecordada(null);
     }
 
     api.configuracionObtener().then(setConfiguracionTienda).catch(() => {});
@@ -112,6 +122,12 @@ function App() {
   // color de acento -- actualiza tiendaRecordada al toque, sin esperar
   // a que alguien vuelva a loguearse para que el cambio se vea.
   const handleIdentidadActualizada = (cambios) => {
+    // El tema y el logo del sidebar salen de configuracionTienda, así que
+    // se actualiza también para que el cambio se vea en todo el sistema.
+    setConfiguracionTienda((actual) =>
+      actual ? { ...actual, logo_path: cambios.logo_url, color_acento: cambios.color_acento } : actual
+    );
+    setVersionLogo(Date.now());
     setTiendaRecordada((actual) => {
       if (!actual) return actual;
       const actualizada = { ...actual, ...cambios };
@@ -151,6 +167,21 @@ function App() {
     cargarEstadoSuscripcion();
   };
 
+  // Identidad visual del negocio con sesión activa. Mientras llega su
+  // configuración del servidor se usa la del negocio recordado (es el
+  // mismo, se guardó en este login); después, siempre la del servidor.
+  const identidadNegocio = configuracionTienda
+    ? { color: configuracionTienda.color_acento, logo: configuracionTienda.logo_path }
+    : { color: tiendaRecordada?.color_acento, logo: tiendaRecordada?.logo_url };
+
+  useEffect(() => {
+    if (logueado) {
+      aplicarTema(identidadNegocio.color);
+    } else {
+      limpiarTema();
+    }
+  }, [logueado, identidadNegocio.color]);
+
   const matchBoletaPublica = window.location.pathname.match(/^\/boleta\/([^/]+)\/(\d+)$/);
   if (matchBoletaPublica) {
     const [, identificadorUrl, comprobanteIdUrl] = matchBoletaPublica;
@@ -188,6 +219,8 @@ function App() {
         nombreTienda={nombreTienda}
         ruc={configuracionTienda?.ruc}
         diasRestantesSuscripcion={estadoSuscripcion?.dias_restantes ?? null}
+        logoUrl={identidadNegocio.logo}
+        versionLogo={versionLogo}
       />
       <div className="app-contenido">
         {pantalla === 'POS' &&
@@ -230,9 +263,8 @@ function App() {
           />
         )}
         {pantalla === 'CONFIGURACION' && (
-        <Configuracion onIdentidadActualizada={handleIdentidadActualizada} />
+          <Configuracion onIdentidadActualizada={handleIdentidadActualizada} />
         )}
-        {pantalla === 'CONFIGURACION' && <Configuracion />}
       </div>
     </div>
   );

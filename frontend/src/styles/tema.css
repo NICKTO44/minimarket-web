@@ -1,0 +1,29 @@
+/* ============================================================
+   Tema global de Monspeet POS
+   ------------------------------------------------------------
+   Valores por defecto = verde Monspeet (#16a34a).
+   Cuando un negocio inicia sesión, src/utils/tema.js reescribe
+   estas mismas variables en <html> con el color que ese negocio
+   eligió en Configuración. Si cambias algo aquí, mantén los
+   mismos valores que calcularTema(null) en tema.js.
+   ============================================================ */
+:root {
+  /* Color principal del negocio */
+  --color-primario: #16a34a;
+  --color-primario-rgb: 22, 163, 74;
+  --color-primario-hover: #138b3f;
+  --color-primario-texto: #117f3a;
+  --color-primario-suave: #e8f6ed;
+  --color-primario-borde: #b9e3c9;
+  --color-sobre-primario: #ffffff;
+
+  /* Sidebar (oscuro, teñido con el color del negocio) */
+  --sb-bg: #0c2114;
+  --sb-panel: #163a24;
+  --sb-borde: rgba(255, 255, 255, 0.06);
+  --sb-texto: #ecf8f1;
+  --sb-texto-item: #b8d3c3;
+  --sb-texto-tenue: #67997a;
+  --sb-menta: #7fcc9b;
+  --sb-menta-texto: #092f17;
+}

@@ -5,8 +5,8 @@
   --pos-borde: #e4e6eb;
   --pos-texto: #16181d;
   --pos-texto-tenue: #6b7280;
-  --pos-primario: #4338ca;
-  --pos-primario-hover: #362da8;
+  --pos-primario: var(--color-primario);
+  --pos-primario-hover: var(--color-primario-hover);
   --pos-exito: #15803d;
   --pos-exito-bg: #dcfce7;
   --pos-error: #b91c1c;
@@ -117,31 +117,34 @@
    imagen + nombre de 2 líneas + precio + stock + paddings, el navegador
    ya no tiene que calcular nada: todas las tarjetas miden exactamente lo
    mismo, así que ninguna fila del grid puede quedar más corta de lo que
-   necesita su contenido. Si se cambia el tamaño de fuente, el alto de
-   imagen, o el padding en algún breakpoint, este valor debe recalcularse
-   y ajustarse junto con esos cambios. */
+   necesita su contenido.
+   Desde 2026-09-29 la imagen ya no tiene alto fijo: ocupa todo el
+   espacio que sobra (flex: 1) y el texto queda pegado abajo, así la
+   tarjeta no tiene huecos en blanco. Cambiar la altura aquí solo hace
+   la imagen más grande o más chica; el texto no se mueve. */
 .pos-producto-card {
   background: var(--pos-superficie);
   border: 1px solid var(--pos-borde);
   border-radius: var(--pos-radio);
-  padding: 12px;
+  padding: 8px 10px 10px;
   text-align: left;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 0;
   height: 196px;
+  overflow: hidden;
   transition: transform 0.08s, box-shadow 0.15s, border-color 0.15s;
 }
 
 .pos-producto-card:hover {
   border-color: var(--pos-primario);
-  box-shadow: 0 2px 8px rgba(67, 56, 202, 0.1);
+  box-shadow: 0 2px 8px rgba(var(--color-primario-rgb), 0.1);
 }
 
 .pos-producto-card:active {
   transform: scale(0.97);
-  background: #eef2ff;
+  background: var(--color-primario-suave);
 }
 
 /* Nombre limitado a 2 líneas con puntos suspensivos -- antes crecía
@@ -159,7 +162,21 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-height: calc(1.3em * 2);
+  flex-shrink: 0;
+}
+
+/* Precio a la izquierda y stock como etiqueta a la derecha, en la misma
+   fila, 4px debajo del nombre. flex-wrap: si el precio y el stock son
+   muy largos para el ancho de la tarjeta, la etiqueta baja a otra línea
+   en vez de salirse (la imagen se achica un poco para dejarle lugar). */
+.pos-producto-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  margin-top: 4px;
+  flex-shrink: 0;
 }
 
 .pos-producto-precio {
@@ -167,27 +184,39 @@
   font-weight: 700;
   color: var(--pos-primario);
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .pos-producto-stock {
-  font-size: 11.5px;
-  color: var(--pos-texto-tenue);
+  font-size: 11px;
+  font-weight: 600;
+  color: #4b5563;
+  background: #f1f2f4;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
-/* flex-shrink: 0 -- sin esto, cuando el nombre es largo y la tarjeta
-   se queda corta de espacio vertical, flexbox comprime la imagen para
-   darle lugar al texto (el bug reportado: imagen chica en tarjetas con
-   nombre largo). Con flex-shrink:0 la imagen SIEMPRE mantiene su
-   tamaño; si algo se ajusta, es solo el espacio del texto (ya resuelto
-   arriba con line-clamp). */
+.pos-producto-stock-bajo {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+/* La imagen toma todo el alto libre de la tarjeta (flex: 1 1 0 +
+   min-height: 0). El nombre está limitado a 2 líneas con line-clamp,
+   así que la diferencia de tamaño entre una tarjeta con nombre corto y
+   otra con nombre largo es de una sola línea (~17px) -- ya no pasa lo
+   de antes (imagen diminuta con nombres largos). min-height: 56px es
+   un piso de seguridad para que nunca desaparezca. */
 .pos-producto-imagen {
   width: 100%;
-  height: 74px;
+  flex: 1 1 0;
+  min-height: 56px;
+  height: auto;
   object-fit: contain;
   margin-bottom: 6px;
   display: block;
   overflow: hidden;
-  flex-shrink: 0;
 }
 
 .pos-producto-imagen-vacia {
@@ -196,10 +225,7 @@
   justify-content: center;
   background: #f4f5f7;
   border-radius: 8px;
-  font-size: 20px;
-  margin-bottom: 6px;
-  height: 74px;
-  flex-shrink: 0;
+  font-size: 22px;
 }
 
 .pos-sin-resultados {
@@ -328,7 +354,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #eef2ff;
+  background: var(--color-primario-suave);
   padding: 9px 12px;
   border-radius: var(--pos-radio-sm);
   font-size: 13.5px;
@@ -543,6 +569,21 @@
   flex-shrink: 0;
 }
 
+/* Con el pago mixto abierto el resumen crece bastante. Si no entra en
+   el panel, esta zona se desplaza (scroll) en vez de salirse por abajo,
+   y el botón Cobrar queda siempre pegado al fondo y visible (sticky). */
+.pos-resumen-mixto {
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.pos-resumen-mixto .pos-cobrar {
+  position: sticky;
+  bottom: 0;
+  box-shadow: 0 -10px 12px -4px var(--pos-superficie);
+}
+
 .pos-total-row {
   display: flex;
   justify-content: space-between;
@@ -612,6 +653,212 @@
   font-weight: 700;
   color: var(--pos-exito);
   text-align: right;
+}
+
+/* ===== Pago mixto (efectivo + un medio digital) ===== */
+.pos-metodo-pago .pos-metodo-mixto {
+  grid-column: 1 / -1;
+  border-style: dashed;
+  border-color: var(--color-primario-borde);
+  background: var(--color-primario-suave);
+  color: var(--color-primario-texto);
+  font-weight: 700;
+}
+
+.pos-metodo-pago .pos-metodo-mixto.activo {
+  border-style: solid;
+  background: var(--pos-primario);
+  border-color: var(--pos-primario);
+  color: white;
+}
+
+.pos-mixto {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1.5px solid var(--color-primario-borde);
+  background: var(--color-primario-suave);
+  border-radius: 12px;
+}
+
+.pos-mixto-titulo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-primario-texto);
+}
+
+.pos-mixto-paso {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pos-mixto-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--pos-texto-tenue);
+}
+
+.pos-mixto-rapido {
+  padding: 3px 9px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: var(--pos-superficie);
+  font-size: 11px;
+  font-weight: 700;
+  color: #374151;
+  cursor: pointer;
+}
+
+.pos-mixto-rapido:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.pos-mixto-chips {
+  display: flex;
+  gap: 6px;
+}
+
+.pos-mixto-chips button {
+  flex: 1;
+  padding: 7px 4px;
+  border: 1px solid var(--pos-borde);
+  border-radius: 999px;
+  background: var(--pos-superficie);
+  font-size: 12px;
+  font-weight: 700;
+  color: #4b5563;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pos-mixto-chips button.activo {
+  background: var(--pos-texto);
+  border-color: var(--pos-texto);
+  color: white;
+}
+
+.pos-mixto-campo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1.5px solid var(--pos-borde);
+  border-radius: var(--pos-radio-sm);
+  background: var(--pos-superficie);
+}
+
+.pos-mixto-campo:focus-within {
+  border-color: var(--pos-primario);
+}
+
+.pos-mixto-campo.error {
+  border-color: #f87171;
+}
+
+.pos-mixto-campo span {
+  color: var(--pos-texto-tenue);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* font-size 16px: por debajo, iOS Safari hace zoom al enfocar (ver .pos-buscador) */
+.pos-mixto-campo input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 16px;
+  color: var(--pos-texto);
+}
+
+.pos-mixto-calculado {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px dashed #d1d5db;
+  border-radius: var(--pos-radio-sm);
+  background: var(--pos-superficie);
+  font-size: 13px;
+  color: var(--pos-texto);
+}
+
+.pos-mixto-calculado small {
+  color: var(--pos-texto-tenue);
+}
+
+.pos-mixto-calculado strong {
+  font-size: 16px;
+}
+
+.pos-mixto-barra {
+  display: flex;
+  height: 9px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.pos-mixto-barra-otro {
+  background: #7c3aed;
+}
+
+.pos-mixto-barra-efectivo {
+  background: var(--pos-exito);
+}
+
+.pos-mixto-leyenda {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.pos-mixto-leyenda i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
+.pos-mixto-punto-otro {
+  background: #7c3aed;
+}
+
+.pos-mixto-punto-efectivo {
+  background: var(--pos-exito);
+}
+
+.pos-mixto-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--pos-radio-sm);
+  background: var(--pos-error-bg);
+  color: var(--pos-error);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pos-mixto-ok {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--pos-exito);
 }
 
 .pos-mensaje {
@@ -720,8 +967,8 @@
 .pos-venta-modal-tipo {
   font-size: 12px;
   font-weight: 700;
-  color: #4338ca;
-  background: #eef2ff;
+  color: var(--color-primario-texto);
+  background: var(--color-primario-suave);
   display: inline-block;
   padding: 3px 10px;
   border-radius: 999px;
@@ -799,7 +1046,7 @@
     color: white;
     font-size: 14px;
     font-weight: 700;
-    box-shadow: 0 6px 18px rgba(67, 56, 202, 0.35);
+    box-shadow: 0 6px 18px rgba(var(--color-primario-rgb), 0.35);
     cursor: pointer;
   }
 
@@ -870,28 +1117,17 @@
   }
 
   .pos-producto-card {
-    padding: 12px 10px;
-    gap: 5px;
-    height: 190px;
-  }
-
-  .pos-producto-imagen,
-  .pos-producto-imagen-vacia {
-    height: 60px;
+    padding: 8px 10px 10px;
+    height: 200px;
   }
 
   .pos-producto-nombre {
     font-size: 14px;
     line-height: 1.25;
-    min-height: calc(1.25em * 2);
   }
 
   .pos-producto-precio {
     font-size: 17px;
-  }
-
-  .pos-producto-stock {
-    font-size: 11.5px;
   }
 
   .pos-comprobante-opciones button {
@@ -916,11 +1152,6 @@
   .pos-grid {
     grid-template-columns: repeat(3, 1fr);
     gap: 10px;
-  }
-
-  .pos-producto-imagen,
-  .pos-producto-imagen-vacia {
-    height: 48px;
   }
 }
 

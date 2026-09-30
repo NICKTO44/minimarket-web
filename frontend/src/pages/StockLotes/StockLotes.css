@@ -39,9 +39,9 @@
 }
 
 .sl-horizontes button.activo {
-  background: #4338ca;
+  background: var(--color-primario);
   color: white;
-  border-color: #4338ca;
+  border-color: var(--color-primario);
 }
 
 .sl-subtitulo {

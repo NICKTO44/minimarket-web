@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { montoEnLetras } from '../utils/numeroALetras';
 import { construirCadenaQrSunat } from '../utils/qrSunat';
+import { nombreMetodo } from '../utils/metodoPago';
 
 export default function Recibo({ venta, items, nombreTienda, direccion, telefono, ruc, cajero, comprobante, cliente }) {
   const esComprobanteReal = !!comprobante;
@@ -143,6 +144,12 @@ export default function Recibo({ venta, items, nombreTienda, direccion, telefono
 
       {esComprobanteReal && <div className="recibo-importe-letras">SON: {montoEnLetras(total)}</div>}
 
+      {venta.metodoPago === 'MIXTO' && venta.pagoOtro != null && (
+        <div className="recibo-detalle-pago">
+          <span>{nombreMetodo(venta.pagoOtroMetodo)}</span>
+          <span>S/.{venta.pagoOtro.toFixed(2)}</span>
+        </div>
+      )}
       {venta.montoRecibido != null && (
         <div className="recibo-detalle-pago">
           <span>Efectivo</span>
