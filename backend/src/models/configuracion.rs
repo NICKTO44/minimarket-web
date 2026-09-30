@@ -17,6 +17,8 @@ pub struct ConfiguracionTienda {
     pub serie_factura: Option<String>,
     pub logo_path: Option<String>,
     pub color_acento: Option<String>,
+    /// 'TIENDA' (sistema de siempre) o 'RESTAURANTE' (atención en mesas).
+    pub modo_negocio: String,
 }
 
 #[derive(Debug, Deserialize)]

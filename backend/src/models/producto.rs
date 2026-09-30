@@ -17,6 +17,8 @@ pub struct Producto {
     pub imagen_url: Option<String>,
     pub activo: bool,
     pub precio_compra: f64,
+    /// false = preparado al momento (café, jugo): se vende sin stock.
+    pub controla_stock: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -33,6 +35,9 @@ pub struct NuevoProducto {
     pub lleva_vencimiento: Option<bool>,
     pub imagen_url: Option<String>,
     pub precio_compra: Option<f64>,
+    /// Solo lo manda el frontend en modo Cafetería/Restaurante.
+    #[serde(default)]
+    pub controla_stock: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +54,8 @@ pub struct ActualizarProducto {
     pub lleva_vencimiento: Option<bool>,
     pub imagen_url: Option<String>,
     pub precio_compra: Option<f64>,
+    #[serde(default)]
+    pub controla_stock: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]

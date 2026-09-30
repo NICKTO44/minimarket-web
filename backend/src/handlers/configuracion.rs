@@ -43,6 +43,11 @@ pub async fn obtener_configuracion(
             serie_factura: row.get(12).ok(),
             logo_path: row.get(13).ok(),
             color_acento: row.get(14).ok(),
+            modo_negocio: if crate::handlers::mesas::modo_restaurante(&conn).await {
+                "RESTAURANTE".to_string()
+            } else {
+                "TIENDA".to_string()
+            },
             };
             // Todos los usuarios leen la configuración (nombre, RUC, series...),
             // pero el token de FacturaLibre es un secreto: solo lo ve el

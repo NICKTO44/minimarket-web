@@ -4,6 +4,7 @@ use chrono::Local;
 use crate::models::venta::{NuevaVenta, VentaResult};
 use crate::tenants::TenantDb;
 use crate::models::auth::Claims;
+use crate::handlers::mesas::es_mesero;
 
 const METODOS_PAGO_VALIDOS: &[&str] = &["EFECTIVO", "TARJETA", "TRANSFERENCIA", "YAPE_PLIN", "MIXTO"];
 const METODOS_OTRO_MIXTO: &[&str] = &["TARJETA", "TRANSFERENCIA", "YAPE_PLIN"];
@@ -98,6 +99,44 @@ async fn descontar_stock_fefo(
     Ok(())
 }
 
+/// Datos reales del producto al momento de vender: (stock, lleva_vencimiento,
+/// nombre, unidad, controla_stock). Si la migración 0007 todavía no llegó a
+/// esta base (columna controla_stock inexistente), se asume que controla
+/// stock, como siempre -- así una venta nunca falla por eso.
+async fn datos_producto_para_venta(
+    conn: &libsql::Connection,
+    producto_id: i64,
+) -> Result<Option<(f64, bool, Option<String>, Option<String>, bool)>, String> {
+    let consulta = conn
+        .query(
+            "SELECT stock, lleva_vencimiento, nombre, unidad_medida, controla_stock FROM productos WHERE id = ?1",
+            libsql::params![producto_id],
+        )
+        .await;
+    let (mut rows, con_columna) = match consulta {
+        Ok(rows) => (rows, true),
+        Err(_) => (
+            conn.query(
+                "SELECT stock, lleva_vencimiento, nombre, unidad_medida FROM productos WHERE id = ?1",
+                libsql::params![producto_id],
+            )
+            .await
+            .map_err(|e| e.to_string())?,
+            false,
+        ),
+    };
+    match rows.next().await.map_err(|e| e.to_string())? {
+        Some(row) => Ok(Some((
+            row.get(0).unwrap_or(0.0),
+            row.get::<i64>(1).unwrap_or(0) == 1,
+            row.get(2).ok(),
+            row.get(3).ok(),
+            if con_columna { row.get::<i64>(4).unwrap_or(1) == 1 } else { true },
+        ))),
+        None => Ok(None),
+    }
+}
+
 // Para productos SIN vencimiento: descuenta directo de productos.stock
 async fn descontar_stock_simple(
     conn: &libsql::Connection,
@@ -123,6 +162,11 @@ pub async fn procesar_venta(
     let usuario_id = claims.sub;
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Mesero y Preparación (barra/cocina) no cobran.
+    if es_mesero(&conn, claims.rol_id).await {
+        return Err((StatusCode::FORBIDDEN, "Este usuario no cobra (mesero o barra/cocina). Pide al cajero que cobre la cuenta.".into()));
+    }
+
     // 1. Verificar caja abierta
     let mut rows_caja = conn
         .query(
@@ -143,23 +187,21 @@ pub async fn procesar_venta(
 
     // 2. Validar stock disponible por producto (perecible o no). De paso
     // se toma el nombre y la unidad REALES del producto (no los que manda
-    // el frontend) para guardarlos en la venta tal como son hoy.
-    let mut datos_producto: std::collections::HashMap<i64, (String, String)> = std::collections::HashMap::new();
+    // el frontend) para guardarlos en la venta tal como son hoy. Los
+    // productos preparados al momento (controla_stock = 0, p. ej. un café)
+    // no se validan ni se descuentan.
+    // producto_id -> (nombre, unidad, lleva_vencimiento, controla_stock)
+    let mut datos_producto: std::collections::HashMap<i64, (String, String, bool, bool)> = std::collections::HashMap::new();
     for p in &payload.productos {
-        let mut rows = conn
-            .query(
-                "SELECT stock, lleva_vencimiento, nombre, unidad_medida FROM productos WHERE id = ?1",
-                libsql::params![p.id],
-            )
+        let datos = datos_producto_para_venta(&conn, p.id)
             .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-        if let Some(row) = rows.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-            let stock: f64 = row.get(0).unwrap_or(0.0);
-            let nombre_actual: String = row.get(2).unwrap_or_else(|_| p.nombre.clone());
-            let unidad_actual: String = row.get(3).unwrap_or_else(|_| "UNIDAD".to_string());
-            datos_producto.insert(p.id, (nombre_actual, unidad_actual));
-            if stock < p.cantidad {
+        if let Some((stock, lleva_vencimiento, nombre, unidad, controla_stock)) = datos {
+            let nombre_actual = nombre.unwrap_or_else(|| p.nombre.clone());
+            let unidad_actual = unidad.unwrap_or_else(|| "UNIDAD".to_string());
+            datos_producto.insert(p.id, (nombre_actual, unidad_actual, lleva_vencimiento, controla_stock));
+            if controla_stock && stock < p.cantidad {
                 return Err((StatusCode::BAD_REQUEST, format!(
                     "Stock insuficiente para {} (disponible: {}, solicitado: {})",
                     p.nombre, stock, p.cantidad
@@ -167,6 +209,34 @@ pub async fn procesar_venta(
             }
         } else {
             return Err((StatusCode::BAD_REQUEST, format!("Producto {} no encontrado", p.nombre)));
+        }
+    }
+
+    // 2b. Cobro de un pedido de mesa: debe seguir abierto y lo que se cobra
+    // debe ser exactamente lo que tiene el pedido (si alguien agregó algo
+    // mientras se cobraba, se pide volver a abrirlo).
+    if let Some(pedido_id) = payload.pedido_id {
+        let mut rows = conn
+            .query(
+                "SELECT p.estado,
+                        CAST(COALESCE((SELECT SUM(i.cantidad * i.precio_unitario) FROM pedido_items i
+                                  WHERE i.pedido_id = p.id AND i.estado != 'ANULADO'), 0) AS REAL)
+                 FROM pedidos p WHERE p.id = ?1",
+                libsql::params![pedido_id],
+            )
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let (estado, total_pedido): (String, f64) =
+            match rows.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+                Some(row) => (row.get(0).unwrap_or_default(), row.get(1).unwrap_or(0.0)),
+                None => return Err((StatusCode::NOT_FOUND, "El pedido no existe.".into())),
+            };
+        if estado != "ABIERTO" {
+            return Err((StatusCode::CONFLICT, "Este pedido ya fue cobrado o anulado.".into()));
+        }
+        let total_cobrado: f64 = payload.productos.iter().map(|p| p.precio * p.cantidad).sum();
+        if ((total_cobrado - total_pedido) * 100.0).round().abs() > 1.0 {
+            return Err((StatusCode::CONFLICT, "El pedido cambió mientras cobrabas. Vuelve a abrir la mesa para cobrar lo actualizado.".into()));
         }
     }
 
@@ -216,16 +286,14 @@ pub async fn procesar_venta(
         let desc = p.descuento_monto.unwrap_or(0.0).max(0.0).min(sub);
         let total_linea = sub - desc;
 
-        let mut rows = conn
-            .query("SELECT lleva_vencimiento FROM productos WHERE id = ?1", libsql::params![p.id])
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        let lleva_vencimiento: bool = match rows.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-            Some(row) => row.get::<i64>(0).unwrap_or(0) == 1,
-            None => false,
-        };
+        let (lleva_vencimiento, controla_stock) = datos_producto
+            .get(&p.id)
+            .map(|d| (d.2, d.3))
+            .unwrap_or((false, true));
 
-        if lleva_vencimiento {
+        if !controla_stock {
+            // Preparado al momento: no hay stock que descontar.
+        } else if lleva_vencimiento {
             descontar_stock_fefo(&conn, p.id, p.cantidad).await
                 .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
         } else {
@@ -236,10 +304,18 @@ pub async fn procesar_venta(
         // Nombre y unidad congelados al momento de la venta (migración 0005):
         // si después se renombra el producto, esta venta sigue mostrando
         // el nombre con el que se vendió, igual que su comprobante SUNAT.
-        let (nombre_venta, unidad_venta) = datos_producto
+        let (nombre_base, unidad_venta) = datos_producto
             .get(&p.id)
-            .cloned()
+            .map(|d| (d.0.clone(), d.1.clone()))
             .unwrap_or_else(|| (p.nombre.clone(), "UNIDAD".to_string()));
+        // En pedidos de mesa, las opciones van con el nombre:
+        // "Capuchino (Grande, Leche de almendras)".
+        let nombre_venta = match p.detalle.as_deref().map(str::trim) {
+            Some(detalle) if !detalle.is_empty() => {
+                format!("{} ({})", nombre_base, detalle.chars().take(120).collect::<String>())
+            }
+            _ => nombre_base,
+        };
 
         conn.execute(
             "INSERT INTO detalles_venta (venta_id, producto_id, cantidad, precio_unitario, subtotal, descuento_linea, total_linea,
@@ -249,6 +325,20 @@ pub async fn procesar_venta(
         )
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar detalle: {}", e)))?;
+    }
+
+    // 7. Si fue el cobro de un pedido de mesa: se cierra y la mesa queda libre.
+    if let Some(pedido_id) = payload.pedido_id {
+        conn.execute("UPDATE ventas SET pedido_id = ?1 WHERE id = ?2", libsql::params![pedido_id, venta_id])
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        conn.execute(
+            "UPDATE pedidos SET estado = 'COBRADO', venta_id = ?1, fecha_cierre = datetime('now', 'localtime')
+             WHERE id = ?2 AND estado = 'ABIERTO'",
+            libsql::params![venta_id, pedido_id],
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     }
 
     Ok(Json(VentaResult { venta_id, folio }))

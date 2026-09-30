@@ -21,6 +21,9 @@ pub struct UsuarioSesion {
     pub username: String,
     pub nombre_completo: String,
     pub rol_id: i64,
+    /// Nombre del rol (ADMIN, CAJERO, MESERO...): el id del Mesero puede
+    /// variar entre negocios, el nombre no.
+    pub rol_nombre: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -29,6 +32,8 @@ pub struct TiendaSesion {
     pub nombre_negocio: String,
     pub logo_url: Option<String>,
     pub color_acento: Option<String>,
+    /// 'TIENDA' o 'RESTAURANTE' (atención en mesas).
+    pub modo_negocio: String,
 }
 
 #[derive(Serialize)]
@@ -118,6 +123,17 @@ pub async fn login(
 
     let (logo_url, color_acento) = leer_identidad_visual(&conn).await;
 
+    let rol_nombre: Option<String> = match conn
+        .query("SELECT nombre FROM roles WHERE id = ?1", libsql::params![rol_id])
+        .await
+    {
+        Ok(mut filas) => match filas.next().await {
+            Ok(Some(fila)) => fila.get(0).ok(),
+            _ => None,
+        },
+        Err(_) => None,
+    };
+
     let exp = (Utc::now() + Duration::hours(12)).timestamp() as usize;
 
     let claims = Claims {
@@ -140,12 +156,18 @@ pub async fn login(
             username: payload.usuario,
             nombre_completo,
             rol_id,
+            rol_nombre,
         },
         tienda: TiendaSesion {
             identificador: tienda.identificador,
             nombre_negocio: tienda.nombre_negocio,
             logo_url,
             color_acento,
+            modo_negocio: if crate::handlers::mesas::modo_restaurante(&conn).await {
+                "RESTAURANTE".to_string()
+            } else {
+                "TIENDA".to_string()
+            },
         },
         modo_lectura,
         aviso,
@@ -177,12 +199,16 @@ pub async fn identificar_usuario(
         .await
         .map_err(|_| (StatusCode::UNAUTHORIZED, "Usuario o contraseña incorrectos".to_string()))?;
 
-    let (logo_url, color_acento) = match state.tiendas.conectar_cacheado(&tienda).await {
+    let (logo_url, color_acento, modo_negocio) = match state.tiendas.conectar_cacheado(&tienda).await {
         Ok(db) => match db.connect() {
-            Ok(conn) => leer_identidad_visual(&conn).await,
-            Err(_) => (None, None),
+            Ok(conn) => {
+                let (logo, color) = leer_identidad_visual(&conn).await;
+                let modo = if crate::handlers::mesas::modo_restaurante(&conn).await { "RESTAURANTE" } else { "TIENDA" };
+                (logo, color, modo.to_string())
+            }
+            Err(_) => (None, None, "TIENDA".to_string()),
         },
-        Err(_) => (None, None),
+        Err(_) => (None, None, "TIENDA".to_string()),
     };
 
     Ok(Json(IdentificarUsuarioResponse {
@@ -192,6 +218,7 @@ pub async fn identificar_usuario(
             nombre_negocio: tienda.nombre_negocio,
             logo_url,
             color_acento,
+            modo_negocio,
         },
     }))
 }

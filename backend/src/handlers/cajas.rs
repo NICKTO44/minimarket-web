@@ -15,6 +15,10 @@ pub async fn abrir_caja(
 ) -> Result<Json<CajaResponse>, (StatusCode, String)> {
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    if crate::handlers::mesas::es_mesero(&conn, claims.rol_id).await {
+        return Err((StatusCode::FORBIDDEN, "Este usuario no maneja caja (mesero o barra/cocina).".into()));
+    }
+
     let mut rows = conn
         .query(
             "SELECT c.id, u.nombre_completo FROM cajas c

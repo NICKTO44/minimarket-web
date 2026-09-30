@@ -8,6 +8,10 @@ pub struct ProductoVenta {
     pub cantidad: f64,
     #[serde(rename = "descuentoMonto")]
     pub descuento_monto: Option<f64>,
+    /// Opciones y nota de un pedido de mesa ("Grande, Leche de almendras").
+    /// Se agrega al nombre guardado en la venta y en el comprobante.
+    #[serde(default)]
+    pub detalle: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -27,6 +31,10 @@ pub struct NuevaVenta {
     pub pago_otro: Option<f64>,
     #[serde(default)]
     pub pago_otro_metodo: Option<String>,
+    /// Pedido de mesa que se está cobrando (módulo Cafetería/Restaurante).
+    /// None en una venta normal del POS.
+    #[serde(default)]
+    pub pedido_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]

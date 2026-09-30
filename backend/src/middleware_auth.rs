@@ -5,7 +5,8 @@ use axum::{
     http::{Method, StatusCode, header},
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::models::auth::Claims;
 use crate::tenants::{NivelAcceso, TenantDb};
@@ -115,10 +116,86 @@ pub async fn requiere_auth(
         Err(e) => eprintln!("⚠️  No se pudo verificar si el usuario {} está activo: {}", claims.username, e),
     }
 
+    // Roles de cafetería/restaurante con acceso limitado: el Mesero solo
+    // maneja mesas y pedidos; Preparación (barra/cocina) solo su pantalla.
+    // Se bloquea en el servidor, no solo se esconde en el menú.
+    if let Some(rol) = nombre_rol_cacheado(claims.tienda_id, claims.rol_id, &db_tienda).await {
+        if !ruta_permitida(&rol, req.method(), req.uri().path()) {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
+
     req.extensions_mut().insert(claims);
     req.extensions_mut().insert(Arc::new(TenantDb(db_tienda)));
 
     Ok(next.run(req).await)
+}
+
+/// (tienda_id, rol_id) -> nombre del rol. Los roles casi nunca cambian, así
+/// que se consulta una sola vez por negocio y rol (no en cada petición).
+fn cache_roles() -> &'static Mutex<HashMap<(i64, i64), String>> {
+    static CACHE: OnceLock<Mutex<HashMap<(i64, i64), String>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+async fn nombre_rol_cacheado(tienda_id: i64, rol_id: i64, db: &libsql::Database) -> Option<String> {
+    // El administrador (rol 1) nunca tiene restricciones: ni se consulta.
+    if rol_id == ROL_ADMIN {
+        return None;
+    }
+    if let Some(nombre) = cache_roles().lock().ok()?.get(&(tienda_id, rol_id)).cloned() {
+        return Some(nombre);
+    }
+    let conn = db.connect().ok()?;
+    let nombre = crate::handlers::mesas::nombre_rol(&conn, rol_id).await?;
+    cache_roles().lock().ok()?.insert((tienda_id, rol_id), nombre.clone());
+    Some(nombre)
+}
+
+/// Qué puede usar cada rol limitado. Cualquier otro rol: todo (como antes).
+fn ruta_permitida(rol: &str, metodo: &Method, ruta: &str) -> bool {
+    let lectura = metodo == Method::GET || metodo == Method::HEAD;
+    // Lo mínimo para que la app cargue (nombre del negocio, aviso de pago).
+    let basico = lectura && (ruta == "/configuracion" || ruta == "/suscripcion/estado");
+    match rol {
+        "MESERO" => {
+            basico
+                || ruta == "/pedidos"
+                || ruta.starts_with("/pedidos/")
+                || ruta == "/preparacion/entregado"
+                || (lectura
+                    && matches!(ruta, "/mesas" | "/productos" | "/categorias" | "/modificadores" | "/preparacion"))
+        }
+        "PREPARACION" => basico || (lectura && ruta == "/preparacion") || ruta == "/preparacion/listo",
+        _ => true,
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    #[test]
+    fn permisos_por_rol() {
+        let g = Method::GET;
+        let p = Method::POST;
+        assert!(ruta_permitida("MESERO", &g, "/mesas"));
+        assert!(ruta_permitida("MESERO", &p, "/pedidos/5/items"));
+        assert!(ruta_permitida("MESERO", &p, "/preparacion/entregado"));
+        assert!(!ruta_permitida("MESERO", &p, "/preparacion/listo"));
+        assert!(!ruta_permitida("MESERO", &p, "/ventas"));
+        assert!(!ruta_permitida("MESERO", &g, "/reportes/ventas"));
+        assert!(!ruta_permitida("MESERO", &p, "/mesas"));
+        assert!(ruta_permitida("PREPARACION", &g, "/preparacion"));
+        assert!(ruta_permitida("PREPARACION", &p, "/preparacion/listo"));
+        assert!(!ruta_permitida("PREPARACION", &g, "/mesas"));
+        assert!(!ruta_permitida("PREPARACION", &g, "/productos"));
+        assert!(!ruta_permitida("PREPARACION", &p, "/pedidos/5/items"));
+        assert!(ruta_permitida("PREPARACION", &g, "/configuracion"));
+        assert!(!ruta_permitida("PREPARACION", &axum::http::Method::PUT, "/configuracion"));
+        assert!(ruta_permitida("CAJERO", &p, "/ventas"));
+        assert!(ruta_permitida("INVENTARIO", &p, "/productos"));
+    }
 }
 
 /// rol_id del administrador del negocio (tabla roles).

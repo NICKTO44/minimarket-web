@@ -25,6 +25,9 @@ pub struct RegistroRequest {
     pub usuario: String,
     pub password: String,
     pub ruc: Option<String>,
+    /// 'TIENDA' (por defecto) o 'RESTAURANTE' (cafetería / atención en mesas).
+    #[serde(default)]
+    pub modo_negocio: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -328,6 +331,19 @@ async fn registrar_negocio_interno(
     migraciones::aplicar_migraciones_a_tienda(&tienda_recien_creada, Path::new("migraciones"))
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error aplicando migraciones al negocio nuevo: {}", e)))?;
+
+    // 5b. Tipo de negocio elegido al registrarse. Cafetería/Restaurante
+    //     activa la atención en mesas y deja 6 mesas de ejemplo; cualquier
+    //     otro valor deja el sistema de siempre (TIENDA).
+    if payload.modo_negocio.as_deref().map(|m| m.trim().to_uppercase()) == Some("RESTAURANTE".to_string()) {
+        conn_nueva
+            .execute("UPDATE configuracion_tienda SET modo_negocio = 'RESTAURANTE'", ())
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        crate::handlers::mesas::sembrar_mesas_iniciales(&conn_nueva)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    }
 
     // 6. Guardar el negocio + el índice de usuario en la base central.
     //    El token se cifra antes de guardarlo — nunca queda en texto

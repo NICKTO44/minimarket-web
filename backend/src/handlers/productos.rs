@@ -39,22 +39,30 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let mut rows = conn
-        .query(
-            "SELECT p.id, p.codigo, p.nombre, p.descripcion, p.precio, p.stock, p.stock_minimo,
+    // controla_stock llegó con la migración 0007; si esta base todavía no
+    // la tiene, se lista igual que antes (todos controlan stock).
+    const SQL_BASE: &str = "SELECT p.id, p.codigo, p.nombre, p.descripcion, p.precio, p.stock, p.stock_minimo,
                     p.unidad_medida, p.categoria_id, c.nombre, p.descuento_porcentaje,
-                    p.lleva_vencimiento, p.imagen_url, p.activo, p.precio_compra
-             FROM productos p
+                    p.lleva_vencimiento, p.imagen_url, p.activo, p.precio_compra";
+    const SQL_RESTO: &str = " FROM productos p
              LEFT JOIN categorias c ON p.categoria_id = c.id
              WHERE p.activo = ?1
-             ORDER BY p.nombre",
-            libsql::params![activo],
-        )
+             ORDER BY p.nombre";
+    let (mut rows, con_columna) = match conn
+        .query(&format!("{}, p.controla_stock{}", SQL_BASE, SQL_RESTO), libsql::params![activo])
         .await
-        .map_err(|e| {
-            eprintln!("❌ Error en el SELECT de listar_productos: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    {
+        Ok(rows) => (rows, true),
+        Err(_) => (
+            conn.query(&format!("{}{}", SQL_BASE, SQL_RESTO), libsql::params![activo])
+                .await
+                .map_err(|e| {
+                    eprintln!("❌ Error en el SELECT de listar_productos: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?,
+            false,
+        ),
+    };
 
     let mut productos = Vec::new();
     while let Some(row) = rows.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
@@ -74,6 +82,7 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
             imagen_url: row.get(12).ok(),
             activo: row.get::<i64>(13).unwrap_or(1) == 1,
             precio_compra: row.get(14).unwrap_or(0.0),
+            controla_stock: if con_columna { row.get::<i64>(15).unwrap_or(1) == 1 } else { true },
         });
     }
 
@@ -85,17 +94,23 @@ pub async fn productos_stock_bajo(
 ) -> Result<Json<Vec<Producto>>, StatusCode> {
     let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let mut rows = conn
-        .query(
-            "SELECT p.id, p.codigo, p.nombre, p.stock, p.stock_minimo, p.unidad_medida, c.nombre
+    // Los preparados al momento (controla_stock = 0) no tienen stock que
+    // reponer, así que no se listan como "stock bajo".
+    const SQL_STOCK_BAJO: &str = "SELECT p.id, p.codigo, p.nombre, p.stock, p.stock_minimo, p.unidad_medida, c.nombre
              FROM productos p
              LEFT JOIN categorias c ON p.categoria_id = c.id
-             WHERE p.activo = 1 AND p.stock <= p.stock_minimo
-             ORDER BY (p.stock - p.stock_minimo), p.nombre",
-            (),
-        )
+             WHERE p.activo = 1 AND p.stock <= p.stock_minimo";
+    const SQL_ORDEN: &str = " ORDER BY (p.stock - p.stock_minimo), p.nombre";
+    let mut rows = match conn
+        .query(&format!("{} AND p.controla_stock = 1{}", SQL_STOCK_BAJO, SQL_ORDEN), ())
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    {
+        Ok(rows) => rows,
+        Err(_) => conn
+            .query(&format!("{}{}", SQL_STOCK_BAJO, SQL_ORDEN), ())
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    };
 
     let mut productos = Vec::new();
     while let Some(row) = rows.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
@@ -115,6 +130,7 @@ pub async fn productos_stock_bajo(
             imagen_url: None,
             activo: true,
             precio_compra: 0.0,
+            controla_stock: true,
         });
     }
 
@@ -221,6 +237,13 @@ pub async fn agregar_producto(
 
     let producto_id = conn.last_insert_rowid();
 
+    if let Some(controla) = payload.controla_stock {
+        conn.execute(
+            "UPDATE productos SET controla_stock = ?1 WHERE id = ?2",
+            libsql::params![controla as i64, producto_id],
+        ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
     Ok(Json(ProductoResponse {
         success: true,
         message: "Producto agregado exitosamente".into(),
@@ -290,6 +313,13 @@ pub async fn actualizar_producto(
             imagen_a_guardar, payload.precio_compra.unwrap_or(0.0), id
         ],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al actualizar: {}", e)))?;
+
+    if let Some(controla) = payload.controla_stock {
+        conn.execute(
+            "UPDATE productos SET controla_stock = ?1 WHERE id = ?2",
+            libsql::params![controla as i64, id],
+        ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
 
     Ok(Json(ProductoResponse {
         success: true,

@@ -18,3 +18,4 @@ pub mod registro;
 pub mod suscripcion;
 pub mod publico;
 pub mod documentos;
+pub mod mesas;
