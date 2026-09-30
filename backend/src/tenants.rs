@@ -96,8 +96,16 @@ pub struct RegistroTiendas {
     central_db: libsql::Database,
     cache: RwLock<HashMap<i64, (TiendaConexion, Instant)>>,
     conexiones: RwLock<HashMap<i64, Arc<libsql::Database>>>,
+    /// (tienda_id, usuario_id) -> (activo, rol_id, cuándo se consultó).
+    /// Ver `estado_usuario`.
+    usuarios: RwLock<HashMap<(i64, i64), (bool, i64, Instant)>>,
     clave_cifrado: [u8; 32],
 }
+
+/// Cada cuánto se vuelve a consultar si un usuario sigue activo y cuál es
+/// su rol. Desactivar o reactivar desde Configuración invalida la entrada al
+/// momento, así que en la práctica el efecto es inmediato.
+const TTL_CACHE_USUARIO: Duration = Duration::from_secs(60);
 
 impl RegistroTiendas {
     pub fn nuevo(central_db: libsql::Database, clave_cifrado: [u8; 32]) -> Self {
@@ -105,6 +113,7 @@ impl RegistroTiendas {
             central_db,
             cache: RwLock::new(HashMap::new()),
             conexiones: RwLock::new(HashMap::new()),
+            usuarios: RwLock::new(HashMap::new()),
             clave_cifrado,
         }
     }
@@ -286,5 +295,111 @@ impl RegistroTiendas {
     /// que necesita insertar la tienda nueva y su usuario en el índice).
     pub fn conexion_central(&self) -> Result<libsql::Connection, String> {
         self.central_db.connect().map_err(|e| e.to_string())
+    }
+
+    /// ¿El usuario sigue activo en su negocio y con qué rol? Lo usa el
+    /// middleware en cada petición para que un usuario desactivado pierda
+    /// el acceso aunque su sesión (JWT) todavía no haya expirado. Cacheado
+    /// por `TTL_CACHE_USUARIO`. Devuelve Ok(None) si el usuario ya no existe.
+    pub async fn estado_usuario(
+        &self,
+        tienda_id: i64,
+        usuario_id: i64,
+        db: &libsql::Database,
+    ) -> Result<Option<(bool, i64)>, String> {
+        if let Some((activo, rol_id, cuando)) = self.usuarios.read().await.get(&(tienda_id, usuario_id)) {
+            if cuando.elapsed() < TTL_CACHE_USUARIO {
+                return Ok(Some((*activo, *rol_id)));
+            }
+        }
+        let conn = db.connect().map_err(|e| e.to_string())?;
+        let mut rows = conn
+            .query("SELECT activo, rol_id FROM usuarios WHERE id = ?1", libsql::params![usuario_id])
+            .await
+            .map_err(|e| e.to_string())?;
+        let resultado = match rows.next().await.map_err(|e| e.to_string())? {
+            Some(fila) => {
+                let activo = fila.get::<i64>(0).unwrap_or(1) == 1;
+                let rol_id: i64 = fila.get(1).unwrap_or(0);
+                Some((activo, rol_id))
+            }
+            None => None,
+        };
+        let (activo, rol_id) = resultado.unwrap_or((false, 0));
+        self.usuarios.write().await.insert((tienda_id, usuario_id), (activo, rol_id, Instant::now()));
+        Ok(resultado)
+    }
+
+    /// Olvida el estado cacheado de un usuario (al desactivarlo o reactivarlo).
+    pub async fn invalidar_usuario(&self, tienda_id: i64, usuario_id: i64) {
+        self.usuarios.write().await.remove(&(tienda_id, usuario_id));
+    }
+
+    // ------------------------------------------------------------------
+    // Índice central de usuarios (`usuarios_indice`): dice a qué negocio
+    // pertenece cada nombre de usuario. El login en dos pasos lo usa para
+    // saber a qué base conectarse, así que TODO usuario que pueda iniciar
+    // sesión (dueño y cajeros) debe estar aquí, y los nombres de usuario
+    // son únicos en todo Monspeet.
+    // ------------------------------------------------------------------
+
+    /// Negocio al que pertenece `usuario` en el índice central, si existe.
+    pub async fn tienda_de_usuario(&self, usuario: &str) -> Result<Option<i64>, String> {
+        let conn = self.central_db.connect().map_err(|e| e.to_string())?;
+        let mut rows = conn
+            .query("SELECT tienda_id FROM usuarios_indice WHERE usuario = ?1", libsql::params![usuario])
+            .await
+            .map_err(|e| e.to_string())?;
+        match rows.next().await.map_err(|e| e.to_string())? {
+            Some(fila) => Ok(Some(fila.get(0).map_err(|e| e.to_string())?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Registra `usuario` como perteneciente a `tienda_id` en el índice central.
+    pub async fn registrar_usuario_en_indice(&self, usuario: &str, tienda_id: i64) -> Result<(), String> {
+        let conn = self.central_db.connect().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO usuarios_indice (usuario, tienda_id) VALUES (?1, ?2)",
+            libsql::params![usuario, tienda_id],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Agrega al índice central los usuarios de un negocio que todavía no
+    /// están (los cajeros creados antes de este arreglo solo existían en la
+    /// base del negocio y no podían iniciar sesión en un dispositivo nuevo).
+    /// Devuelve (cuántos se agregaron, nombres que ya usa OTRO negocio).
+    /// Nunca modifica ni borra filas existentes del índice.
+    pub async fn sincronizar_indice_usuarios(&self, tienda: &TiendaConexion) -> Result<(usize, Vec<String>), String> {
+        let db = self.conectar_cacheado(tienda).await?;
+        let conn = db.connect().map_err(|e| e.to_string())?;
+        let mut rows = conn
+            .query("SELECT username FROM usuarios", ())
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut nombres = Vec::new();
+        while let Some(fila) = rows.next().await.map_err(|e| e.to_string())? {
+            let nombre: String = fila.get(0).unwrap_or_default();
+            if !nombre.trim().is_empty() {
+                nombres.push(nombre);
+            }
+        }
+
+        let mut agregados = 0;
+        let mut conflictos = Vec::new();
+        for nombre in nombres {
+            match self.tienda_de_usuario(&nombre).await? {
+                None => {
+                    self.registrar_usuario_en_indice(&nombre, tienda.id).await?;
+                    agregados += 1;
+                }
+                Some(id) if id == tienda.id => {}
+                Some(_) => conflictos.push(nombre),
+            }
+        }
+        Ok((agregados, conflictos))
     }
 }   

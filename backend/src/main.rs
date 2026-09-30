@@ -97,6 +97,27 @@ async fn main() {
                         }
                     }
                     println!("🔄 Migraciones automáticas: {} al día, {} con error(es).", ok, fallos);
+
+                    // Índice central de usuarios: registra a los cajeros que
+                    // se crearon antes de que crear_usuario los agregara
+                    // (sin esto no pueden iniciar sesión en un dispositivo
+                    // nuevo). Solo agrega filas, nunca borra ni modifica.
+                    for tienda in &tiendas {
+                        match state_migraciones.tiendas.sincronizar_indice_usuarios(tienda).await {
+                            Ok((agregados, conflictos)) => {
+                                if agregados > 0 {
+                                    println!("  👤 {} ({}) — {} usuario(s) agregado(s) al índice de login", tienda.nombre_negocio, tienda.identificador, agregados);
+                                }
+                                for nombre in conflictos {
+                                    eprintln!(
+                                        "  ⚠️  {} ({}) — el usuario '{}' ya lo usa otro negocio; no podrá entrar desde un dispositivo nuevo hasta que se le cambie el nombre",
+                                        tienda.nombre_negocio, tienda.identificador, nombre
+                                    );
+                                }
+                            }
+                            Err(e) => eprintln!("  ❌ {} ({}) — no se pudo sincronizar el índice de usuarios: {}", tienda.nombre_negocio, tienda.identificador, e),
+                        }
+                    }
                 }
                 Err(e) => eprintln!("⚠️  No se pudo listar los negocios para aplicar migraciones automáticas: {}", e),
             }
@@ -150,6 +171,8 @@ async fn main() {
         .route("/clientes/todos", get(handlers::clientes::listar_clientes))
         .route("/clientes/:id", axum::routing::put(handlers::clientes::actualizar_cliente))
         .route("/clientes/:id/desactivar", post(handlers::clientes::desactivar_cliente))
+        .route("/clientes/desactivados", get(handlers::clientes::listar_clientes_desactivados))
+        .route("/clientes/:id/reactivar", post(handlers::clientes::reactivar_cliente))
         .route("/ventas", post(handlers::ventas::procesar_venta))
         .route("/ventas/:identificador", get(handlers::devoluciones::buscar_venta_para_devolucion))
         .route("/devoluciones", post(handlers::devoluciones::procesar_devolucion))
@@ -184,6 +207,7 @@ async fn main() {
         .route("/usuarios", get(handlers::configuracion::listar_usuarios))
         .route("/usuarios", post(handlers::configuracion::crear_usuario))
         .route("/usuarios/:id/desactivar", post(handlers::configuracion::desactivar_usuario))
+        .route("/usuarios/:id/reactivar", post(handlers::configuracion::reactivar_usuario))
         .route("/suscripcion/canjear-codigo", post(handlers::suscripcion::canjear_codigo))
         .route("/suscripcion/estado", get(handlers::suscripcion::estado_suscripcion))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), middleware_auth::requiere_auth));

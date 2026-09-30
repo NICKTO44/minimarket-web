@@ -3,6 +3,7 @@ use chrono::Local;
 
 use crate::models::venta::{NuevaVenta, VentaResult};
 use crate::tenants::TenantDb;
+use crate::models::auth::Claims;
 
 const METODOS_PAGO_VALIDOS: &[&str] = &["EFECTIVO", "TARJETA", "TRANSFERENCIA", "YAPE_PLIN", "MIXTO"];
 const METODOS_OTRO_MIXTO: &[&str] = &["TARJETA", "TRANSFERENCIA", "YAPE_PLIN"];
@@ -114,15 +115,19 @@ async fn descontar_stock_simple(
 
 pub async fn procesar_venta(
     Extension(tenant): Extension<std::sync::Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<NuevaVenta>,
 ) -> Result<Json<VentaResult>, (StatusCode, String)> {
+    // El autor de la venta es el usuario de la sesión (JWT), no el
+    // usuario_id que manda el navegador.
+    let usuario_id = claims.sub;
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // 1. Verificar caja abierta
     let mut rows_caja = conn
         .query(
             "SELECT id FROM cajas WHERE usuario_id = ?1 AND estado = 'ABIERTA'",
-            libsql::params![payload.usuario_id],
+            libsql::params![usuario_id],
         )
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -196,7 +201,7 @@ pub async fn procesar_venta(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'COMPLETADA', ?10, ?11, ?12)",
         libsql::params![
             folio.clone(), payload.cliente_id, subtotal, descuento_total, payload.total,
-            payload.metodo_pago.clone(), payload.monto_recibido, payload.cambio, payload.usuario_id,
+            payload.metodo_pago.clone(), payload.monto_recibido, payload.cambio, usuario_id,
             pago_efectivo, pago_otro, pago_otro_metodo
         ],
     )

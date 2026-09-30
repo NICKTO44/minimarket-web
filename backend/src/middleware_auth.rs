@@ -100,8 +100,37 @@ pub async fn requiere_auth(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    // ¿El usuario sigue activo? Un usuario desactivado pierde el acceso
+    // aunque su JWT siga vigente (401 -> el frontend lo manda al login).
+    // El rol también sale de la base, no solo del token. Si la consulta
+    // falla por un problema de red, no se bloquea la operación (mismo
+    // criterio que con servicios externos): se deja pasar y se registra.
+    let mut claims = claims;
+    match state.tiendas.estado_usuario(claims.tienda_id, claims.sub, &db_tienda).await {
+        Ok(Some((true, rol_id))) => claims.rol_id = rol_id,
+        Ok(Some((false, _))) | Ok(None) => {
+            eprintln!("🚫 Usuario {} de la tienda '{}' desactivado o inexistente", claims.username, tienda.identificador);
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        Err(e) => eprintln!("⚠️  No se pudo verificar si el usuario {} está activo: {}", claims.username, e),
+    }
+
     req.extensions_mut().insert(claims);
     req.extensions_mut().insert(Arc::new(TenantDb(db_tienda)));
 
     Ok(next.run(req).await)
+}
+
+/// rol_id del administrador del negocio (tabla roles).
+pub const ROL_ADMIN: i64 = 1;
+
+/// Corta la petición si quien la hace no es administrador. El rol sale del
+/// JWT (firmado por el backend), nunca de lo que mande el navegador.
+/// Configuración y Suscripción son solo para el administrador; el cajero
+/// usa todo lo demás.
+pub fn exigir_admin(claims: &Claims) -> Result<(), (StatusCode, String)> {
+    if claims.rol_id != ROL_ADMIN {
+        return Err((StatusCode::FORBIDDEN, "Solo el administrador del negocio puede hacer esto.".to_string()));
+    }
+    Ok(())
 }

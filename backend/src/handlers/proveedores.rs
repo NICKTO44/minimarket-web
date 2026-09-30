@@ -4,6 +4,7 @@ use chrono::Local;
 
 use crate::tenants::TenantDb;
 use crate::models::proveedor::*;
+use crate::models::auth::Claims;
 
 pub async fn obtener_proveedores(
     Extension(tenant): Extension<Arc<TenantDb>>,
@@ -67,6 +68,7 @@ pub async fn agregar_proveedor(
 
 pub async fn crear_compra(
     Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<NuevaCompraRequest>,
 ) -> Result<Json<CompraResponse>, (StatusCode, String)> {
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -115,7 +117,7 @@ pub async fn crear_compra(
         libsql::params![
             folio.clone(), payload.proveedor_id, payload.fecha_compra.clone(), subtotal, descuento,
             credito_aplicado, total, payload.tipo_pago.clone(), monto_pagado, saldo_pendiente,
-            payload.fecha_vencimiento_pago.clone(), estado_pago, payload.usuario_id,
+            payload.fecha_vencimiento_pago.clone(), estado_pago, claims.sub,
             payload.factura_numero.clone(), payload.notas.clone()
         ],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al crear compra: {}", e)))?;
@@ -124,10 +126,19 @@ pub async fn crear_compra(
 
     for item in &payload.items {
         let subtotal_item = item.precio_compra * item.cantidad;
+        // Nombre congelado al registrar la compra (migración 0006).
+        let mut r_nombre = conn
+            .query("SELECT nombre FROM productos WHERE id = ?1", libsql::params![item.producto_id])
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let nombre_producto: Option<String> = match r_nombre.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+            Some(fila) => fila.get(0).ok(),
+            None => None,
+        };
         conn.execute(
-            "INSERT INTO detalles_compra (compra_id, producto_id, cantidad, cantidad_recibida, cantidad_conforme, precio_compra, precio_venta_sugerido, subtotal)
-             VALUES (?1, ?2, ?3, 0, 0, ?4, ?5, ?6)",
-            libsql::params![compra_id, item.producto_id, item.cantidad, item.precio_compra, item.precio_venta_sugerido, subtotal_item],
+            "INSERT INTO detalles_compra (compra_id, producto_id, cantidad, cantidad_recibida, cantidad_conforme, precio_compra, precio_venta_sugerido, subtotal, nombre_producto)
+             VALUES (?1, ?2, ?3, 0, 0, ?4, ?5, ?6, ?7)",
+            libsql::params![compra_id, item.producto_id, item.cantidad, item.precio_compra, item.precio_venta_sugerido, subtotal_item, nombre_producto],
         ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar item: {}", e)))?;
     }
 
@@ -305,7 +316,7 @@ pub async fn detalle_compra(
     };
 
     let mut r2 = conn.query(
-        "SELECT dc.id, dc.producto_id, p.nombre, p.lleva_vencimiento, dc.cantidad, dc.cantidad_recibida, dc.cantidad_conforme, dc.precio_compra
+        "SELECT dc.id, dc.producto_id, COALESCE(dc.nombre_producto, p.nombre), p.lleva_vencimiento, dc.cantidad, dc.cantidad_recibida, dc.cantidad_conforme, dc.precio_compra
          FROM detalles_compra dc JOIN productos p ON p.id = dc.producto_id
          WHERE dc.compra_id = ?1 ORDER BY dc.id",
         libsql::params![id],

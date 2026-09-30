@@ -4,6 +4,7 @@ use chrono::Local;
 
 use crate::tenants::TenantDb;
 use crate::models::devolucion::*;
+use crate::models::auth::Claims;
 
 pub async fn buscar_venta_para_devolucion(
     Extension(tenant): Extension<Arc<TenantDb>>,
@@ -115,6 +116,7 @@ pub async fn buscar_venta_para_devolucion(
 
 pub async fn procesar_devolucion(
     Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<NuevaDevolucion>,
 ) -> Result<Json<DevolucionResponse>, (StatusCode, String)> {
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -199,7 +201,7 @@ pub async fn procesar_devolucion(
     conn.execute(
         "INSERT INTO devoluciones (venta_original_id, folio_devolucion, monto_reembolsado, metodo_reembolso, motivo, usuario_id, estado)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'PROCESADA')",
-        libsql::params![payload.venta_id, folio_devolucion.clone(), monto_total, metodo_reembolso, payload.motivo.clone(), payload.usuario_id],
+        libsql::params![payload.venta_id, folio_devolucion.clone(), monto_total, metodo_reembolso, payload.motivo.clone(), claims.sub],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar devolución: {}", e)))?;
 
     let devolucion_id = conn.last_insert_rowid();

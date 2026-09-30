@@ -5,9 +5,11 @@ use serde::Deserialize;
 
 use crate::tenants::TenantDb;
 use crate::models::proveedor::*;
+use crate::models::auth::Claims;
 
 pub async fn registrar_devolucion(
     Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<RegistrarDevolucionProveedorRequest>,
 ) -> Result<Json<DevolucionProveedorResponse>, (StatusCode, String)> {
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -46,7 +48,7 @@ pub async fn registrar_devolucion(
          VALUES (?1,?2,?3,?4,?5,?6,'PENDIENTE',?7,?8)",
         libsql::params![
             payload.compra_id, proveedor_id, folio.clone(), payload.motivo.clone(),
-            payload.detalle_motivo.clone(), monto_total, payload.usuario_id, payload.notas.clone()
+            payload.detalle_motivo.clone(), monto_total, claims.sub, payload.notas.clone()
         ],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al registrar devolución: {}", e)))?;
 

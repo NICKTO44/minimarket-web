@@ -63,6 +63,7 @@ pub async fn canjear_codigo(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CanjearCodigoRequest>,
 ) -> Result<Json<CanjearCodigoResponse>, (StatusCode, String)> {
+    crate::middleware_auth::exigir_admin(&claims)?;
     let codigo = payload.codigo.trim().to_uppercase();
     if codigo.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "Ingresa un código.".to_string()));

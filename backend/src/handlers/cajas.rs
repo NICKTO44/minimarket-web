@@ -3,11 +3,14 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::tenants::TenantDb;
+use crate::models::auth::Claims;
+use crate::middleware_auth::ROL_ADMIN;
 use crate::models::caja::{AbrirCajaRequest, CerrarCajaRequest, MovimientoCajaRequest, CajaResponse};
 use crate::models::caja::CajaEstado;
 
 pub async fn abrir_caja(
     Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<AbrirCajaRequest>,
 ) -> Result<Json<CajaResponse>, (StatusCode, String)> {
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -36,7 +39,7 @@ pub async fn abrir_caja(
     conn.execute(
         "INSERT INTO cajas (usuario_id, numero_caja, turno, monto_inicial, observaciones_apertura, fecha_apertura, hora_apertura)
          VALUES (?1, ?2, 'GENERAL', ?3, ?4, datetime('now','localtime'), strftime('%H:%M:%S','now','localtime'))",
-        libsql::params![payload.usuario_id, payload.numero_caja.unwrap_or(1), payload.monto_inicial, payload.observaciones.clone()],
+        libsql::params![claims.sub, payload.numero_caja.unwrap_or(1), payload.monto_inicial, payload.observaciones.clone()],
     )
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al abrir caja: {}", e)))?;
@@ -52,6 +55,7 @@ pub async fn abrir_caja(
 
 pub async fn cerrar_caja(
     Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<CerrarCajaRequest>,
 ) -> Result<Json<CajaResponse>, (StatusCode, String)> {
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -77,7 +81,8 @@ pub async fn cerrar_caja(
     let gastos_total: f64 = row.get(4).unwrap_or_default();
     let ingresos_total: f64 = row.get(5).unwrap_or_default();
 
-    if caja_usuario_id != payload.usuario_id && payload.usuario_rol_id != 1 {
+    // Quién cierra y con qué rol sale del JWT, no del navegador.
+    if caja_usuario_id != claims.sub && claims.rol_id != ROL_ADMIN {
         return Err((StatusCode::FORBIDDEN, "Solo el cajero que abrió la caja o un administrador pueden cerrarla".into()));
     }
 
@@ -121,6 +126,7 @@ pub async fn cerrar_caja(
 
 pub async fn registrar_movimiento(
     Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<MovimientoCajaRequest>,
 ) -> Result<Json<CajaResponse>, (StatusCode, String)> {
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -143,7 +149,7 @@ pub async fn registrar_movimiento(
 
     conn.execute(
         "INSERT INTO movimientos_caja (caja_id, tipo, monto, motivo, usuario_id) VALUES (?1, ?2, ?3, ?4, ?5)",
-        libsql::params![payload.caja_id, payload.tipo.clone(), payload.monto, payload.motivo.clone(), payload.usuario_id],
+        libsql::params![payload.caja_id, payload.tipo.clone(), payload.monto, payload.motivo.clone(), claims.sub],
     )
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al registrar movimiento: {}", e)))?;
