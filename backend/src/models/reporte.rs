@@ -7,6 +7,10 @@ pub struct VentaResumen {
     pub fecha_hora: String,
     pub total: f64,
     pub metodo_pago: String,
+    // Solo con metodo_pago = "MIXTO"
+    pub pago_efectivo: Option<f64>,
+    pub pago_otro: Option<f64>,
+    pub pago_otro_metodo: Option<String>,
     pub cajero: String,
     pub estado: String,
 }

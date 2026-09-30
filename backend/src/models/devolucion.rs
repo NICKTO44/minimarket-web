@@ -24,6 +24,10 @@ pub struct VentaParaDevolucion {
     pub fecha_hora: String,
     pub total: f64,
     pub metodo_pago: String,
+    // Solo con metodo_pago = "MIXTO"
+    pub pago_efectivo: Option<f64>,
+    pub pago_otro: Option<f64>,
+    pub pago_otro_metodo: Option<String>,
     pub productos: Vec<ProductoVentaDetalle>,
     pub comprobante: Option<ComprobanteInfo>,
 }
@@ -41,6 +45,10 @@ pub struct NuevaDevolucion {
     pub productos: Vec<ProductoDevolver>,
     pub motivo: String,
     pub usuario_id: i64,
+    // Solo se usa si la venta original fue MIXTO: "EFECTIVO" o el medio
+    // digital con el que se pagó la otra parte. Si no llega, EFECTIVO.
+    #[serde(default)]
+    pub metodo_reembolso: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

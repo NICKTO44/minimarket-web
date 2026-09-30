@@ -19,7 +19,8 @@ pub async fn ventas_por_rango(
 
     let mut rows = conn
         .query(
-            "SELECT v.id, v.folio, v.fecha_hora, v.total, v.metodo_pago, u.nombre_completo, v.estado
+            "SELECT v.id, v.folio, v.fecha_hora, v.total, v.metodo_pago, u.nombre_completo, v.estado,
+                    v.pago_efectivo, v.pago_otro, v.pago_otro_metodo
              FROM ventas v JOIN usuarios u ON v.usuario_id = u.id
              WHERE date(v.fecha_hora) BETWEEN ?1 AND ?2
              ORDER BY v.fecha_hora DESC",
@@ -36,6 +37,9 @@ pub async fn ventas_por_rango(
             fecha_hora: row.get(2).unwrap_or_default(),
             total: row.get(3).unwrap_or_default(),
             metodo_pago: row.get(4).unwrap_or_default(),
+            pago_efectivo: row.get::<Option<f64>>(7).ok().flatten(),
+            pago_otro: row.get::<Option<f64>>(8).ok().flatten(),
+            pago_otro_metodo: row.get::<Option<String>>(9).ok().flatten(),
             cajero: row.get(5).unwrap_or_default(),
             estado: row.get(6).unwrap_or_default(),
         });

@@ -48,7 +48,7 @@ pub async fn buscar_venta_para_devolucion(
 
     let mut rv = conn
         .query(
-            "SELECT id, folio, fecha_hora, total, metodo_pago FROM ventas WHERE id = ?1",
+            "SELECT id, folio, fecha_hora, total, metodo_pago, pago_efectivo, pago_otro, pago_otro_metodo FROM ventas WHERE id = ?1",
             libsql::params![venta_id],
         )
         .await
@@ -63,6 +63,9 @@ pub async fn buscar_venta_para_devolucion(
     let fecha_hora: String = row.get(2).unwrap_or_default();
     let total: f64 = row.get(3).unwrap_or_default();
     let metodo_pago: String = row.get(4).unwrap_or_default();
+    let pago_efectivo: Option<f64> = row.get(5).ok().flatten();
+    let pago_otro: Option<f64> = row.get(6).ok().flatten();
+    let pago_otro_metodo: Option<String> = row.get(7).ok().flatten();
 
     let mut rows_det = conn
         .query(
@@ -103,7 +106,11 @@ pub async fn buscar_venta_para_devolucion(
         None => None,
     };
 
-    Ok(Json(VentaParaDevolucion { venta_id, folio: folio_venta, fecha_hora, total, metodo_pago, productos, comprobante }))
+    Ok(Json(VentaParaDevolucion {
+        venta_id, folio: folio_venta, fecha_hora, total, metodo_pago,
+        pago_efectivo, pago_otro, pago_otro_metodo,
+        productos, comprobante,
+    }))
 }
 
 pub async fn procesar_devolucion(
@@ -156,14 +163,38 @@ pub async fn procesar_devolucion(
         monto_total += precio * p.cantidad;
     }
 
-    let mut r_metodo = conn.query("SELECT metodo_pago FROM ventas WHERE id = ?1", libsql::params![payload.venta_id])
+    let mut r_metodo = conn.query("SELECT metodo_pago, pago_otro_metodo FROM ventas WHERE id = ?1", libsql::params![payload.venta_id])
         .await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let metodo_original: String = match r_metodo.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-        Some(row) => row.get(0).unwrap_or_else(|_| "EFECTIVO".to_string()),
-        None => "EFECTIVO".to_string(),
+    let (metodo_original, otro_metodo_original): (String, Option<String>) =
+        match r_metodo.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+            Some(row) => (
+                row.get(0).unwrap_or_else(|_| "EFECTIVO".to_string()),
+                row.get::<Option<String>>(1).ok().flatten(),
+            ),
+            None => ("EFECTIVO".to_string(), None),
+        };
+
+    // En una venta MIXTO el cajero elige cómo devuelve el dinero: en
+    // efectivo o por el mismo medio digital con el que se pagó la otra
+    // parte. En el resto, se devuelve por el mismo método de la venta.
+    let metodo_para_caja = if metodo_original == "MIXTO" {
+        let elegido = payload.metodo_reembolso.clone().unwrap_or_else(|| "EFECTIVO".to_string());
+        let otro = otro_metodo_original.clone().unwrap_or_default();
+        if elegido == "EFECTIVO" {
+            "EFECTIVO".to_string()
+        } else if !otro.is_empty() && elegido == otro {
+            otro
+        } else {
+            return Err((StatusCode::BAD_REQUEST, format!(
+                "En esta venta mixta solo se puede devolver en efectivo o por {}",
+                otro.replace('_', "/")
+            )));
+        }
+    } else {
+        metodo_original.clone()
     };
     // El trigger de caja solo distingue EFECTIVO/TARJETA/TRANSFERENCIA — Yape/Plin se agrupa como transferencia
-    let metodo_reembolso = if metodo_original == "YAPE_PLIN" { "TRANSFERENCIA" } else { metodo_original.as_str() };
+    let metodo_reembolso = if metodo_para_caja == "YAPE_PLIN" { "TRANSFERENCIA" } else { metodo_para_caja.as_str() };
 
     conn.execute(
         "INSERT INTO devoluciones (venta_original_id, folio_devolucion, monto_reembolsado, metodo_reembolso, motivo, usuario_id, estado)

@@ -4,6 +4,53 @@ use chrono::Local;
 use crate::models::venta::{NuevaVenta, VentaResult};
 use crate::tenants::TenantDb;
 
+const METODOS_PAGO_VALIDOS: &[&str] = &["EFECTIVO", "TARJETA", "TRANSFERENCIA", "YAPE_PLIN", "MIXTO"];
+const METODOS_OTRO_MIXTO: &[&str] = &["TARJETA", "TRANSFERENCIA", "YAPE_PLIN"];
+
+fn redondear_2(valor: f64) -> f64 {
+    (valor * 100.0).round() / 100.0
+}
+
+/// Valida el reparto de un pago MIXTO y devuelve (pago_efectivo,
+/// pago_otro, pago_otro_metodo) listos para guardar. Para cualquier otro
+/// método devuelve (None, None, None): esas columnas solo se usan en
+/// ventas mixtas y el trigger de caja las ignora en el resto.
+fn validar_pago(payload: &NuevaVenta) -> Result<(Option<f64>, Option<f64>, Option<String>), String> {
+    if !METODOS_PAGO_VALIDOS.contains(&payload.metodo_pago.as_str()) {
+        return Err(format!("Método de pago no válido: {}", payload.metodo_pago));
+    }
+    if payload.metodo_pago != "MIXTO" {
+        return Ok((None, None, None));
+    }
+
+    let efectivo = redondear_2(payload.pago_efectivo.unwrap_or(0.0));
+    let otro = redondear_2(payload.pago_otro.unwrap_or(0.0));
+    let metodo_otro = payload.pago_otro_metodo.clone().unwrap_or_default();
+
+    if !METODOS_OTRO_MIXTO.contains(&metodo_otro.as_str()) {
+        return Err("En un pago mixto, el otro medio debe ser Tarjeta, Transferencia o Yape/Plin".into());
+    }
+    if efectivo <= 0.0 || otro <= 0.0 {
+        return Err("En un pago mixto, la parte en efectivo y la del otro medio deben ser mayores a cero".into());
+    }
+    // Comparación en céntimos: tolera 1 céntimo por redondeo, nada más.
+    if ((efectivo + otro - payload.total) * 100.0).round().abs() > 1.0 {
+        return Err(format!(
+            "El pago mixto no cuadra: efectivo S/ {:.2} + otro medio S/ {:.2} debe sumar el total S/ {:.2}",
+            efectivo, otro, payload.total
+        ));
+    }
+    if let Some(recibido) = payload.monto_recibido {
+        if recibido + 0.005 < efectivo {
+            return Err(format!(
+                "El efectivo recibido (S/ {:.2}) no alcanza para la parte en efectivo (S/ {:.2})",
+                recibido, efectivo
+            ));
+        }
+    }
+    Ok((Some(efectivo), Some(otro), Some(metodo_otro)))
+}
+
 // Descuenta stock por FEFO: recorre lotes activos ordenados por fecha de
 // vencimiento y va restando hasta cubrir la cantidad vendida.
 async fn descontar_stock_fefo(
@@ -84,6 +131,11 @@ pub async fn procesar_venta(
         return Err((StatusCode::BAD_REQUEST, "Debes abrir una caja antes de procesar ventas".into()));
     }
 
+    // 1b. Validar método de pago (y el reparto si es MIXTO) antes de
+    // tocar stock o insertar nada.
+    let (pago_efectivo, pago_otro, pago_otro_metodo) =
+        validar_pago(&payload).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+
     // 2. Validar stock disponible por producto (perecible o no)
     for p in &payload.productos {
         let mut rows = conn
@@ -133,11 +185,13 @@ pub async fn procesar_venta(
 
     // 5. Insertar venta
     conn.execute(
-        "INSERT INTO ventas (folio, cliente_id, subtotal, descuento, total, metodo_pago, monto_recibido, cambio, usuario_id, estado)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'COMPLETADA')",
+        "INSERT INTO ventas (folio, cliente_id, subtotal, descuento, total, metodo_pago, monto_recibido, cambio, usuario_id, estado,
+                             pago_efectivo, pago_otro, pago_otro_metodo)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'COMPLETADA', ?10, ?11, ?12)",
         libsql::params![
             folio.clone(), payload.cliente_id, subtotal, descuento_total, payload.total,
-            payload.metodo_pago.clone(), payload.monto_recibido, payload.cambio, payload.usuario_id
+            payload.metodo_pago.clone(), payload.monto_recibido, payload.cambio, payload.usuario_id,
+            pago_efectivo, pago_otro, pago_otro_metodo
         ],
     )
     .await
