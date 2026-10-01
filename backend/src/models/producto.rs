@@ -19,6 +19,10 @@ pub struct Producto {
     pub precio_compra: f64,
     /// false = preparado al momento (café, jugo): se vende sin stock.
     pub controla_stock: bool,
+    /// true = plato de la "Carta de hoy" (solo existe ese día).
+    pub carta_dia: bool,
+    /// true = se acabó: se ve en gris y no se puede pedir.
+    pub agotado: bool,
 }
 
 #[derive(Debug, Deserialize)]

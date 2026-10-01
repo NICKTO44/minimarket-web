@@ -554,26 +554,39 @@ pub async fn agregar_items(
     ids_productos.sort_unstable();
     ids_productos.dedup();
 
-    let mut filas = conn
-        .query(
-            &format!(
-                "SELECT p.id, p.nombre, CAST(p.precio AS REAL), p.activo,
-                        g.id, g.nombre, g.obligatorio, g.multiple
-                 FROM productos p
-                 LEFT JOIN producto_grupos_modificador pg ON pg.producto_id = p.id
-                 LEFT JOIN grupos_modificadores g ON g.id = pg.grupo_id AND g.activo = 1
-                 WHERE p.id IN ({})
-                 ORDER BY p.id, g.orden, g.id",
-                marcadores(1, ids_productos.len())
-            ),
-            libsql::params_from_iter(ids_productos.clone()),
+    // "agotado" llegó con la migración 0009 (carta del día); si la base aún
+    // no la tiene, se consulta como antes y nada se considera agotado.
+    let consulta_productos = |agotado: &str| {
+        format!(
+            "SELECT p.id, p.nombre, CAST(p.precio AS REAL), p.activo,
+                    g.id, g.nombre, g.obligatorio, g.multiple, {}
+             FROM productos p
+             LEFT JOIN producto_grupos_modificador pg ON pg.producto_id = p.id
+             LEFT JOIN grupos_modificadores g ON g.id = pg.grupo_id AND g.activo = 1
+             WHERE p.id IN ({})
+             ORDER BY p.id, g.orden, g.id",
+            agotado,
+            marcadores(1, ids_productos.len())
         )
+    };
+    let mut filas = match conn
+        .query(&consulta_productos("COALESCE(p.agotado, 0)"), libsql::params_from_iter(ids_productos.clone()))
         .await
-        .map_err(e500)?;
+    {
+        Ok(filas) => filas,
+        Err(_) => conn
+            .query(&consulta_productos("0"), libsql::params_from_iter(ids_productos.clone()))
+            .await
+            .map_err(e500)?,
+    };
     // producto_id -> (nombre, precio, activo, grupos[(id, nombre, obligatorio, multiple)])
     let mut productos: HashMap<i64, (String, f64, bool, Vec<(i64, String, bool, bool)>)> = HashMap::new();
+    let mut agotados: std::collections::HashSet<i64> = std::collections::HashSet::new();
     while let Some(f) = filas.next().await.map_err(e500)? {
         let id: i64 = f.get(0).unwrap_or_default();
+        if f.get::<i64>(8).unwrap_or(0) == 1 {
+            agotados.insert(id);
+        }
         let entrada = productos.entry(id).or_insert_with(|| {
             (f.get(1).unwrap_or_default(), f.get(2).unwrap_or(0.0), f.get::<i64>(3).unwrap_or(0) == 1, Vec::new())
         });
@@ -620,6 +633,9 @@ pub async fn agregar_items(
             .ok_or_else(|| error(StatusCode::NOT_FOUND, "Uno de los productos ya no existe."))?;
         if !*activo {
             return Err(error(StatusCode::BAD_REQUEST, format!("\"{}\" está desactivado.", nombre)));
+        }
+        if agotados.contains(&item.producto_id) {
+            return Err(error(StatusCode::CONFLICT, format!("\"{}\" se agotó.", nombre)));
         }
 
         let mut elegidas_por_grupo: HashMap<i64, Vec<(String, f64)>> = HashMap::new();

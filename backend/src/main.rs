@@ -231,6 +231,10 @@ async fn main() {
         .route("/modificadores", post(handlers::mesas::crear_grupo_modificador))
         .route("/modificadores/:id", axum::routing::put(handlers::mesas::actualizar_grupo_modificador))
         .route("/modificadores/:id/desactivar", post(handlers::mesas::desactivar_grupo_modificador))
+        .route("/carta-dia", get(handlers::carta::listar_carta))
+        .route("/carta-dia", post(handlers::carta::agregar_plato))
+        .route("/carta-dia/:id", axum::routing::put(handlers::carta::actualizar_plato))
+        .route("/carta-dia/:id/quitar", post(handlers::carta::quitar_plato))
         .route("/suscripcion/canjear-codigo", post(handlers::suscripcion::canjear_codigo))
         .route("/suscripcion/estado", get(handlers::suscripcion::estado_suscripcion))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), middleware_auth::requiere_auth));

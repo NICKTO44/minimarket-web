@@ -12,3 +12,4 @@ pub mod comprobante;
 pub mod configuracion;
 pub mod auth;
 pub mod mesa;
+pub mod carta;

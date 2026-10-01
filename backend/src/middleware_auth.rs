@@ -153,6 +153,12 @@ async fn nombre_rol_cacheado(tienda_id: i64, rol_id: i64, db: &libsql::Database)
 }
 
 /// Qué puede usar cada rol limitado. Cualquier otro rol: todo (como antes).
+/// "Carta de hoy": la arman el mozo y la barra/cocina (el handler además
+/// impide que el cajero la cambie).
+fn es_carta(ruta: &str) -> bool {
+    ruta == "/carta-dia" || ruta.starts_with("/carta-dia/")
+}
+
 fn ruta_permitida(rol: &str, metodo: &Method, ruta: &str) -> bool {
     let lectura = metodo == Method::GET || metodo == Method::HEAD;
     // Lo mínimo para que la app cargue (nombre del negocio, aviso de pago).
@@ -163,13 +169,18 @@ fn ruta_permitida(rol: &str, metodo: &Method, ruta: &str) -> bool {
                 || ruta == "/pedidos"
                 || ruta.starts_with("/pedidos/")
                 || ruta == "/preparacion/entregado"
+                || es_carta(ruta)
                 || (lectura
                     && matches!(ruta, "/mesas" | "/productos" | "/categorias" | "/modificadores" | "/preparacion"))
         }
         // También puede marcar "entregado": en local chico la barra entrega
         // en el mostrador, y así limpia lo que quedó pendiente.
         "PREPARACION" => {
-            basico || (lectura && ruta == "/preparacion") || ruta == "/preparacion/listo" || ruta == "/preparacion/entregado"
+            basico
+                || (lectura && ruta == "/preparacion")
+                || ruta == "/preparacion/listo"
+                || ruta == "/preparacion/entregado"
+                || es_carta(ruta)
         }
         _ => true,
     }
@@ -198,6 +209,12 @@ mod pruebas {
         assert!(ruta_permitida("PREPARACION", &p, "/preparacion/entregado"));
         assert!(ruta_permitida("PREPARACION", &g, "/configuracion"));
         assert!(!ruta_permitida("PREPARACION", &axum::http::Method::PUT, "/configuracion"));
+        assert!(ruta_permitida("MESERO", &p, "/carta-dia"));
+        assert!(ruta_permitida("MESERO", &Method::PUT, "/carta-dia/7"));
+        assert!(ruta_permitida("PREPARACION", &g, "/carta-dia"));
+        assert!(ruta_permitida("PREPARACION", &Method::PUT, "/carta-dia/7"));
+        assert!(ruta_permitida("PREPARACION", &p, "/carta-dia/7/quitar"));
+        assert!(!ruta_permitida("PREPARACION", &p, "/carta-diaria"));
         assert!(ruta_permitida("CAJERO", &p, "/ventas"));
         assert!(ruta_permitida("INVENTARIO", &p, "/productos"));
     }

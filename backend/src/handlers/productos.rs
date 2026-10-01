@@ -39,29 +39,39 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    // controla_stock llegó con la migración 0007; si esta base todavía no
-    // la tiene, se lista igual que antes (todos controlan stock).
+    // controla_stock llegó con la migración 0007 y carta_fecha/agotado con
+    // la 0009; si esta base todavía no las tiene, se lista igual que antes.
     const SQL_BASE: &str = "SELECT p.id, p.codigo, p.nombre, p.descripcion, p.precio, p.stock, p.stock_minimo,
                     p.unidad_medida, p.categoria_id, c.nombre, p.descuento_porcentaje,
                     p.lleva_vencimiento, p.imagen_url, p.activo, p.precio_compra";
-    const SQL_RESTO: &str = " FROM productos p
+    const SQL_DESDE: &str = " FROM productos p
              LEFT JOIN categorias c ON p.categoria_id = c.id
-             WHERE p.activo = ?1
-             ORDER BY p.nombre";
-    let (mut rows, con_columna) = match conn
-        .query(&format!("{}, p.controla_stock{}", SQL_BASE, SQL_RESTO), libsql::params![activo])
-        .await
-    {
-        Ok(rows) => (rows, true),
-        Err(_) => (
-            conn.query(&format!("{}{}", SQL_BASE, SQL_RESTO), libsql::params![activo])
-                .await
-                .map_err(|e| {
-                    eprintln!("❌ Error en el SELECT de listar_productos: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?,
-            false,
-        ),
+             WHERE p.activo = ?1";
+    const SQL_ORDEN: &str = " ORDER BY p.nombre";
+    // Platos de la carta del día: solo los de hoy y solo entre los activos
+    // (los de días pasados no aparecen ni en "desactivados").
+    let hoy = crate::handlers::carta::hoy_lima();
+    let con_carta = format!(
+        "{}, p.controla_stock, p.carta_fecha IS NOT NULL, COALESCE(p.agotado, 0){} AND (p.carta_fecha IS NULL OR (?1 = 1 AND p.carta_fecha = ?2)){}",
+        SQL_BASE, SQL_DESDE, SQL_ORDEN
+    );
+    let (mut rows, columnas) = match conn.query(&con_carta, libsql::params![activo, hoy]).await {
+        Ok(rows) => (rows, 2),
+        Err(_) => match conn
+            .query(&format!("{}, p.controla_stock{}{}", SQL_BASE, SQL_DESDE, SQL_ORDEN), libsql::params![activo])
+            .await
+        {
+            Ok(rows) => (rows, 1),
+            Err(_) => (
+                conn.query(&format!("{}{}{}", SQL_BASE, SQL_DESDE, SQL_ORDEN), libsql::params![activo])
+                    .await
+                    .map_err(|e| {
+                        eprintln!("❌ Error en el SELECT de listar_productos: {}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?,
+                0,
+            ),
+        },
     };
 
     let mut productos = Vec::new();
@@ -82,7 +92,9 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
             imagen_url: row.get(12).ok(),
             activo: row.get::<i64>(13).unwrap_or(1) == 1,
             precio_compra: row.get(14).unwrap_or(0.0),
-            controla_stock: if con_columna { row.get::<i64>(15).unwrap_or(1) == 1 } else { true },
+            controla_stock: if columnas >= 1 { row.get::<i64>(15).unwrap_or(1) == 1 } else { true },
+            carta_dia: columnas >= 2 && row.get::<i64>(16).unwrap_or(0) == 1,
+            agotado: columnas >= 2 && row.get::<i64>(17).unwrap_or(0) == 1,
         });
     }
 
@@ -131,6 +143,8 @@ pub async fn productos_stock_bajo(
             activo: true,
             precio_compra: 0.0,
             controla_stock: true,
+            carta_dia: false,
+            agotado: false,
         });
     }
 
