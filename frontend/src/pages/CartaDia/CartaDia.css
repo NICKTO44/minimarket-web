@@ -1,0 +1,190 @@
+/* ============================================================
+   "Carta de hoy" (Cafetería / Restaurante). Mismos tokens que
+   Mesas (blanco, bordes #e4e6eb, color del negocio).
+   ============================================================ */
+
+.carta-layout {
+  --m-bg: #f4f5f7;
+  --m-borde: #e4e6eb;
+  --m-texto: #16181d;
+  --m-tenue: #6b7280;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--m-texto);
+  background: var(--m-bg);
+  box-sizing: border-box;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 22px 26px 40px;
+}
+
+.carta-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  max-width: 760px;
+}
+
+.carta-header h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 22px;
+  margin: 0;
+}
+
+.carta-fecha {
+  margin: 2px 0 0;
+  color: var(--m-tenue);
+  font-size: 14px;
+  text-transform: capitalize;
+}
+
+.carta-resumen {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--m-tenue);
+}
+
+.carta-ayuda {
+  max-width: 760px;
+  margin: 10px 0 14px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--m-tenue);
+}
+
+.carta-tarjeta {
+  max-width: 760px;
+  background: #fff;
+  border: 1px solid var(--m-borde);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.carta-vacia {
+  margin: 6px 4px 10px;
+}
+
+.carta-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Nombre | precio | estado | quitar */
+.carta-fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px 104px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f1f4;
+}
+
+.carta-fila .mesas-input {
+  padding: 9px 10px;
+}
+
+.carta-fila-agotada .carta-nombre {
+  color: var(--m-tenue);
+  text-decoration: line-through;
+}
+
+.carta-precio {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--m-tenue);
+}
+
+.carta-precio input {
+  text-align: right;
+  min-width: 0;
+}
+
+.carta-estado {
+  height: 40px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+}
+
+.carta-estado.disponible {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.carta-estado.agotado {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.carta-estado:disabled,
+.carta-quitar:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.carta-quitar {
+  height: 40px;
+  border-radius: 9px;
+  border: 1.5px solid var(--m-borde);
+  background: #fff;
+  color: var(--m-tenue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0;
+}
+
+.carta-quitar.confirmar {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+
+/* Fila para escribir un plato nuevo: el botón ocupa estado + quitar. */
+.carta-nueva {
+  grid-template-columns: minmax(0, 1fr) 104px 152px;
+  border-bottom: none;
+  padding-top: 10px;
+}
+
+.carta-agregar {
+  height: 40px;
+}
+
+/* Celular: nombre arriba a lo ancho; precio, estado y quitar debajo. */
+@media (max-width: 899px) {
+  .carta-layout {
+    padding: 14px 16px 40px;
+  }
+
+  .carta-header h1 {
+    font-size: 20px;
+  }
+
+  .carta-fila {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 40px;
+    padding: 10px 0;
+  }
+
+  .carta-fila .carta-nombre {
+    grid-column: 1 / -1;
+  }
+
+  .carta-nueva {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  }
+}

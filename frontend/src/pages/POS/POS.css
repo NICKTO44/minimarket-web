@@ -147,6 +147,17 @@
   background: var(--color-primario-suave);
 }
 
+/* Plato de la carta del día agotado: visible pero no se agrega. */
+.pos-producto-card.pos-producto-agotado {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pos-producto-card.pos-producto-agotado:active {
+  transform: none;
+  background: var(--pos-superficie);
+}
+
 /* Nombre limitado a 2 líneas con puntos suspensivos -- antes crecía
    libremente y, al no tener la imagen flex-shrink:0 (ver abajo), le
    robaba alto a la imagen en vez de simplemente hacer la tarjeta más

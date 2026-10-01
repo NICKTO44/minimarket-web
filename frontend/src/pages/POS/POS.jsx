@@ -333,6 +333,10 @@ export default function POS({
     if (ordenPrecio === 'precio-desc') {
       return [...base].sort((a, b) => b.precio - a.precio);
     }
+    // Restaurante: los platos de la carta de hoy van primero.
+    if (base.some((p) => p.carta_dia)) {
+      return [...base].sort((a, b) => Number(!!b.carta_dia) - Number(!!a.carta_dia));
+    }
     return base;
   }, [productos, busqueda, ordenPrecio]);
 
@@ -351,6 +355,10 @@ export default function POS({
         tipo: 'error',
         texto: `Estás cobrando ${tituloPedido(pedidoACobrar)}. Para agregar algo, vuelve a la mesa y agrégalo al pedido.`,
       });
+      return;
+    }
+    if (producto.agotado) {
+      setMensaje({ tipo: 'error', texto: `"${producto.nombre}" se agotó.` });
       return;
     }
     setCarrito((prev) => {
@@ -721,7 +729,12 @@ export default function POS({
         </div>
         <div className="pos-grid">
           {productosFiltrados.map((p) => (
-            <button key={p.id} className="pos-producto-card" onClick={() => agregarAlCarrito(p)}>
+            <button
+              key={p.id}
+              className={`pos-producto-card${p.agotado ? ' pos-producto-agotado' : ''}`}
+              aria-disabled={p.agotado || undefined}
+              onClick={() => agregarAlCarrito(p)}
+            >
               {p.imagen_url && !imagenesFallidas.has(p.id) ? (
                 <img
                   className="pos-producto-imagen"
@@ -735,6 +748,7 @@ export default function POS({
               <span className="pos-producto-nombre">{p.nombre}</span>
               <span className="pos-producto-fila">
                 <span className="pos-producto-precio">S/ {p.precio.toFixed(2)}</span>
+                {p.agotado && <span className="pos-producto-stock pos-producto-stock-bajo">Agotado</span>}
                 {/* Rojo con el mismo criterio que el reporte de stock bajo
                     (stock <= stock_minimo, ver productos.rs). */}
                 {p.controla_stock !== false && (

@@ -17,6 +17,7 @@ import {
   CreditCard,
   UtensilsCrossed,
   ChefHat,
+  ClipboardList,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
@@ -25,6 +26,7 @@ export const GRUPOS_MENU = [
     items: [
       { id: 'MESAS', label: 'Mesas', icono: UtensilsCrossed, soloRestaurante: true },
       { id: 'PREPARACION', label: 'Preparación', icono: ChefHat, soloRestaurante: true },
+      { id: 'CARTA', label: 'Carta de hoy', icono: ClipboardList, soloRestaurante: true, sinCajero: true },
       { id: 'POS', label: 'Punto de Venta', icono: ScanBarcode },
       { id: 'RESUMEN', label: 'Resumen', icono: LayoutGrid },
       { id: 'CAJA', label: 'Caja y Turnos', icono: Wallet },
@@ -62,6 +64,15 @@ export function esPreparacion(usuario) {
   return usuario?.rol_nombre === 'PREPARACION';
 }
 
+/** true si es Cajero (solo cobra; no arma la carta del día). */
+export function esCajero(usuario) {
+  return usuario?.rol_nombre === 'CAJERO';
+}
+
+/** Pantallas que puede abrir cada rol limitado (modo restaurante). */
+export const PANTALLAS_MESERO = ['MESAS', 'CARTA'];
+export const PANTALLAS_PREPARACION = ['PREPARACION', 'CARTA'];
+
 /** Nombre del rol para mostrar en el menú. */
 export function etiquetaRol(usuario) {
   if (usuario?.rol_id === 1) return 'Administrador';
@@ -73,8 +84,8 @@ export function etiquetaRol(usuario) {
 /**
  * Grupos con solo los módulos que ese usuario puede ver.
  * restaurante: el negocio atiende en mesas (muestra "Mesas").
- * El mesero solo ve Mesas: toma pedidos, no cobra ni maneja caja.
- * Barra/Cocina solo ve Preparación: marca los pedidos listos.
+ * El mesero solo ve Mesas y la Carta de hoy: toma pedidos, no cobra.
+ * Barra/Cocina solo ve Preparación y la Carta de hoy (marca agotados).
  */
 export function gruposParaUsuario(usuario, { restaurante = false } = {}) {
   const esAdmin = usuario?.rol_id === 1;
@@ -84,8 +95,10 @@ export function gruposParaUsuario(usuario, { restaurante = false } = {}) {
     ...g,
     items: g.items.filter((i) => {
       if (i.soloRestaurante && !restaurante) return false;
-      if (mesero) return i.id === 'MESAS';
-      if (preparacion) return i.id === 'PREPARACION';
+      if (mesero) return PANTALLAS_MESERO.includes(i.id);
+      if (preparacion) return PANTALLAS_PREPARACION.includes(i.id);
+      // El cajero solo cobra: la carta del día la arman los demás.
+      if (i.sinCajero && esCajero(usuario)) return false;
       return esAdmin || !i.soloAdmin;
     }),
   })).filter((g) => g.items.length > 0);

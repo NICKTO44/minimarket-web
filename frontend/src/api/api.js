@@ -185,6 +185,10 @@ export const api = {
   preparacionEntregado: (item_ids) =>
     request('/preparacion/entregado', { method: 'POST', body: JSON.stringify({ item_ids }) }),
   modificadores: () => request('/modificadores'),
+  cartaDia: () => request('/carta-dia'),
+  cartaAgregar: (nombre, precio) => request('/carta-dia', { method: 'POST', body: JSON.stringify({ nombre, precio }) }),
+  cartaActualizar: (id, cambios) => request(`/carta-dia/${id}`, { method: 'PUT', body: JSON.stringify(cambios) }),
+  cartaQuitar: (id) => request(`/carta-dia/${id}/quitar`, { method: 'POST' }),
   modificadorCrear: (data) => request('/modificadores', { method: 'POST', body: JSON.stringify(data) }),
   modificadorActualizar: (id, data) => request(`/modificadores/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   modificadorQuitar: (id) => request(`/modificadores/${id}/desactivar`, { method: 'POST' }),

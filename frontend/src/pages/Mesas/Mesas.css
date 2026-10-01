@@ -469,6 +469,49 @@
   transform: scale(0.97);
 }
 
+/* Plato de la carta del día que se acabó: se ve pero no se puede pedir. */
+.pedido-producto.agotado {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pedido-producto.agotado:hover {
+  border-color: var(--m-borde);
+}
+
+.pedido-producto.agotado:active {
+  transform: none;
+}
+
+.pedido-producto-agotado {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #991b1b;
+  background: #fee2e2;
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.pedido-sin-carta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 7px 8px 7px 12px;
+  border-radius: 9px;
+  background: var(--m-ambar-bg);
+  border: 1px solid var(--m-ambar-borde);
+  color: var(--m-ambar);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pedido-sin-carta .mesas-boton-secundario {
+  padding: 6px 10px;
+}
+
 .pedido-producto img,
 .pedido-producto-inicial {
   width: 100%;

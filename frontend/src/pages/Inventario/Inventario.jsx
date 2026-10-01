@@ -89,7 +89,8 @@ export default function Inventario({ restaurante = false }) {
     setCargando(true);
     Promise.all([api.productos(), api.categorias()])
       .then(([p, c]) => {
-        setProductos(p);
+        // Los platos de la carta del día se manejan en "Carta de hoy".
+        setProductos(p.filter((x) => !x.carta_dia));
         setCategorias(c);
       })
       .catch((e) => setMensaje({ tipo: 'error', texto: e.message }))

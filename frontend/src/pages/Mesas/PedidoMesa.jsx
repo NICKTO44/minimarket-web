@@ -8,6 +8,7 @@ import {
   CheckCheck,
   ChefHat,
   ChevronRight,
+  ClipboardList,
   Minus,
   Plus,
   Printer,
@@ -30,16 +31,22 @@ const TODAS = '__todas__';
 
 // Cada cuánto se trae lo último (barra/cocina marca productos listos).
 const REFRESCO_MS = 6000;
+// Cada cuánto se vuelve a traer la carta (platos agotados, carta de hoy).
+const REFRESCO_PRODUCTOS_MS = 20000;
+// Categoría de los platos del día (la crea el backend, ver carta.rs).
+const CATEGORIA_CARTA = 'Carta del día';
 
 /**
  * Pedido de una mesa (o para llevar): a la izquierda la carta, a la
  * derecha la cuenta. Lo nuevo queda "Por enviar" hasta que se manda a
  * preparar (sale la comanda); lo enviado ya no se edita, solo se anula.
  */
-export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onVolver, onCobrar }) {
+export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onVolver, onCobrar, onIrACarta }) {
   const mesero = esMesero(usuario);
   const [productos, setProductos] = useState([]);
   const [grupos, setGrupos] = useState([]);
+  // null mientras carga; true si el negocio ya usó alguna vez la carta del día.
+  const [usaCarta, setUsaCarta] = useState(null);
   const [busqueda, setBusqueda] = useState('');
   const [categoria, setCategoria] = useState(TODAS);
   const [error, setError] = useState(null);
@@ -75,7 +82,20 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
         setGrupos(g);
       })
       .catch((e) => setError(e.message));
+    // Solo para el aviso "Aún no hay carta de hoy" (si nunca la usan, no sale).
+    api
+      .categorias()
+      .then((c) => setUsaCarta(c.some((x) => x.nombre === CATEGORIA_CARTA)))
+      .catch(() => setUsaCarta(false));
   }, [cargar]);
+
+  // La cocina puede marcar platos agotados mientras se toma el pedido.
+  useEffect(() => {
+    const intervalo = setInterval(() => {
+      api.productos().then(setProductos).catch(() => {});
+    }, REFRESCO_PRODUCTOS_MS);
+    return () => clearInterval(intervalo);
+  }, []);
 
   useEffect(() => {
     const intervalo = setInterval(() => refrescar().catch(() => {}), REFRESCO_MS);
@@ -106,18 +126,22 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
     return mapa;
   }, [grupos]);
 
+  // La carta del día va primero (categoría y productos); luego lo de siempre.
   const categorias = useMemo(() => {
-    const set = new Set(productos.map((p) => p.categoria_nombre).filter(Boolean));
-    return [...set].sort((a, b) => a.localeCompare(b));
+    const set = new Set(productos.filter((p) => !p.carta_dia).map((p) => p.categoria_nombre).filter(Boolean));
+    const resto = [...set].sort((a, b) => a.localeCompare(b));
+    return productos.some((p) => p.carta_dia) ? [CATEGORIA_CARTA, ...resto] : resto;
   }, [productos]);
+
+  const hayCartaHoy = productos.some((p) => p.carta_dia);
 
   const productosVisibles = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    return productos.filter(
-      (p) =>
-        (categoria === TODAS || p.categoria_nombre === categoria) &&
-        (!q || p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q))
-    );
+    const enCategoria = (p) =>
+      categoria === TODAS || (categoria === CATEGORIA_CARTA ? p.carta_dia : !p.carta_dia && p.categoria_nombre === categoria);
+    return productos
+      .filter((p) => enCategoria(p) && (!q || p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q)))
+      .sort((a, b) => Number(!!b.carta_dia) - Number(!!a.carta_dia));
   }, [productos, busqueda, categoria]);
 
   const items = detalle?.items || [];
@@ -151,6 +175,10 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
 
   const tocarProducto = (producto) => {
     setError(null);
+    if (producto.agotado) {
+      setError(`"${producto.nombre}" se agotó.`);
+      return;
+    }
     if (gruposPorProducto.has(producto.id)) {
       setProductoConOpciones(producto);
       return;
@@ -376,6 +404,16 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
             onChange={(e) => setBusqueda(e.target.value)}
           />
         </div>
+        {usaCarta && !hayCartaHoy && productos.length > 0 && (
+          <div className="pedido-sin-carta">
+            <span>Aún no hay carta de hoy.</span>
+            {onIrACarta && (
+              <button type="button" className="mesas-boton-secundario" onClick={onIrACarta}>
+                <ClipboardList size={15} /> Armar carta
+              </button>
+            )}
+          </div>
+        )}
         <div className="pedido-categorias">
           <button type="button" className={categoria === TODAS ? 'activo' : ''} onClick={() => setCategoria(TODAS)}>
             Todo
@@ -391,7 +429,13 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
             const tieneOpciones = gruposPorProducto.has(p.id);
             const conImagen = p.imagen_url && !imagenesFallidas.has(p.id);
             return (
-              <button key={p.id} type="button" className="pedido-producto" onClick={() => tocarProducto(p)}>
+              <button
+                key={p.id}
+                type="button"
+                className={`pedido-producto${p.agotado ? ' agotado' : ''}`}
+                aria-disabled={p.agotado || undefined}
+                onClick={() => tocarProducto(p)}
+              >
                 {conImagen ? (
                   <img
                     src={`${API_URL}${p.imagen_url}`}
@@ -404,7 +448,11 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
                 <span className="pedido-producto-nombre">{p.nombre}</span>
                 <span className="pedido-producto-fila">
                   <span className="pedido-producto-precio">S/ {p.precio.toFixed(2)}</span>
-                  {tieneOpciones && <span className="pedido-producto-opciones">opciones</span>}
+                  {p.agotado ? (
+                    <span className="pedido-producto-agotado">Agotado</span>
+                  ) : (
+                    tieneOpciones && <span className="pedido-producto-opciones">opciones</span>
+                  )}
                 </span>
               </button>
             );

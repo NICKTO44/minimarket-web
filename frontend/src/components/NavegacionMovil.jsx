@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChefHat, House, LayoutGrid, LogOut, Package, ScanBarcode, Store, UtensilsCrossed, Wallet } from 'lucide-react';
+import { ChefHat, ClipboardList, House, LayoutGrid, LogOut, Package, ScanBarcode, Store, UtensilsCrossed, Wallet } from 'lucide-react';
 import { API_URL } from '../api/api';
 import { esMesero, esPreparacion, etiquetaRol, gruposParaUsuario, nivelAvisoSuscripcion } from '../utils/menu';
 import './NavegacionMovil.css';
@@ -17,8 +17,8 @@ import './NavegacionMovil.css';
 // tiene Mesas.
 const TABS_TIENDA = ['RESUMEN', 'CAJA', 'POS', 'PRODUCTOS'];
 const TABS_RESTAURANTE = ['MESAS', 'CAJA', 'POS', 'PRODUCTOS'];
-const TABS_MESERO = ['MESAS'];
-const TABS_PREPARACION = ['PREPARACION'];
+const TABS_MESERO = ['MESAS', 'CARTA'];
+const TABS_PREPARACION = ['PREPARACION', 'CARTA'];
 
 // Detecta si el teclado del celular está abierto (el alto visible baja
 // mucho) para ocultar la barra inferior y que no quede encima del teclado.
@@ -131,6 +131,9 @@ export default function NavegacionMovil({
           <Tab id="MESAS" label="Mesas" Icono={UtensilsCrossed} pantalla={pantalla} onIr={ir} insignia={insignias.MESAS} />
         ) : (
           <Tab id="RESUMEN" label="Inicio" Icono={House} pantalla={pantalla} onIr={ir} />
+        )}
+        {(mesero || preparacion) && (
+          <Tab id="CARTA" label="Carta de hoy" Icono={ClipboardList} pantalla={pantalla} onIr={ir} />
         )}
         {!mesero && !preparacion && (
           <>

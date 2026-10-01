@@ -29,7 +29,7 @@ function EstadoPedido({ p }) {
  * Tocar una mesa libre la abre; tocar una ocupada muestra su pedido.
  * El cobro lo hace el POS de siempre (onCobrar).
  */
-export default function Mesas({ usuario, nombreTienda, onCobrar, abrirPedido, onAbrirPedidoUsado }) {
+export default function Mesas({ usuario, nombreTienda, onCobrar, abrirPedido, onAbrirPedidoUsado, onIrACarta }) {
   const [mesas, setMesas] = useState([]);
   const [abiertos, setAbiertos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -122,6 +122,7 @@ export default function Mesas({ usuario, nombreTienda, onCobrar, abrirPedido, on
         mesas={mesas}
         onVolver={() => setPedidoId(null)}
         onCobrar={onCobrar}
+        onIrACarta={onIrACarta}
       />
     );
   }

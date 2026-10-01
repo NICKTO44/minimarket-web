@@ -23,8 +23,9 @@ import Registro from './pages/Registro/Registro';
 import BoletaPublica from './pages/BoletaPublica/BoletaPublica';
 import Mesas from './pages/Mesas/Mesas';
 import Preparacion from './pages/Preparacion/Preparacion';
+import CartaDia from './pages/CartaDia/CartaDia';
 import AvisosListos from './components/AvisosListos';
-import { esMesero, esPreparacion } from './utils/menu';
+import { esCajero, esMesero, esPreparacion, PANTALLAS_MESERO, PANTALLAS_PREPARACION } from './utils/menu';
 
 const STORAGE_KEY = 'minimarket_sesion';
 const TIENDA_STORAGE_KEY = 'minimarket_tienda';
@@ -251,17 +252,23 @@ function App() {
   // ¿El negocio atiende en mesas? Mientras llega la configuración del
   // servidor se usa lo que dijo el login.
   const restaurante = (configuracionTienda?.modo_negocio ?? tiendaRecordada?.modo_negocio) === 'RESTAURANTE';
-  // El mesero solo toma pedidos (siempre ve Mesas) y barra/cocina solo
-  // ve Preparación.
+  // El mesero solo toma pedidos (Mesas) y barra/cocina solo ve
+  // Preparación; ambos pueden además armar la Carta de hoy.
   const soloMesas = restaurante && esMesero(usuarioActual);
   const soloPreparacion = restaurante && esPreparacion(usuarioActual);
   const pantallaVisible = soloPreparacion
-    ? 'PREPARACION'
+    ? PANTALLAS_PREPARACION.includes(pantalla)
+      ? pantalla
+      : 'PREPARACION'
     : soloMesas
-      ? 'MESAS'
-      : ['MESAS', 'PREPARACION'].includes(pantalla) && !restaurante
+      ? PANTALLAS_MESERO.includes(pantalla)
+        ? pantalla
+        : 'MESAS'
+      : ['MESAS', 'PREPARACION', 'CARTA'].includes(pantalla) && !restaurante
         ? 'RESUMEN'
-        : pantalla;
+        : pantalla === 'CARTA' && esCajero(usuarioActual)
+          ? 'MESAS'
+          : pantalla;
 
   const irAPedido = (id) => {
     setAbrirPedido((actual) => ({ id, n: (actual?.n || 0) + 1 }));
@@ -313,9 +320,11 @@ function App() {
             onCobrar={handleCobrarPedido}
             abrirPedido={abrirPedido}
             onAbrirPedidoUsado={() => setAbrirPedido(null)}
+            onIrACarta={esCajero(usuarioActual) ? null : () => setPantalla('CARTA')}
           />
         )}
         {pantallaVisible === 'PREPARACION' && restaurante && <Preparacion />}
+        {pantallaVisible === 'CARTA' && restaurante && <CartaDia />}
         {pantallaVisible === 'POS' &&
           (modoLectura ? (
             <PosBloqueado aviso={avisoSuscripcion} />
