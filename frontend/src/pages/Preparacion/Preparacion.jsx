@@ -101,6 +101,21 @@ export default function Preparacion() {
       });
   };
 
+  // "Ya se entregó": la barra entregó en el mostrador, o limpia un pedido
+  // que quedó listo sin que nadie lo marcara (p. ej. una mesa ya pagada).
+  const entregar = (ids) => {
+    setTickets((lista) =>
+      lista.map((t) => ({ ...t, items: t.items.filter((i) => !ids.includes(i.id)) })).filter((t) => t.items.length)
+    );
+    api
+      .preparacionEntregado(ids)
+      .then(recibir)
+      .catch((e) => {
+        setError(e.message);
+        cargar();
+      });
+  };
+
   const preparando = tickets
     .map((t) => ({ ...t, items: t.items.filter((i) => !i.listo) }))
     .filter((t) => t.items.length > 0);
@@ -185,7 +200,14 @@ export default function Preparacion() {
                   <Check size={16} /> Todo listo
                 </button>
               ) : (
-                <p className="prep-esperando">Esperando que el {t.tipo === 'MESA' ? 'mozo' : 'cajero'} lo entregue</p>
+                <div className="prep-pie-listo">
+                  <span className="prep-esperando">
+                    Esperando que el {t.tipo === 'MESA' ? 'mozo' : 'cajero'} lo entregue
+                  </span>
+                  <button type="button" className="prep-entregado" onClick={() => entregar(t.items.map((i) => i.id))}>
+                    <Check size={15} /> Ya se entregó
+                  </button>
+                </div>
               )}
             </div>
           );
