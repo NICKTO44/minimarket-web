@@ -3,6 +3,7 @@ import { api, API_URL } from '../../api/api';
 import './Inventario.css';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
 import { confirmar } from '../../utils/confirmar';
+import { comprimirImagen } from '../../utils/comprimirImagen';
 
 const FORM_VACIO = {
   codigo: '',
@@ -329,9 +330,16 @@ export default function Inventario({ restaurante = false }) {
 
       if (imagenArchivo && idParaImagen) {
         try {
-          await api.productoSubirImagen(idParaImagen, imagenArchivo);
+          await api.productoSubirImagen(idParaImagen, await comprimirImagen(imagenArchivo));
         } catch (e) {
-          setMensaje({ tipo: 'error', texto: `Producto guardado, pero falló la imagen: ${e.message}` });
+          // El producto YA existe: el formulario pasa a "editar" ese mismo
+          // producto, así "Guardar" de nuevo solo reintenta la foto y no
+          // crea un producto repetido.
+          setEditandoId(idParaImagen);
+          setMensaje({
+            tipo: 'error',
+            texto: `Producto guardado, pero la foto no se pudo subir (${e.message}). Toca Guardar para intentarlo de nuevo.`,
+          });
           cargarTodo();
           return;
         }
