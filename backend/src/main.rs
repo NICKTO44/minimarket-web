@@ -1,4 +1,5 @@
 use axum::{
+    extract::DefaultBodyLimit,
     http::HeaderValue,
     routing::{get, post},
     Router,
@@ -162,7 +163,12 @@ async fn main() {
         .route("/productos/:id", axum::routing::delete(handlers::productos::eliminar_producto))
         .route("/productos/:id/desactivar", post(handlers::productos::desactivar_producto))
         .route("/productos/:id/reactivar", post(handlers::productos::reactivar_producto))
-        .route("/productos/:id/imagen", post(handlers::imagenes::subir_imagen_producto))
+        // Axum corta por defecto en 2 MB y una foto de celular pesa más: el
+        // handler ya valida su propio máximo (10 MB imagen, 5 MB logo).
+        .route(
+            "/productos/:id/imagen",
+            post(handlers::imagenes::subir_imagen_producto).layer(DefaultBodyLimit::max(12 * 1024 * 1024)),
+        )
         .route("/categorias", get(handlers::productos::obtener_categorias))
         .route("/categorias", post(handlers::productos::crear_categoria))
         .route("/clientes", get(handlers::clientes::buscar_clientes))
@@ -203,7 +209,10 @@ async fn main() {
         .route("/impresora/imprimir", post(handlers::impresora::imprimir_boleta))
         .route("/configuracion", get(handlers::configuracion::obtener_configuracion))
         .route("/configuracion", axum::routing::put(handlers::configuracion::actualizar_configuracion))
-        .route("/configuracion/logo", post(handlers::imagenes::subir_logo_tienda))
+        .route(
+            "/configuracion/logo",
+            post(handlers::imagenes::subir_logo_tienda).layer(DefaultBodyLimit::max(6 * 1024 * 1024)),
+        )
         .route("/usuarios", get(handlers::configuracion::listar_usuarios))
         .route("/usuarios", post(handlers::configuracion::crear_usuario))
         .route("/usuarios/:id/desactivar", post(handlers::configuracion::desactivar_usuario))
