@@ -414,3 +414,169 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================================
+   Celular y tablet: nada se sale de la pantalla.
+   ============================================================ */
+
+/* Los campos en dos columnas pueden encogerse (un <input> tiene un ancho
+   mínimo propio que, sin esto, empuja la tarjeta fuera de la pantalla). */
+.cfg-campo {
+  min-width: 0;
+}
+
+.cfg-campo-fila {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.cfg-campo input,
+.cfg-campo select {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Si una tabla no entra, se desplaza dentro de su tarjeta en vez de cortarse. */
+.cfg-tabla-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cfg-tabla td:last-child {
+  white-space: nowrap;
+}
+
+.cfg-modal {
+  max-height: 90vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+@media (max-width: 899px) {
+  .cfg-layout {
+    padding: 14px 16px;
+    max-width: none;
+  }
+
+  .cfg-header {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .cfg-header h1 {
+    font-size: 20px;
+  }
+
+  /* Pestañas: ocupan el ancho y, si no entran en una fila, bajan a otra. */
+  .cfg-tabs {
+    width: 100%;
+    box-sizing: border-box;
+    flex-wrap: wrap;
+  }
+
+  .cfg-tabs button {
+    flex: 1 1 auto;
+    white-space: nowrap;
+  }
+
+  .cfg-card {
+    padding: 16px;
+  }
+
+  /* 16px: evita que iOS haga zoom al tocar un campo. */
+  .cfg-campo input,
+  .cfg-campo select {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  /* En pantallas angostas las pestañas van de dos en dos. */
+  .cfg-tabs button {
+    flex: 1 1 40%;
+  }
+
+  .cfg-campo-fila {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .cfg-boton-nuevo-usuario {
+    width: 100%;
+  }
+
+  /* Usuarios: cada fila de la tabla se vuelve una tarjeta, con todo a la
+     vista (nombre, usuario, rol, estado y su botón) sin desplazar. */
+  .cfg-tabla-wrapper {
+    overflow-x: visible;
+  }
+
+  .cfg-tabla,
+  .cfg-tabla tbody {
+    display: block;
+  }
+
+  .cfg-tabla thead {
+    display: none;
+  }
+
+  .cfg-tabla tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'nombre estado'
+      'usuario accion'
+      'rol accion';
+    align-items: center;
+    gap: 4px 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #f1f2f4;
+  }
+
+  .cfg-tabla tr:last-child {
+    border-bottom: none;
+  }
+
+  .cfg-tabla td {
+    padding: 0;
+    border-bottom: none;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .cfg-tabla td:nth-child(1) {
+    grid-area: usuario;
+    font-size: 13px;
+    color: #6b7280;
+  }
+
+  .cfg-tabla td:nth-child(2) {
+    grid-area: nombre;
+    font-weight: 700;
+  }
+
+  .cfg-tabla td:nth-child(3) {
+    grid-area: rol;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: #6b7280;
+  }
+
+  .cfg-tabla td:nth-child(4) {
+    grid-area: estado;
+    justify-self: end;
+  }
+
+  .cfg-tabla td:nth-child(5) {
+    grid-area: accion;
+    justify-self: end;
+    align-self: end;
+  }
+
+  .cfg-boton-desactivar,
+  .cfg-boton-reactivar {
+    padding: 9px 14px;
+    font-size: 13px;
+  }
+}

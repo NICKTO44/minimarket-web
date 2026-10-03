@@ -1,5 +1,10 @@
 /* Configuración → Detracción en facturas (módulo DETRACCION). */
 
+/* Separada de la tarjeta de datos del negocio que viene debajo. */
+.det-card {
+  margin-bottom: 14px;
+}
+
 .det-cabecera {
   display: flex;
   align-items: center;
