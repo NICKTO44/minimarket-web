@@ -19,6 +19,10 @@ pub struct ConfiguracionTienda {
     pub color_acento: Option<String>,
     /// 'TIENDA' (sistema de siempre) o 'RESTAURANTE' (atención en mesas).
     pub modo_negocio: String,
+    /// Rubro del negocio (BODEGA, RESTAURANTE, FERRETERIA, MADERERA, GENERAL).
+    pub rubro: String,
+    /// Módulos encendidos (MESAS, SERVICIOS...).
+    pub modulos: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]

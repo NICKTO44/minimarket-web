@@ -28,6 +28,11 @@ pub struct RegistroRequest {
     /// 'TIENDA' (por defecto) o 'RESTAURANTE' (cafetería / atención en mesas).
     #[serde(default)]
     pub modo_negocio: Option<String>,
+    /// Rubro elegido al registrarse (BODEGA, RESTAURANTE, FERRETERIA,
+    /// MADERERA, GENERAL). Decide los módulos y unidades iniciales. Si no
+    /// viene, se usa modo_negocio como antes.
+    #[serde(default)]
+    pub rubro: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -335,23 +340,44 @@ async fn registrar_negocio_interno(
     // 5b. Tipo de negocio elegido al registrarse. Cafetería/Restaurante
     //     activa la atención en mesas y deja 6 mesas de ejemplo; cualquier
     //     otro valor deja el sistema de siempre (TIENDA).
-    if payload.modo_negocio.as_deref().map(|m| m.trim().to_uppercase()) == Some("RESTAURANTE".to_string()) {
+    //     El RUBRO es la plantilla: enciende sus módulos y carga sus
+    //     unidades sugeridas (se cambian luego en Configuración).
+    use crate::handlers::rubros;
+    let rubro = payload
+        .rubro
+        .as_deref()
+        .map(|r| r.trim().to_uppercase())
+        .filter(|r| rubros::rubro_valido(r));
+    let pide_restaurante = payload.modo_negocio.as_deref().map(|m| m.trim().to_uppercase())
+        == Some("RESTAURANTE".to_string());
+    // Sin rubro (formulario antiguo): 'RESTAURANTE' si pidió atención en mesas.
+    let rubro = rubro.or_else(|| pide_restaurante.then(|| "RESTAURANTE".to_string()));
+    let modulos = rubro.as_deref().map(rubros::modulos_del_rubro).unwrap_or_default();
+
+    if modulos.iter().any(|m| m == rubros::MODULO_MESAS) {
         conn_nueva
             .execute("UPDATE configuracion_tienda SET modo_negocio = 'RESTAURANTE'", ())
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        // Arranca solo con las unidades de restaurante (Plato, Porción...):
-        // sin metros, sacos ni toneladas. Se cambia en Configuración → Unidades.
-        // Si fallara, el registro sigue: el negocio vería las unidades de siempre.
-        let _ = conn_nueva
-            .execute(
-                "UPDATE configuracion_tienda SET unidades_activas = ?1",
-                libsql::params![crate::handlers::unidades::recomendadas_restaurante()],
-            )
-            .await;
         crate::handlers::mesas::sembrar_mesas_iniciales(&conn_nueva)
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    }
+    if let Some(rubro) = &rubro {
+        // Si algo de esto fallara, el registro sigue: el negocio se vería
+        // como "sin rubro" con las unidades de siempre, y se arregla en
+        // Configuración.
+        let _ = conn_nueva
+            .execute(
+                "UPDATE configuracion_tienda SET rubro = ?1, modulos = ?2",
+                libsql::params![rubro.clone(), rubros::modulos_extra_csv(&modulos)],
+            )
+            .await;
+        if let Some(unidades) = rubros::unidades_del_rubro(rubro) {
+            let _ = conn_nueva
+                .execute("UPDATE configuracion_tienda SET unidades_activas = ?1", libsql::params![unidades])
+                .await;
+        }
     }
 
     // 6. Guardar el negocio + el índice de usuario en la base central.

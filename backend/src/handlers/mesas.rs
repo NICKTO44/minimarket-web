@@ -1138,7 +1138,19 @@ pub async fn cambiar_modo_negocio(
         return Err(error(StatusCode::BAD_REQUEST, "Tipo de negocio no válido."));
     }
     let conn = tenant.0.connect().map_err(e500)?;
+    aplicar_modo_negocio(&conn, &modo).await?;
 
+    let mensaje = if modo == "RESTAURANTE" {
+        "Atención en mesas activada"
+    } else {
+        "Atención en mesas desactivada"
+    };
+    Ok(Json(Respuesta { success: true, message: mensaje.into() }))
+}
+
+/// Enciende ('RESTAURANTE') o apaga ('TIENDA') la atención en mesas. Lo usa
+/// también Configuración → Rubro y módulos (handlers/rubros.rs).
+pub async fn aplicar_modo_negocio(conn: &libsql::Connection, modo: &str) -> Result<(), (StatusCode, String)> {
     if modo == "TIENDA" {
         let mut filas = conn
             .query("SELECT COUNT(*) FROM pedidos WHERE estado = 'ABIERTO'", ())
@@ -1158,21 +1170,15 @@ pub async fn cambiar_modo_negocio(
 
     conn.execute(
         "UPDATE configuracion_tienda SET modo_negocio = ?1, fecha_actualizacion = datetime('now','localtime')",
-        libsql::params![modo.clone()],
+        libsql::params![modo.to_string()],
     )
     .await
     .map_err(e500)?;
 
     if modo == "RESTAURANTE" {
-        sembrar_mesas_iniciales(&conn).await.map_err(e500)?;
+        sembrar_mesas_iniciales(conn).await.map_err(e500)?;
     }
-
-    let mensaje = if modo == "RESTAURANTE" {
-        "Atención en mesas activada"
-    } else {
-        "Atención en mesas desactivada"
-    };
-    Ok(Json(Respuesta { success: true, message: mensaje.into() }))
+    Ok(())
 }
 
 /// Roles disponibles para crear usuarios (el Mesero solo aparece si el

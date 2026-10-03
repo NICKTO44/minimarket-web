@@ -185,6 +185,11 @@ pub async fn procesar_devolucion(
         if elegido == "EFECTIVO" {
             "EFECTIVO".to_string()
         } else if !otro.is_empty() && elegido == otro {
+            // Venta al crédito: lo devuelto se descuenta de la deuda (si la
+            // deuda pendiente no alcanza, hay que devolver en efectivo).
+            if otro == crate::handlers::creditos::METODO_CREDITO {
+                crate::handlers::creditos::descontar_devolucion(&conn, payload.venta_id, monto_total).await?;
+            }
             otro
         } else {
             return Err((StatusCode::BAD_REQUEST, format!(

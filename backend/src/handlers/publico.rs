@@ -24,6 +24,11 @@ pub struct ComprobantePublicoResponse {
     pub fecha_emision: Option<String>,
     pub igv: f64,
     pub total: f64,
+    /// Desglose de IGV tal como se cobró (tasa y totales por tipo).
+    pub igv_tasa: f64,
+    pub op_gravadas: f64,
+    pub op_exoneradas: f64,
+    pub op_inafectas: f64,
     pub folio_venta: String,
     pub cliente_nombre: Option<String>,
     pub cliente_documento: Option<String>,
@@ -86,7 +91,17 @@ pub async fn ver_comprobante_publico(
     let folio_venta: String = row.get(8).unwrap_or_default();
     let total: f64 = row.get(9).unwrap_or_default();
 
-    let igv = total - (total / 1.18);
+    // Desglose de IGV como se cobró; si algo fallara al leerlo, lo de siempre
+    // (todo gravado al 18 %).
+    let desglose = match crate::handlers::igv::desglose_venta(&conn, venta_id).await {
+        Ok((_, d)) => d,
+        Err(_) => crate::logica::igv::desglosar(
+            total,
+            &[(total, crate::logica::igv::Afectacion::Gravado)],
+            crate::logica::igv::TASA_GENERAL,
+        ),
+    };
+    let igv = desglose.igv;
 
     let mut ri = conn
         .query(
@@ -135,6 +150,10 @@ pub async fn ver_comprobante_publico(
         fecha_emision,
         igv,
         total,
+        igv_tasa: desglose.tasa,
+        op_gravadas: desglose.gravadas,
+        op_exoneradas: desglose.exoneradas,
+        op_inafectas: desglose.inafectas,
         folio_venta,
         cliente_nombre,
         cliente_documento,

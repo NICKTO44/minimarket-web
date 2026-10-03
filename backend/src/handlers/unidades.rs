@@ -29,11 +29,18 @@ pub const UNIDADES_RESTAURANTE: &[&str] = &[
     "PLATO", "PORCION", "ENTERO", "MEDIO", "CUARTO", "VASO", "TAZA", "JARRA", "COPA", "BOTELLA",
 ];
 
+/// Las de maderera / ferretería / construcción.
+pub const UNIDADES_CONSTRUCCION: &[&str] = &["PIE_TABLAR", "PIEZA", "PLANCHA", "M2", "M3"];
+
 /// La unidad base: nunca se puede apagar.
 const UNIDAD_BASE: &str = "UNIDAD";
 
 fn catalogo() -> impl Iterator<Item = &'static str> {
-    UNIDADES_CLASICAS.iter().chain(UNIDADES_RESTAURANTE.iter()).copied()
+    UNIDADES_CLASICAS
+        .iter()
+        .chain(UNIDADES_RESTAURANTE.iter())
+        .chain(UNIDADES_CONSTRUCCION.iter())
+        .copied()
 }
 
 /// true si la unidad existe en el catálogo (esté activa o no en el negocio).

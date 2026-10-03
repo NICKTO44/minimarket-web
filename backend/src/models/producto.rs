@@ -23,6 +23,12 @@ pub struct Producto {
     pub carta_dia: bool,
     /// true = se acabó: se ve en gris y no se puede pedir.
     pub agotado: bool,
+    /// IGV que le toca al venderlo: 'GRAVADO', 'EXONERADO' o 'INAFECTO'
+    /// (el propio si lo tiene; si no, el de su categoría).
+    pub afectacion_igv: String,
+    /// Valor propio del producto; None = hereda el de su categoría.
+    pub afectacion_propia: Option<String>,
+    pub afectacion_categoria: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +79,8 @@ pub struct ProductoResponse {
 pub struct Categoria {
     pub id: i64,
     pub nombre: String,
+    /// 'GRAVADO', 'EXONERADO' o 'INAFECTO': lo heredan sus productos.
+    pub afectacion_igv: String,
 }
 #[derive(Debug, Deserialize)]
 pub struct NuevaCategoria {

@@ -27,6 +27,7 @@ pub async fn obtener_configuracion(
 
     match rows.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
         Some(row) => {
+            let negocio = crate::handlers::rubros::negocio(&conn).await;
             let mut config = ConfiguracionTienda {
             id: row.get(0).unwrap_or_default(),
             nombre_tienda: row.get(1).unwrap_or_default(),
@@ -43,11 +44,9 @@ pub async fn obtener_configuracion(
             serie_factura: row.get(12).ok(),
             logo_path: row.get(13).ok(),
             color_acento: row.get(14).ok(),
-            modo_negocio: if crate::handlers::mesas::modo_restaurante(&conn).await {
-                "RESTAURANTE".to_string()
-            } else {
-                "TIENDA".to_string()
-            },
+            modo_negocio: negocio.modo_negocio,
+            rubro: negocio.rubro,
+            modulos: negocio.modulos,
             };
             // Todos los usuarios leen la configuración (nombre, RUC, series...),
             // pero el token de FacturaLibre es un secreto: solo lo ve el
@@ -72,6 +71,11 @@ pub async fn actualizar_configuracion(
     Json(payload): Json<ActualizarConfiguracion>,
 ) -> Result<Json<AccionResponse>, (StatusCode, String)> {
     exigir_admin(&claims)?;
+    // La tasa de IGV se usa de verdad al cobrar y al emitir comprobantes:
+    // no se acepta un valor fuera de rango.
+    if !(payload.iva_porcentaje > 0.0 && payload.iva_porcentaje <= 30.0) {
+        return Err((StatusCode::BAD_REQUEST, "La tasa de IGV debe estar entre 0 y 30 %.".to_string()));
+    }
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     conn.execute(

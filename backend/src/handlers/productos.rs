@@ -48,7 +48,18 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
         "{}, p.controla_stock, p.carta_fecha IS NOT NULL, COALESCE(p.agotado, 0){} AND (p.carta_fecha IS NULL OR (?1 = 1 AND p.carta_fecha = ?2)){}",
         SQL_BASE, SQL_DESDE, SQL_ORDEN
     );
-    let (mut rows, columnas) = match conn.query(&con_carta, libsql::params![activo, hoy]).await {
+    // IGV por producto/categoría (migración 0012): efectivo, propio del
+    // producto y el de su categoría.
+    let con_igv = format!(
+        "{}, p.controla_stock, p.carta_fecha IS NOT NULL, COALESCE(p.agotado, 0),
+            COALESCE(p.afectacion_igv, c.afectacion_igv, 'GRAVADO'), p.afectacion_igv, COALESCE(c.afectacion_igv, 'GRAVADO'){} AND (p.carta_fecha IS NULL OR (?1 = 1 AND p.carta_fecha = ?2)){}",
+        SQL_BASE, SQL_DESDE, SQL_ORDEN
+    );
+    let intento_igv = conn.query(&con_igv, libsql::params![activo, hoy.clone()]).await;
+    let (mut rows, columnas) = if let Ok(rows) = intento_igv {
+        (rows, 3)
+    } else {
+      match conn.query(&con_carta, libsql::params![activo, hoy]).await {
         Ok(rows) => (rows, 2),
         Err(_) => match conn
             .query(&format!("{}, p.controla_stock{}{}", SQL_BASE, SQL_DESDE, SQL_ORDEN), libsql::params![activo])
@@ -65,6 +76,7 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
                 0,
             ),
         },
+      }
     };
 
     let mut productos = Vec::new();
@@ -88,6 +100,9 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
             controla_stock: if columnas >= 1 { row.get::<i64>(15).unwrap_or(1) == 1 } else { true },
             carta_dia: columnas >= 2 && row.get::<i64>(16).unwrap_or(0) == 1,
             agotado: columnas >= 2 && row.get::<i64>(17).unwrap_or(0) == 1,
+            afectacion_igv: if columnas >= 3 { row.get(18).unwrap_or_else(|_| "GRAVADO".to_string()) } else { "GRAVADO".to_string() },
+            afectacion_propia: if columnas >= 3 { row.get(19).ok() } else { None },
+            afectacion_categoria: if columnas >= 3 { row.get(20).unwrap_or_else(|_| "GRAVADO".to_string()) } else { "GRAVADO".to_string() },
         });
     }
 
@@ -138,6 +153,9 @@ pub async fn productos_stock_bajo(
             controla_stock: true,
             carta_dia: false,
             agotado: false,
+            afectacion_igv: "GRAVADO".to_string(),
+            afectacion_propia: None,
+            afectacion_categoria: "GRAVADO".to_string(),
         });
     }
 
@@ -149,16 +167,24 @@ pub async fn obtener_categorias(
 ) -> Result<Json<Vec<Categoria>>, StatusCode> {
     let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let mut rows = conn
-        .query("SELECT id, nombre FROM categorias WHERE activo = 1 ORDER BY nombre", ())
+    // afectacion_igv llegó con la migración 0012; sin ella, todo es gravado.
+    let mut rows = match conn
+        .query("SELECT id, nombre, COALESCE(afectacion_igv, 'GRAVADO') FROM categorias WHERE activo = 1 ORDER BY nombre", ())
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    {
+        Ok(rows) => rows,
+        Err(_) => conn
+            .query("SELECT id, nombre, 'GRAVADO' FROM categorias WHERE activo = 1 ORDER BY nombre", ())
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    };
 
     let mut categorias = Vec::new();
     while let Some(row) = rows.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
         categorias.push(Categoria {
             id: row.get(0).unwrap_or_default(),
             nombre: row.get(1).unwrap_or_default(),
+            afectacion_igv: row.get(2).unwrap_or_else(|_| "GRAVADO".to_string()),
         });
     }
 
@@ -188,7 +214,7 @@ pub async fn crear_categoria(
 
     let id = conn.last_insert_rowid();
 
-    Ok(Json(Categoria { id, nombre: payload.nombre.trim().to_string() }))
+    Ok(Json(Categoria { id, nombre: payload.nombre.trim().to_string(), afectacion_igv: "GRAVADO".to_string() }))
 }
 
 // Si el producto es perecible (lleva_vencimiento), el stock inicial se

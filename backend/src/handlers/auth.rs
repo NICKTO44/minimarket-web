@@ -34,6 +34,9 @@ pub struct TiendaSesion {
     pub color_acento: Option<String>,
     /// 'TIENDA' o 'RESTAURANTE' (atención en mesas).
     pub modo_negocio: String,
+    /// Rubro y módulos encendidos (ver handlers/rubros.rs).
+    pub rubro: String,
+    pub modulos: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -122,6 +125,7 @@ pub async fn login(
     }
 
     let (logo_url, color_acento) = leer_identidad_visual(&conn).await;
+    let negocio = crate::handlers::rubros::negocio(&conn).await;
 
     let rol_nombre: Option<String> = match conn
         .query("SELECT nombre FROM roles WHERE id = ?1", libsql::params![rol_id])
@@ -163,11 +167,9 @@ pub async fn login(
             nombre_negocio: tienda.nombre_negocio,
             logo_url,
             color_acento,
-            modo_negocio: if crate::handlers::mesas::modo_restaurante(&conn).await {
-                "RESTAURANTE".to_string()
-            } else {
-                "TIENDA".to_string()
-            },
+            modo_negocio: negocio.modo_negocio,
+            rubro: negocio.rubro,
+            modulos: negocio.modulos,
         },
         modo_lectura,
         aviso,
@@ -199,16 +201,22 @@ pub async fn identificar_usuario(
         .await
         .map_err(|_| (StatusCode::UNAUTHORIZED, "Usuario o contraseña incorrectos".to_string()))?;
 
-    let (logo_url, color_acento, modo_negocio) = match state.tiendas.conectar_cacheado(&tienda).await {
+    // Si la base del negocio no respondiera, se muestra como una tienda sin
+    // módulos extra (igual que antes); el login real lo corrige.
+    let sin_datos = || crate::models::rubro::Negocio {
+        rubro: crate::handlers::rubros::RUBRO_GENERAL.to_string(),
+        modulos: Vec::new(),
+        modo_negocio: "TIENDA".to_string(),
+    };
+    let (logo_url, color_acento, negocio) = match state.tiendas.conectar_cacheado(&tienda).await {
         Ok(db) => match db.connect() {
             Ok(conn) => {
                 let (logo, color) = leer_identidad_visual(&conn).await;
-                let modo = if crate::handlers::mesas::modo_restaurante(&conn).await { "RESTAURANTE" } else { "TIENDA" };
-                (logo, color, modo.to_string())
+                (logo, color, crate::handlers::rubros::negocio(&conn).await)
             }
-            Err(_) => (None, None, "TIENDA".to_string()),
+            Err(_) => (None, None, sin_datos()),
         },
-        Err(_) => (None, None, "TIENDA".to_string()),
+        Err(_) => (None, None, sin_datos()),
     };
 
     Ok(Json(IdentificarUsuarioResponse {
@@ -218,7 +226,9 @@ pub async fn identificar_usuario(
             nombre_negocio: tienda.nombre_negocio,
             logo_url,
             color_acento,
-            modo_negocio,
+            modo_negocio: negocio.modo_negocio,
+            rubro: negocio.rubro,
+            modulos: negocio.modulos,
         },
     }))
 }

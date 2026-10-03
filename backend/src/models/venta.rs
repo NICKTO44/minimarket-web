@@ -35,6 +35,13 @@ pub struct NuevaVenta {
     /// None en una venta normal del POS.
     #[serde(default)]
     pub pedido_id: Option<i64>,
+    /// Venta al crédito (módulo CREDITO): el pago queda pendiente y se
+    /// cobra con abonos. Con esto se ignoran metodo_pago y el pago mixto.
+    #[serde(default)]
+    pub credito: Option<crate::handlers::creditos::CreditoVenta>,
+    /// Cotización de la que salió esta venta: al cobrarla queda VENDIDA.
+    #[serde(default)]
+    pub cotizacion_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]

@@ -11,57 +11,41 @@ pub async fn emitir_comprobante(
 ) -> Result<Json<ComprobanteResponse>, (StatusCode, String)> {
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let mut r = conn
-        .query("SELECT total, subtotal FROM ventas WHERE id = ?1", libsql::params![payload.venta_id])
+    // Líneas y desglose de IGV tal como se cobró la venta: tasa del
+    // negocio y qué líneas son gravadas, exoneradas o inafectas.
+    let (lineas, desglose) = crate::handlers::igv::desglose_venta(&conn, payload.venta_id)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let (total, subtotal): (f64, f64) = match r.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-        Some(row) => (row.get(0).unwrap_or_default(), row.get(1).unwrap_or_default()),
-        None => return Err((StatusCode::NOT_FOUND, "Venta no encontrada".into())),
-    };
-    let _ = subtotal;
+        .map_err(|e| {
+            if e == "Venta no encontrada" { (StatusCode::NOT_FOUND, e) } else { (StatusCode::INTERNAL_SERVER_ERROR, e) }
+        })?;
+    let total = desglose.total;
+    let igv = desglose.igv;
+    let base_sin_igv = desglose.gravadas;
 
-    let igv = total - (total / 1.18);
-    let base_sin_igv = total - igv;
+    let items: Vec<ItemFactura> = lineas
+        .into_iter()
+        .map(|l| ItemFactura {
+            descripcion: l.descripcion,
+            cantidad: l.cantidad,
+            precio_unitario: l.precio_unitario,
+            unidad_medida: l.unidad_medida,
+            afectacion: l.afectacion,
+        })
+        .collect();
 
-    let mut ri = conn
+    // Dirección del cliente de la venta (una sola consulta).
+    let mut cliente_direccion: Option<String> = None;
+    let mut r_cliente = conn
         .query(
-            "SELECT COALESCE(dv.nombre_producto, p.nombre), dv.cantidad, dv.precio_unitario,
-                    COALESCE(dv.unidad_medida, p.unidad_medida)
-             FROM detalles_venta dv JOIN productos p ON p.id = dv.producto_id
-             WHERE dv.venta_id = ?1",
+            "SELECT c.direccion FROM ventas v JOIN clientes c ON c.id = v.cliente_id WHERE v.id = ?1",
             libsql::params![payload.venta_id],
         )
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    let mut items = Vec::new();
-    while let Some(row) = ri.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-        items.push(ItemFactura {
-            descripcion: row.get(0).unwrap_or_default(),
-            cantidad: row.get(1).unwrap_or_default(),
-            precio_unitario: row.get(2).unwrap_or_default(),
-            unidad_medida: row.get(3).unwrap_or_default(),
-        });
+    if let Some(row) = r_cliente.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        cliente_direccion = row.get(0).ok();
     }
-
-    let mut cliente_direccion: Option<String> = None;
-    let mut r_venta_cliente = conn
-        .query("SELECT cliente_id FROM ventas WHERE id = ?1", libsql::params![payload.venta_id])
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    if let Some(row) = r_venta_cliente.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-        let cliente_id: Option<i64> = row.get(0).ok();
-        if let Some(cid) = cliente_id {
-            let mut rc = conn
-                .query("SELECT direccion FROM clientes WHERE id = ?1", libsql::params![cid])
-                .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-            if let Some(rowc) = rc.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-                cliente_direccion = rowc.get(0).ok();
-            }
-        }
-    }
+    drop(r_cliente);
 
     // Valor de respaldo si el tenant no tiene nada guardado en
     // codigo_producto_sunat_generico (columna vacía/NULL) — antes este
@@ -73,14 +57,32 @@ pub async fn emitir_comprobante(
     // en la tabla desde el schema original pero nunca se leía; el
     // sistema siempre mandaba la constante fija sin importar lo que
     // tuviera guardado cada tenant.
-    let mut rcfg = conn
+    // Configuración de emisión y, en la misma consulta, la de detracción
+    // (un viaje a la base en vez de cuatro). Si la base aún no tiene las
+    // columnas nuevas (migraciones 0011/0013), se lee como antes.
+    const COLUMNAS_EMISION: &str = "facturalibre_token, facturalibre_ruta, ruc, serie_boleta, serie_factura, codigo_producto_sunat_generico";
+    let completa = conn
         .query(
-            "SELECT facturalibre_token, facturalibre_ruta, ruc, serie_boleta, serie_factura, codigo_producto_sunat_generico FROM configuracion_tienda LIMIT 1",
+            &format!(
+                "SELECT {}, modulos, CAST(detraccion_porcentaje AS REAL), detraccion_codigo,
+                        CAST(detraccion_minimo AS REAL), detraccion_cuenta
+                 FROM configuracion_tienda LIMIT 1",
+                COLUMNAS_EMISION
+            ),
             (),
         )
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await;
+    let (mut rcfg, con_detraccion) = match completa {
+        Ok(filas) => (filas, true),
+        Err(_) => (
+            conn.query(&format!("SELECT {} FROM configuracion_tienda LIMIT 1", COLUMNAS_EMISION), ())
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
+            false,
+        ),
+    };
 
+    let mut cfg_detraccion_leida = None;
     let (token, ruta, ruc_emisor, serie_boleta, serie_factura, codigo_sunat_cfg): (
         Option<String>,
         Option<String>,
@@ -89,16 +91,21 @@ pub async fn emitir_comprobante(
         Option<String>,
         Option<String>,
     ) = match rcfg.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-        Some(row) => (
-            row.get(0).ok(),
-            row.get(1).ok(),
-            row.get(2).ok(),
-            row.get(3).ok(),
-            row.get(4).ok(),
-            row.get(5).ok(),
-        ),
+        Some(row) => {
+            if con_detraccion {
+                cfg_detraccion_leida = Some(crate::handlers::detraccion::desde_columnas(
+                    row.get::<String>(6).ok(),
+                    row.get::<f64>(7).ok(),
+                    row.get::<String>(8).ok(),
+                    row.get::<f64>(9).ok(),
+                    row.get::<String>(10).ok(),
+                ));
+            }
+            (row.get(0).ok(), row.get(1).ok(), row.get(2).ok(), row.get(3).ok(), row.get(4).ok(), row.get(5).ok())
+        }
         None => (None, None, None, None, None, None),
     };
+    drop(rcfg);
 
     let serie_boleta = serie_boleta.filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "B001".to_string());
     let serie_factura = serie_factura.filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "F001".to_string());
@@ -124,6 +131,14 @@ pub async fn emitir_comprobante(
         })
     };
 
+    // Detracción: solo facturas de un negocio que la tiene encendida y con
+    // su cuenta configurada, cuando el total supera el mínimo.
+    let cfg_detraccion = match cfg_detraccion_leida {
+        Some(cfg) => cfg,
+        None => crate::handlers::detraccion::configuracion(&conn).await,
+    };
+    let detraccion = crate::logica::detraccion::calcular(&payload.tipo, total, &cfg_detraccion, payload.detraccion);
+
     let datos = DatosParaEmitir {
         tipo: payload.tipo.clone(),
         cliente_tipo_documento: tipo_doc_cliente.clone(),
@@ -133,7 +148,18 @@ pub async fn emitir_comprobante(
         subtotal: base_sin_igv,
         igv,
         total,
+        tasa: desglose.tasa,
+        exoneradas: desglose.exoneradas,
+        inafectas: desglose.inafectas,
         items,
+        detraccion: detraccion.clone(),
+        // Venta al crédito con saldo pendiente: la factura sale "al crédito".
+        // (Solo la factura lleva forma de pago; en boleta no se consulta.)
+        credito: if payload.tipo == "FACTURA" {
+            crate::handlers::creditos::pendiente_de_venta(&conn, payload.venta_id).await
+        } else {
+            None
+        },
     };
 
     let resultado = emitir_facturalibre(&datos, &token, &ruta, &codigo_sunat, &serie_boleta, &serie_factura).await;
@@ -169,6 +195,18 @@ pub async fn emitir_comprobante(
 
     let comprobante_id = conn.last_insert_rowid();
 
+    // Se guarda la detracción enviada para reimprimir el ticket igual. Va
+    // aparte y sin fallar: una base sin la migración 0013 nunca llega aquí
+    // con detracción, y si algo falla el comprobante ya quedó registrado.
+    if let Some(d) = &detraccion {
+        let _ = conn
+            .execute(
+                "UPDATE comprobantes_electronicos SET detraccion_porcentaje = ?1, detraccion_monto = ?2, detraccion_cuenta = ?3 WHERE id = ?4",
+                libsql::params![d.porcentaje, d.monto, d.cuenta.clone(), comprobante_id],
+            )
+            .await;
+    }
+
     let cliente_tipo_documento_codigo = match &tipo_doc_cliente {
         Some(t) => codigo_tipo_documento_identidad(t).to_string(),
         None => "0".to_string(),
@@ -193,7 +231,14 @@ pub async fn emitir_comprobante(
         fecha_emision: Some(resultado.fecha_emision),
         igv,
         total_venta: total,
+        igv_tasa: desglose.tasa,
+        op_gravadas: desglose.gravadas,
+        op_exoneradas: desglose.exoneradas,
+        op_inafectas: desglose.inafectas,
         cliente_tipo_documento_codigo,
         cliente_numero_documento,
+        detraccion_porcentaje: detraccion.as_ref().map(|d| d.porcentaje),
+        detraccion_monto: detraccion.as_ref().map(|d| d.monto),
+        detraccion_cuenta: detraccion.as_ref().map(|d| d.cuenta.clone()),
     }))
 }
