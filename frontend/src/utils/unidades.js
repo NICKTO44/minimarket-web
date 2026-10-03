@@ -4,7 +4,7 @@
 export const GRUPOS_UNIDADES = [
   {
     titulo: 'Restaurante y cafetería',
-    restaurante: true,
+    rubros: ['RESTAURANTE'],
     unidades: [
       { valor: 'PLATO', label: 'Plato', abrev: 'plato' },
       { valor: 'PORCION', label: 'Porción', abrev: 'porc' },
@@ -16,6 +16,17 @@ export const GRUPOS_UNIDADES = [
       { valor: 'JARRA', label: 'Jarra', abrev: 'jarra' },
       { valor: 'COPA', label: 'Copa', abrev: 'copa' },
       { valor: 'BOTELLA', label: 'Botella', abrev: 'bot' },
+    ],
+  },
+  {
+    titulo: 'Madera y construcción',
+    rubros: ['MADERERA', 'FERRETERIA'],
+    unidades: [
+      { valor: 'PIE_TABLAR', label: 'Pie tablar', abrev: 'pt' },
+      { valor: 'PIEZA', label: 'Pieza', abrev: 'pza' },
+      { valor: 'PLANCHA', label: 'Plancha', abrev: 'plancha' },
+      { valor: 'M2', label: 'Metro cuadrado', abrev: 'm²' },
+      { valor: 'M3', label: 'Metro cúbico', abrev: 'm³' },
     ],
   },
   {
@@ -63,11 +74,11 @@ export const GRUPOS_UNIDADES = [
 // La unidad base: siempre activa.
 export const UNIDAD_BASE = 'UNIDAD';
 
-const TODAS = GRUPOS_UNIDADES.flatMap((g) => g.unidades.map((u) => ({ ...u, restaurante: !!g.restaurante })));
+const TODAS = GRUPOS_UNIDADES.flatMap((g) => g.unidades.map((u) => ({ ...u, deRubro: !!g.rubros })));
 const POR_VALOR = new Map(TODAS.map((u) => [u.valor, u]));
 
 /** Las 20 de siempre (lo que ve un negocio que nunca configuró sus unidades). */
-export const UNIDADES_CLASICAS = TODAS.filter((u) => !u.restaurante).map((u) => u.valor);
+export const UNIDADES_CLASICAS = TODAS.filter((u) => !u.deRubro).map((u) => u.valor);
 
 /** "Kilogramo" a partir de "KG" (o el mismo código si no se conoce). */
 export function etiquetaUnidad(valor) {
@@ -77,13 +88,6 @@ export function etiquetaUnidad(valor) {
 /** "kg" a partir de "KG": para etiquetas cortas de stock. */
 export function abreviaturaUnidad(valor) {
   return POR_VALOR.get(valor)?.abrev || (valor || 'und').toLowerCase();
-}
-
-/** Con qué conviene empezar según el tipo de negocio. */
-export function unidadesRecomendadas(restaurante) {
-  return restaurante
-    ? [UNIDAD_BASE, ...TODAS.filter((u) => u.restaurante).map((u) => u.valor)]
-    : UNIDADES_CLASICAS;
 }
 
 /**

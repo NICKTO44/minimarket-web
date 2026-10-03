@@ -148,6 +148,9 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     // esta fila (hash, RUC emisor, fecha) para que el QR salga correcto.
     try {
       const detalle = await api.ventaParaDevolucion(comp.folio_venta);
+      // Desglose de IGV como se cobró (tasa, gravado, exonerado). Si el
+      // servidor aún no lo ofrece, se imprime como siempre (todo al 18 %).
+      const igvVenta = await api.igvVenta(comp.venta_id).catch(() => null);
 
       const tipoDocCliente =
         comp.tipo === 'FACTURA'
@@ -169,8 +172,15 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
               hash: comp.hash,
               ruc_emisor: comp.ruc_emisor,
               fecha_emision: comp.fecha_emision_corta,
-              igv: comp.monto - comp.monto / 1.18,
+              igv: igvVenta?.igv ?? comp.monto - comp.monto / 1.18,
               total_venta: comp.monto,
+              igv_tasa: igvVenta?.igv_tasa,
+              op_gravadas: igvVenta?.op_gravadas,
+              op_exoneradas: igvVenta?.op_exoneradas,
+              op_inafectas: igvVenta?.op_inafectas,
+              detraccion_porcentaje: igvVenta?.detraccion_porcentaje,
+              detraccion_monto: igvVenta?.detraccion_monto,
+              detraccion_cuenta: igvVenta?.detraccion_cuenta,
               cliente_tipo_documento_codigo: tipoDocCliente,
               cliente_numero_documento: comp.cliente_documento || '-',
             }

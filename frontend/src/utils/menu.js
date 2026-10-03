@@ -18,6 +18,9 @@ import {
   UtensilsCrossed,
   ChefHat,
   ClipboardList,
+  FileText,
+  HandCoins,
+  Route,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
@@ -32,6 +35,10 @@ export const GRUPOS_MENU = [
       { id: 'CAJA', label: 'Caja y Turnos', icono: Wallet },
       { id: 'HISTORIAL_CAJA', label: 'Historial de Caja', icono: History },
       { id: 'CLIENTES', label: 'Clientes', icono: Users },
+      // Solo con su módulo encendido (ver utils/rubros.js).
+      { id: 'COTIZACIONES', label: 'Cotizaciones', icono: FileText, modulo: 'COTIZACIONES' },
+      { id: 'CREDITOS', label: 'Créditos', icono: HandCoins, modulo: 'CREDITO' },
+      { id: 'GUIAS', label: 'Guías de remisión', icono: Route, modulo: 'GUIAS' },
     ],
   },
   {
@@ -84,17 +91,21 @@ export function etiquetaRol(usuario) {
 /**
  * Grupos con solo los módulos que ese usuario puede ver.
  * restaurante: el negocio atiende en mesas (muestra "Mesas").
+ * etiquetas: nombres de pantalla propios del rubro (ver utils/rubros.js).
+ * modulos: módulos encendidos del negocio (muestra Cotizaciones, Créditos, Guías).
  * El mesero solo ve Mesas y la Carta de hoy: toma pedidos, no cobra.
  * Barra/Cocina solo ve Preparación y la Carta de hoy (marca agotados).
  */
-export function gruposParaUsuario(usuario, { restaurante = false } = {}) {
+export function gruposParaUsuario(usuario, { restaurante = false, etiquetas = {}, modulos = [] } = {}) {
   const esAdmin = usuario?.rol_id === 1;
   const mesero = restaurante && esMesero(usuario);
   const preparacion = restaurante && esPreparacion(usuario);
   return GRUPOS_MENU.map((g) => ({
     ...g,
-    items: g.items.filter((i) => {
+    // El rubro puede renombrar pantallas ("Carta" en vez de "Productos").
+    items: g.items.map((i) => (etiquetas[i.id] ? { ...i, label: etiquetas[i.id] } : i)).filter((i) => {
       if (i.soloRestaurante && !restaurante) return false;
+      if (i.modulo && !modulos.includes(i.modulo)) return false;
       if (mesero) return PANTALLAS_MESERO.includes(i.id);
       if (preparacion) return PANTALLAS_PREPARACION.includes(i.id);
       // El cajero solo cobra: la carta del día la arman los demás.

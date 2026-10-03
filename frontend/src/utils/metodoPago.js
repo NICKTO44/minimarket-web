@@ -11,7 +11,17 @@ const NOMBRES = {
   TRANSFERENCIA: 'Transferencia',
   YAPE_PLIN: 'Yape/Plin',
   MIXTO: 'Mixto',
+  CREDITO: 'Crédito',
 };
+
+// Una venta al crédito se guarda como MIXTO con pago_otro_metodo =
+// 'CREDITO' (ver migración 0015_creditos.sql).
+export const METODO_CREDITO = 'CREDITO';
+
+/** true si la venta (campos del backend) fue al crédito. */
+export function esVentaAlCredito(venta) {
+  return venta?.metodo_pago === 'MIXTO' && venta?.pago_otro_metodo === METODO_CREDITO;
+}
 
 export function nombreMetodo(metodo) {
   return NOMBRES[metodo] || (metodo || '').replace('_', '/');
@@ -24,6 +34,7 @@ export function nombreMetodo(metodo) {
  */
 export function describirPago(venta) {
   if (!venta) return '';
+  if (esVentaAlCredito(venta)) return 'Al crédito';
   if (venta.metodo_pago !== 'MIXTO') {
     return (venta.metodo_pago || '').replace('_', '/');
   }

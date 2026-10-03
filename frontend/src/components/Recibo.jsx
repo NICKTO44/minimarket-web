@@ -3,6 +3,8 @@ import QRCode from 'qrcode';
 import { montoEnLetras } from '../utils/numeroALetras';
 import { construirCadenaQrSunat } from '../utils/qrSunat';
 import { nombreMetodo } from '../utils/metodoPago';
+import { desgloseDeComprobante, etiquetaTasa } from '../utils/igv';
+import { formatoCantidad, subtotalLinea } from '../utils/medidas';
 
 export default function Recibo({ venta, items, nombreTienda, direccion, telefono, ruc, cajero, comprobante, cliente }) {
   const esComprobanteReal = !!comprobante;
@@ -17,10 +19,15 @@ export default function Recibo({ venta, items, nombreTienda, direccion, telefono
   // recalcula localmente solo para mostrar el desglose visual — nunca
   // para el QR, que solo se dibuja si hay datos reales completos.
   const total = comprobante?.total_venta ?? venta.total;
-  const igv = comprobante?.igv ?? (total - total / 1.18);
-  const gravada = total - igv;
+  // Tasa del negocio y totales por tipo de operación (gravado, exonerado,
+  // inafecto), tal como se enviaron a SUNAT.
+  const desglose = desgloseDeComprobante(comprobante, total);
+  const igv = desglose.igv;
 
-  const totalUnidades = items.reduce((sum, item) => sum + item.cantidad, 0);
+  const totalUnidades = formatoCantidad(items.reduce((sum, item) => sum + item.cantidad, 0));
+
+  // Factura sujeta a detracción (SPOT): lo que se envió a SUNAT.
+  const detraccion = comprobante?.detraccion_monto > 0 ? comprobante : null;
 
   // --- QR oficial de SUNAT ---
   // Solo se genera si tenemos TODOS los datos reales necesarios (RUC
@@ -108,8 +115,8 @@ export default function Recibo({ venta, items, nombreTienda, direccion, telefono
         <div key={idx} className="recibo-item">
           <div className="recibo-item-nombre">{item.nombre}</div>
           <div className="recibo-item-detalle">
-            <span>{item.cantidad} x S/.{item.precio.toFixed(2)}</span>
-            <span>S/.{(item.precio * item.cantidad).toFixed(2)}</span>
+            <span>{formatoCantidad(item.cantidad)} x S/.{item.precio.toFixed(2)}</span>
+            <span>S/.{subtotalLinea(item.precio, item.cantidad).toFixed(2)}</span>
           </div>
         </div>
       ))}
@@ -126,10 +133,22 @@ export default function Recibo({ venta, items, nombreTienda, direccion, telefono
           <div className="recibo-linea"></div>
           <div className="recibo-fila-meta">
             <span>Op. Gravada</span>
-            <span>S/.{gravada.toFixed(2)}</span>
+            <span>S/.{desglose.gravadas.toFixed(2)}</span>
           </div>
+          {desglose.exoneradas > 0 && (
+            <div className="recibo-fila-meta">
+              <span>Op. Exonerada</span>
+              <span>S/.{desglose.exoneradas.toFixed(2)}</span>
+            </div>
+          )}
+          {desglose.inafectas > 0 && (
+            <div className="recibo-fila-meta">
+              <span>Op. Inafecta</span>
+              <span>S/.{desglose.inafectas.toFixed(2)}</span>
+            </div>
+          )}
           <div className="recibo-fila-meta">
-            <span>IGV (18%)</span>
+            <span>IGV ({etiquetaTasa(desglose.tasa)}%)</span>
             <span>S/.{igv.toFixed(2)}</span>
           </div>
         </>
@@ -144,10 +163,49 @@ export default function Recibo({ venta, items, nombreTienda, direccion, telefono
 
       {esComprobanteReal && <div className="recibo-importe-letras">SON: {montoEnLetras(total)}</div>}
 
+      {detraccion && (
+        <div className="recibo-detraccion">
+          <div className="recibo-detraccion-titulo">OPERACIÓN SUJETA A DETRACCIÓN</div>
+          <div className="recibo-fila-meta">
+            <span>Detracción ({formatoCantidad(detraccion.detraccion_porcentaje)}%)</span>
+            <span>S/.{detraccion.detraccion_monto.toFixed(2)}</span>
+          </div>
+          {detraccion.detraccion_cuenta && (
+            <div className="recibo-fila-meta">
+              <span>Cta. Bco. de la Nación</span>
+              <span>{detraccion.detraccion_cuenta}</span>
+            </div>
+          )}
+          <div className="recibo-fila-meta">
+            <span>Neto a pagar</span>
+            <span>S/.{(total - detraccion.detraccion_monto).toFixed(2)}</span>
+          </div>
+        </div>
+      )}
+
       {venta.metodoPago === 'MIXTO' && venta.pagoOtro != null && (
         <div className="recibo-detalle-pago">
           <span>{nombreMetodo(venta.pagoOtroMetodo)}</span>
           <span>S/.{venta.pagoOtro.toFixed(2)}</span>
+        </div>
+      )}
+      {venta.credito && (
+        <div className="recibo-detraccion">
+          <div className="recibo-detraccion-titulo">VENTA AL CRÉDITO</div>
+          {venta.credito.adelanto > 0 && (
+            <div className="recibo-fila-meta">
+              <span>Adelanto ({nombreMetodo(venta.credito.adelantoMetodo)})</span>
+              <span>S/.{venta.credito.adelanto.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="recibo-fila-meta">
+            <span>Saldo por pagar</span>
+            <span>S/.{venta.credito.saldo.toFixed(2)}</span>
+          </div>
+          <div className="recibo-fila-meta">
+            <span>Plazo</span>
+            <span>{venta.credito.dias} días</span>
+          </div>
         </div>
       )}
       {venta.montoRecibido != null && (

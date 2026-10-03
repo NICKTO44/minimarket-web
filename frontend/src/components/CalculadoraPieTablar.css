@@ -1,0 +1,214 @@
+/* Calculadora de pie tablar (módulo "Venta por medidas"). Mismos tokens
+   que el punto de venta: blanco, bordes #e4e6eb y el color del negocio. */
+
+.pt-velo {
+  position: fixed;
+  inset: 0;
+  z-index: 320;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.pt-modal {
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 18px;
+  border-radius: 16px;
+  background: #fff;
+  color: #16181d;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.pt-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pt-icono {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--color-primario-suave);
+  color: var(--color-primario);
+}
+
+.pt-cabecera h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.pt-cabecera p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+.pt-modos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  background: #f4f5f7;
+}
+
+.pt-modos button {
+  padding: 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.pt-modos button.activo {
+  background: #fff;
+  color: #16181d;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.pt-campos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.pt-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pt-campo span {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.pt-campo input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 9px;
+  font-size: 16px; /* 16px: evita el zoom de iOS */
+  font-weight: 600;
+  background: #fff;
+}
+
+.pt-campo input:focus {
+  outline: none;
+  border-color: var(--color-primario);
+}
+
+.pt-largo-en {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+.pt-largo-en button {
+  padding: 5px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.pt-largo-en button.activo {
+  border-color: var(--color-primario);
+  background: var(--color-primario-suave);
+  color: var(--color-primario);
+}
+
+.pt-formula {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+.pt-resultado {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: #f4f5f7;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pt-resultado strong {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.pt-resultado-error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.pt-aviso {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.pt-acciones {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.pt-cancelar,
+.pt-agregar {
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pt-cancelar {
+  border: 1.5px solid #e4e6eb;
+  background: #fff;
+  color: #6b7280;
+}
+
+.pt-agregar {
+  border: none;
+  background: var(--color-primario);
+  color: #fff;
+}
+
+.pt-agregar:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}

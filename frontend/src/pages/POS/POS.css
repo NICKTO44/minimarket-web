@@ -614,6 +614,108 @@
   font-weight: 600;
 }
 
+/* Módulo "Venta por medidas": la cantidad se puede escribir (0.5, 37.5). */
+.pos-carrito-item-editable {
+  grid-template-columns: 26px 58px 26px 26px;
+}
+
+.pos-cantidad-input {
+  width: 100%;
+  height: 26px;
+  padding: 0 4px;
+  border: 1px solid var(--pos-borde);
+  border-radius: 6px;
+  background: var(--pos-superficie);
+  color: var(--pos-texto);
+  text-align: center;
+  font-size: 16px; /* 16px: evita el zoom de iOS al enfocar */
+  font-weight: 600;
+}
+
+.pos-cantidad-input:focus {
+  outline: none;
+  border-color: var(--pos-primario);
+}
+
+@media (min-width: 900px) {
+  .pos-cantidad-input {
+    font-size: 13.5px;
+  }
+}
+
+/* Línea agregada con la calculadora de pie tablar: pies fijos + quitar. */
+.pos-carrito-item-medida {
+  grid-template-columns: auto 26px;
+}
+
+.pos-carrito-item-medida span {
+  white-space: nowrap;
+}
+
+/* Guardar el carrito como cotización (módulo Cotizaciones). */
+.pos-cotizar {
+  width: 100%;
+  padding: 10px;
+  border: 1.5px dashed var(--pos-borde);
+  border-radius: var(--pos-radio);
+  background: var(--pos-superficie);
+  color: var(--pos-texto);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pos-cotizar:hover:not(:disabled) {
+  border-color: var(--pos-primario);
+  color: var(--pos-primario);
+}
+
+/* Venta al crédito: deuda que ya tiene el cliente. */
+.pos-credito-deuda {
+  margin: 0;
+  padding: 7px 9px;
+  border-radius: var(--pos-radio-sm);
+  background: var(--pos-error-bg);
+  color: var(--pos-error);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Aviso de detracción al elegir Factura (módulo Detracción). */
+.pos-detraccion {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px solid #f59e0b;
+  border-radius: var(--pos-radio-sm);
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.pos-detraccion input {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--pos-primario);
+}
+
+.pos-detraccion strong {
+  display: block;
+  font-size: 12.5px;
+}
+
+.pos-detraccion-apagada {
+  border-color: var(--pos-borde);
+  background: var(--pos-superficie);
+  color: var(--pos-texto-tenue);
+}
+
 .pos-quitar {
   border: none !important;
   color: var(--pos-error);
@@ -1044,6 +1146,25 @@
 
 .pos-venta-modal-linea strong {
   font-size: 14.5px;
+}
+
+/* El comprobante no se pudo emitir (la venta sí quedó registrada). */
+.pos-venta-modal-error {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.pos-venta-modal-imprimir:disabled,
+.pos-venta-modal-whatsapp-boton:disabled,
+.pos-imprimir:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .pos-venta-modal-acciones {

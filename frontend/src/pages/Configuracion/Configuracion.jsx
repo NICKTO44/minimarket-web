@@ -3,9 +3,13 @@ import { api, API_URL } from '../../api/api';
 import { COLOR_MONSPEET, normalizarAcento } from '../../utils/tema';
 import './Configuracion.css';
 import { confirmar } from '../../utils/confirmar';
-import { Coffee, Store } from 'lucide-react';
 import ConfiguracionRestaurante from './ConfiguracionRestaurante';
 import ConfiguracionUnidades from './ConfiguracionUnidades';
+import ConfiguracionNegocio from './ConfiguracionNegocio';
+import SelectorTasaIgv from './SelectorTasaIgv';
+import ConfiguracionDetraccion from './ConfiguracionDetraccion';
+import { etiquetaTasa, TASA_GENERAL } from '../../utils/igv';
+import { datosNegocio, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
 
 const ROLES = [
   { id: 1, nombre: 'Administrador' },
@@ -23,9 +27,8 @@ const NOMBRE_ROL = {
   PREPARACION: 'Barra / Cocina (marca los pedidos listos)',
 };
 
-export default function Configuracion({ onIdentidadActualizada, usuarioActualId, onModoNegocioCambiado }) {
+export default function Configuracion({ onIdentidadActualizada, usuarioActualId, onNegocioCambiado }) {
   const [roles, setRoles] = useState(ROLES);
-  const [cambiandoModo, setCambiandoModo] = useState(false);
   const [vista, setVista] = useState('NEGOCIO');
 
   const [formConfig, setFormConfig] = useState(null);
@@ -39,11 +42,16 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
 
   const [mensaje, setMensaje] = useState(null);
+  // Tasa de IGV que tiene guardada el negocio (para avisar si la cambia).
+  const [tasaGuardada, setTasaGuardada] = useState(null);
 
   const cargarConfig = () => {
     api
       .configuracionObtener()
-      .then((c) => setFormConfig(c))
+      .then((c) => {
+        setFormConfig(c);
+        setTasaGuardada(Number(c.iva_porcentaje));
+      })
       .catch((e) => setMensaje({ tipo: 'error', texto: e.message }));
   };
 
@@ -69,37 +77,14 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
     cargarRoles();
   }, []);
 
-  const restaurante = formConfig?.modo_negocio === 'RESTAURANTE';
+  const negocio = datosNegocio(formConfig);
+  const restaurante = negocio.modulos.includes(MODULO_MESAS);
 
-  // Activa o desactiva la atención en mesas (Cafetería / Restaurante).
-  const cambiarModo = async (modo) => {
-    if (modo === formConfig.modo_negocio || cambiandoModo) return;
-    const activar = modo === 'RESTAURANTE';
-    const ok = await confirmar({
-      titulo: activar ? '¿Activar atención en mesas?' : '¿Volver al modo Tienda?',
-      mensaje: activar
-        ? 'Se agrega "Mesas" al menú, el rol Mesero y las opciones de productos (tamaño, tipo de leche...). Tus ventas, caja e inventario siguen igual. Si no hay mesas, se crean 6 de ejemplo.'
-        : 'Se ocultan Mesas y las opciones de productos. No se borra nada: si lo vuelves a activar, todo sigue ahí.',
-      textoConfirmar: activar ? 'Activar' : 'Volver a Tienda',
-      icono: 'aviso',
-    });
-    if (!ok) return;
-    setCambiandoModo(true);
-    setMensaje(null);
-    try {
-      await api.modoNegocioCambiar(modo);
-      setFormConfig((actual) => ({ ...actual, modo_negocio: modo }));
-      onModoNegocioCambiado?.(modo);
-      cargarRoles();
-      setMensaje({
-        tipo: 'exito',
-        texto: activar ? 'Atención en mesas activada. Revisa tus mesas en "Mesas y opciones".' : 'Modo Tienda activado.',
-      });
-    } catch (e) {
-      setMensaje({ tipo: 'error', texto: e.message });
-    } finally {
-      setCambiandoModo(false);
-    }
+  // Configuración → Rubro y módulos guardó un cambio.
+  const alCambiarNegocio = (cambio) => {
+    setFormConfig((actual) => ({ ...actual, ...cambio }));
+    onNegocioCambiado?.(cambio);
+    cargarRoles();
   };
 
   const guardarConfig = async () => {
@@ -107,6 +92,24 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
     if (!formConfig.nombre_tienda.trim()) {
       setMensaje({ tipo: 'error', texto: 'El nombre de la tienda es obligatorio.' });
       return;
+    }
+    // La tasa de IGV se usa de verdad al cobrar y al emitir comprobantes.
+    const tasa = Number(formConfig.iva_porcentaje);
+    if (!(tasa > 0 && tasa <= 30)) {
+      setMensaje({ tipo: 'error', texto: 'Escribe una tasa de IGV válida (mayor a 0 y hasta 30 %).' });
+      return;
+    }
+    if (tasaGuardada !== null && tasa !== tasaGuardada) {
+      const ok = await confirmar({
+        titulo: `¿Cambiar el IGV a ${etiquetaTasa(tasa)} %?`,
+        mensaje:
+          tasa === TASA_GENERAL
+            ? 'Desde ahora tus ventas y comprobantes se calcularán con la tasa general de 18 %. Las ventas ya hechas no cambian.'
+            : `Desde ahora tus ventas y comprobantes se calcularán con ${etiquetaTasa(tasa)} %. Hazlo solo si tu negocio está inscrito en el padrón de SUNAT para esa tasa; si no, tus comprobantes saldrán observados. Las ventas ya hechas no cambian.`,
+        textoConfirmar: 'Cambiar tasa',
+        icono: 'aviso',
+      });
+      if (!ok) return;
     }
     setGuardandoConfig(true);
     try {
@@ -117,7 +120,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
         email: formConfig.email || null,
         ruc: formConfig.ruc || null,
         moneda: 'PEN',
-        iva_porcentaje: parseFloat(formConfig.iva_porcentaje) || 18,
+        iva_porcentaje: tasa,
         facturalibre_token: formConfig.facturalibre_token || null,
         facturalibre_ruta: formConfig.facturalibre_ruta || null,
         codigo_producto_sunat_generico: formConfig.codigo_producto_sunat_generico || null,
@@ -128,6 +131,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
       setMensaje({ tipo: 'exito', texto: 'Configuración guardada.' });
       const actualizada = await api.configuracionObtener();
       setFormConfig(actualizada);
+      setTasaGuardada(Number(actualizada.iva_porcentaje));
       onIdentidadActualizada?.({
         logo_url: actualizada.logo_path,
         color_acento: actualizada.color_acento,
@@ -253,39 +257,21 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
 
       {mensaje && <p className={`cfg-mensaje cfg-mensaje-${mensaje.tipo}`}>{mensaje.texto}</p>}
 
-      {vista === 'NEGOCIO' && (
-        <div className="cfg-card cfg-card-tipo">
-          <h3 className="cfg-subtitulo-seccion">Tipo de negocio</h3>
-          <p className="cfg-nota-moneda">
-            Elige cómo atiendes. Puedes cambiarlo cuando quieras; no se borra nada.
-          </p>
-          <div className="cfg-tipos">
-            <button
-              type="button"
-              className={`cfg-tipo${!restaurante ? ' activo' : ''}`}
-              onClick={() => cambiarModo('TIENDA')}
-              disabled={cambiandoModo}
-            >
-              <Store size={22} />
-              <strong>Tienda</strong>
-              <span>Venta directa en el punto de venta: bodega, minimarket, ferretería...</span>
-            </button>
-            <button
-              type="button"
-              className={`cfg-tipo${restaurante ? ' activo' : ''}`}
-              onClick={() => cambiarModo('RESTAURANTE')}
-              disabled={cambiandoModo}
-            >
-              <Coffee size={22} />
-              <strong>Cafetería / Restaurante</strong>
-              <span>Mesas, pedidos abiertos, comandas a barra/cocina y opciones por producto.</span>
-            </button>
-          </div>
-        </div>
+      {vista === 'NEGOCIO' && formConfig && (
+        <ConfiguracionNegocio
+          rubro={negocio.rubro}
+          modulos={negocio.modulos}
+          onCambiado={alCambiarNegocio}
+          onMensaje={setMensaje}
+        />
+      )}
+
+      {vista === 'NEGOCIO' && formConfig && negocio.modulos.includes(MODULO_DETRACCION) && (
+        <ConfiguracionDetraccion onMensaje={setMensaje} />
       )}
 
       {vista === 'RESTAURANTE' && restaurante && <ConfiguracionRestaurante />}
-      {vista === 'UNIDADES' && <ConfiguracionUnidades restaurante={restaurante} />}
+      {vista === 'UNIDADES' && <ConfiguracionUnidades rubro={negocio.rubro} />}
 
       {vista === 'NEGOCIO' && (
         <div className="cfg-card">
@@ -333,15 +319,12 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
                 registra por transacción — hacerlo generaría descuadres en caja y reportes históricos.
               </p>
             </div>
-            <div className="cfg-campo">
-              <label>IGV (%)</label>
-              <input
-                type="number"
-                value={formConfig.iva_porcentaje}
-                onChange={(e) => setFormConfig({ ...formConfig, iva_porcentaje: e.target.value })}
-              />
-            </div>
           </div>
+
+          <SelectorTasaIgv
+            valor={formConfig.iva_porcentaje}
+            onCambiar={(tasa) => setFormConfig({ ...formConfig, iva_porcentaje: tasa })}
+          />
 
           <div className="cfg-separador-seccion"></div>
           <h3 className="cfg-subtitulo-seccion">Identidad visual del negocio</h3>

@@ -18,6 +18,8 @@ export default function Sidebar({
   logoUrl,
   versionLogo,
   restaurante = false,
+  etiquetas = {},
+  modulos = [],
   // Números sobre un módulo (p. ej. { MESAS: 2 } = 2 pedidos listos).
   insignias = {},
 }) {
@@ -59,7 +61,7 @@ export default function Sidebar({
         </div>
 
         <nav className="sidebar-nav">
-          {gruposParaUsuario(usuario, { restaurante }).map((grupo) => (
+          {gruposParaUsuario(usuario, { restaurante, etiquetas, modulos }).map((grupo) => (
             <div className="sidebar-grupo" key={grupo.titulo}>
               <span className="sidebar-grupo-titulo">{grupo.titulo}</span>
               {grupo.items.map((item) => {

@@ -10,6 +10,11 @@ import { ChevronRight, ShoppingCart } from 'lucide-react';
 import { METODOS_OTRO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
 import { tituloPedido } from '../../utils/mesas';
 import { abreviaturaUnidad } from '../../utils/unidades';
+import { UNIDAD_PIE_TABLAR, formatoCantidad, leerCantidad, subtotalLinea } from '../../utils/medidas';
+import CalculadoraPieTablar from '../../components/CalculadoraPieTablar';
+import CotizacionImprimible from '../../components/CotizacionImprimible';
+import { numeroCotizacion } from '../../utils/formato';
+import '../../components/PantallaModulo.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -32,6 +37,42 @@ function etiquetaStock(producto) {
 }
 
 const redondear2 = (n) => Math.round(n * 100) / 100;
+const redondear3 = (n) => Math.round(n * 1000) / 1000;
+
+// Identifica una línea del carrito. Un producto normal tiene una sola
+// línea (su id); las líneas de un pedido de mesa y las de venta por
+// medidas llevan clave propia porque el mismo producto puede repetirse.
+const claveDe = (item) => item.clave || item.id;
+// Línea agregada con la calculadora de pie tablar: su cantidad son los
+// pies calculados, no se cambia con − y +.
+const esLineaMedida = (item) => typeof item.clave === 'string' && item.clave.startsWith('medida-');
+
+/**
+ * Cantidad del carrito que se puede escribir (módulo "Venta por medidas"):
+ * 0.5 kg, 37.5 pies. Se aplica al salir del campo o con Enter; si lo
+ * escrito no sirve, vuelve a la cantidad anterior.
+ */
+function CantidadEditable({ valor, onCambiar, etiqueta }) {
+  const [texto, setTexto] = useState(null);
+  const aplicar = () => {
+    if (texto === null) return;
+    const nueva = leerCantidad(texto);
+    if (nueva !== null && nueva !== valor) onCambiar(nueva);
+    setTexto(null);
+  };
+  return (
+    <input
+      className="pos-cantidad-input"
+      inputMode="decimal"
+      value={texto ?? formatoCantidad(valor)}
+      onChange={(e) => setTexto(e.target.value)}
+      onFocus={(e) => e.target.select()}
+      onBlur={aplicar}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      aria-label={etiqueta}
+    />
+  );
+}
 
 // Líneas de un pedido de mesa convertidas en carrito del POS. Cada línea
 // es independiente (el mismo café puede ir con opciones distintas), por
@@ -48,6 +89,25 @@ function carritoDePedido(pedido) {
   }));
 }
 
+// Líneas de una cotización convertidas en carrito: van con el precio que
+// se le ofreció al cliente y su cantidad fija (clave "medida-...").
+function carritoDeCotizacion(cotizacion) {
+  return cotizacion.items.map((i, idx) => ({
+    id: i.producto_id,
+    clave: `medida-cot-${cotizacion.id}-${idx}`,
+    nombre: i.nombre,
+    precio: i.precio_unitario,
+    cantidad: i.cantidad,
+    descuentoMonto: 0,
+    detalle: i.detalle || null,
+    unidad_medida: i.unidad_medida,
+  }));
+}
+
+// Plazos que se ofrecen al vender al crédito (días).
+const PLAZOS_CREDITO = [7, 15, 30, 45, 60];
+const METODOS_ADELANTO = ['EFECTIVO', 'YAPE_PLIN', 'TRANSFERENCIA', 'TARJETA'];
+
 // Opciones del selector "Ordenar por" encima de la grilla del POS.
 const OPCIONES_ORDEN = [
   { valor: 'nombre', label: 'Nombre (A-Z)' },
@@ -62,6 +122,16 @@ export default function POS({
   telefono,
   ruc,
   identificadorNegocio,
+  // Módulo "Venta por medidas": cantidad con decimales y calculadora de
+  // pie tablar. Apagado, el punto de venta es el de siempre.
+  medidas = false,
+  // Módulo "Cotizaciones": botón para guardar el carrito como cotización.
+  cotizaciones = false,
+  // Módulo "Ventas al crédito": método de pago "Crédito".
+  credito = false,
+  // Cotización que se abrió desde su pantalla para venderla.
+  cotizacionACargar = null,
+  onCotizacionUsada,
   // Cafetería / Restaurante: pedido de una mesa que se está cobrando.
   pedidoACobrar = null,
   onCancelarCobroPedido,
@@ -82,7 +152,22 @@ export default function POS({
   const [busqueda, setBusqueda] = useState('');
   const [ordenPrecio, setOrdenPrecio] = useState('nombre');
   const buscadorRef = useRef(null);
-  const [carrito, setCarrito] = useState(() => (pedidoACobrar ? carritoDePedido(pedidoACobrar) : []));
+  const [carrito, setCarrito] = useState(() =>
+    pedidoACobrar ? carritoDePedido(pedidoACobrar) : cotizacionACargar ? carritoDeCotizacion(cotizacionACargar) : []
+  );
+  // Cotización que se está vendiendo (al cobrar queda como vendida).
+  const [cotizacionEnVenta, setCotizacionEnVenta] = useState(() =>
+    !pedidoACobrar && cotizacionACargar ? { id: cotizacionACargar.id, numero: cotizacionACargar.numero } : null
+  );
+  // Ventana "Guardar cotización" ({ nombre, validez, notas }) y la recién guardada.
+  const [nuevaCotizacion, setNuevaCotizacion] = useState(null);
+  const [guardandoCotizacion, setGuardandoCotizacion] = useState(false);
+  const [cotizacionGuardada, setCotizacionGuardada] = useState(null);
+  // Venta al crédito: adelanto de hoy (opcional), con qué lo paga y plazo.
+  const [creditoAdelanto, setCreditoAdelanto] = useState('');
+  const [creditoAdelantoMetodo, setCreditoAdelantoMetodo] = useState('EFECTIVO');
+  const [creditoDias, setCreditoDias] = useState(30);
+  const [deudaCliente, setDeudaCliente] = useState(null);
   const [carritoAbierto, setCarritoAbierto] = useState(false);
   const [metodoPago, setMetodoPago] = useState('EFECTIVO');
   const [montoRecibido, setMontoRecibido] = useState('');
@@ -90,13 +175,27 @@ export default function POS({
   // pagó por el medio digital; la parte en efectivo se calcula sola.
   const [mixtoOtroMetodo, setMixtoOtroMetodo] = useState('YAPE_PLIN');
   const [mixtoMontoOtro, setMixtoMontoOtro] = useState('');
-  const [cliente, setCliente] = useState(null);
+  const [cliente, setCliente] = useState(() =>
+    !pedidoACobrar && cotizacionACargar?.cliente_id
+      ? {
+          id: cotizacionACargar.cliente_id,
+          nombre_razon_social: cotizacionACargar.cliente_nombre,
+          numero_documento: cotizacionACargar.cliente_documento,
+        }
+      : null
+  );
   const [mostrarBusquedaCliente, setMostrarBusquedaCliente] = useState(false);
   const [busquedaCliente, setBusquedaCliente] = useState('');
   const [resultadosCliente, setResultadosCliente] = useState([]);
   const [buscandoCliente, setBuscandoCliente] = useState(false);
   const [sinResultadosCliente, setSinResultadosCliente] = useState(false);
   const [tipoComprobante, setTipoComprobante] = useState('BOLETA');
+  // Producto por pie tablar cuya calculadora está abierta (módulo Medidas).
+  const [productoAMedir, setProductoAMedir] = useState(null);
+  // Detracción del negocio (null = no la usa o aún no carga) y si esta
+  // factura la lleva (el cajero puede excluir una venta que no está sujeta).
+  const [detraccion, setDetraccion] = useState(null);
+  const [conDetraccion, setConDetraccion] = useState(true);
   const [procesando, setProcesando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [ultimaVentaParaImprimir, setUltimaVentaParaImprimir] = useState(null);
@@ -130,6 +229,15 @@ export default function POS({
         // en procesarVenta antes de crear la venta.
         setFacturacionConfigurada(true);
       });
+  }, []);
+
+  // Solo los negocios con el módulo de detracción la tienen "lista"
+  // (encendida y con su cuenta). Si la consulta falla, se sigue sin ella.
+  useEffect(() => {
+    api
+      .detraccion()
+      .then((d) => setDetraccion(d?.lista ? d : null))
+      .catch(() => setDetraccion(null));
   }, []);
 
   const [nuevoTipoDocumento, setNuevoTipoDocumento] = useState('DNI');
@@ -352,13 +460,36 @@ export default function POS({
       setMensaje({ tipo: 'error', texto: `"${producto.nombre}" se agotó.` });
       return;
     }
+    // Madera por pie tablar: se abre la calculadora de medidas.
+    if (medidas && producto.unidad_medida === UNIDAD_PIE_TABLAR) {
+      setProductoAMedir(producto);
+      return;
+    }
     setCarrito((prev) => {
-      const existe = prev.find((i) => i.id === producto.id);
+      const existe = prev.find((i) => !i.clave && i.id === producto.id);
       if (existe) {
-        return prev.map((i) => (i.id === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i));
+        return prev.map((i) => (i === existe ? { ...i, cantidad: redondear3(i.cantidad + 1) } : i));
       }
       return [...prev, { ...producto, cantidad: 1, descuentoMonto: 0 }];
     });
+  };
+
+  // La calculadora devolvió pies y medidas: entra como línea propia (la
+  // misma madera puede ir varias veces con medidas distintas).
+  const agregarMedida = ({ cantidad, detalle }) => {
+    const producto = productoAMedir;
+    setProductoAMedir(null);
+    if (!producto) return;
+    setCarrito((prev) => [
+      ...prev,
+      {
+        ...producto,
+        clave: `medida-${Date.now()}-${prev.length}`,
+        cantidad,
+        descuentoMonto: 0,
+        detalle,
+      },
+    ]);
   };
 
   const manejarEnterBusquedaProducto = (e) => {
@@ -409,22 +540,53 @@ export default function POS({
     return () => clearTimeout(timeout);
   }, [ultimoEscaneo]);
 
-  const cambiarCantidad = (id, delta) => {
+  // − y +: de uno en uno. Con cantidades con decimales (0.5 kg) el − no
+  // baja de lo que hay si quedaría en cero o menos.
+  const cambiarCantidad = (clave, delta) => {
     setCarrito((prev) =>
-      prev
-        .map((i) => (i.id === id ? { ...i, cantidad: Math.max(1, i.cantidad + delta) } : i))
-        .filter((i) => i.cantidad > 0)
+      prev.map((i) => {
+        if (claveDe(i) !== clave) return i;
+        const nueva = redondear3(i.cantidad + delta);
+        return { ...i, cantidad: nueva > 0 ? nueva : Math.min(i.cantidad, 1) };
+      })
     );
   };
 
-  const quitarDelCarrito = (id) => setCarrito((prev) => prev.filter((i) => i.id !== id));
+  // Cantidad escrita a mano (módulo "Venta por medidas").
+  const fijarCantidad = (clave, cantidad) => {
+    setCarrito((prev) => prev.map((i) => (claveDe(i) === clave ? { ...i, cantidad } : i)));
+  };
 
+  const quitarDelCarrito = (clave) => setCarrito((prev) => prev.filter((i) => claveDe(i) !== clave));
+
+  // Cada línea se redondea al céntimo (igual que el servidor): con
+  // cantidades enteras da lo mismo que antes; con decimales evita totales
+  // como 144.9855.
   const total = useMemo(
-    () => carrito.reduce((sum, i) => sum + i.precio * i.cantidad - (i.descuentoMonto || 0), 0),
+    () => redondear2(carrito.reduce((sum, i) => sum + subtotalLinea(i.precio, i.cantidad) - (i.descuentoMonto || 0), 0)),
     [carrito]
   );
 
+  // Factura sujeta a detracción: negocio con el módulo listo y total mayor
+  // al mínimo. La boleta nunca la lleva.
+  const detraccionAplicable = !!detraccion && tipoComprobante === 'FACTURA' && total > detraccion.minimo;
+  const montoDetraccion = detraccionAplicable ? redondear2((total * detraccion.porcentaje) / 100) : 0;
+
   const esMixto = metodoPago === 'MIXTO';
+  const esCredito = metodoPago === 'CREDITO';
+  const adelantoNum = redondear2(parseFloat(String(creditoAdelanto).replace(',', '.')) || 0);
+  const adelantoValido = adelantoNum >= 0 && adelantoNum < total;
+
+  // Cuánto debe ya ese cliente, para verlo antes de darle otro crédito.
+  const clienteIdCredito = esCredito ? cliente?.id : null;
+  useEffect(() => {
+    if (!clienteIdCredito) return;
+    api
+      .creditoDeudaCliente(clienteIdCredito)
+      .then(setDeudaCliente)
+      .catch(() => setDeudaCliente(null));
+  }, [clienteIdCredito]);
+  const deudaActual = esCredito && cliente && deudaCliente?.cliente_id === cliente.id ? deudaCliente : null;
   const recibidoNum = parseFloat(montoRecibido) || 0;
   const mixtoOtro = redondear2(parseFloat(mixtoMontoOtro) || 0);
   const mixtoEfectivo = redondear2(Math.max(0, total - mixtoOtro));
@@ -453,15 +615,52 @@ export default function POS({
     return { listo: true, error: null };
   })();
 
-  const clienteEsObligatorio = tipoComprobante === 'BOLETA' || tipoComprobante === 'FACTURA';
-  const clienteEsOpcionalVisible = tipoComprobante === 'NINGUNO';
+  // Al crédito siempre hace falta saber quién debe, aunque sea nota simple.
+  const clienteEsObligatorio = tipoComprobante === 'BOLETA' || tipoComprobante === 'FACTURA' || esCredito;
+  const clienteEsOpcionalVisible = tipoComprobante === 'NINGUNO' && !esCredito;
 
   const puedeCobrar =
     carrito.length > 0 &&
     !procesando &&
     (!clienteEsObligatorio || cliente) &&
     (metodoPago !== 'EFECTIVO' || parseFloat(montoRecibido) >= total) &&
+    (!esCredito || adelantoValido) &&
     estadoMixto.listo;
+
+  // Guarda lo que hay en el carrito como cotización (no toca stock ni caja).
+  const guardarCotizacion = async () => {
+    setGuardandoCotizacion(true);
+    setMensaje(null);
+    try {
+      const guardada = await api.cotizacionCrear({
+        cliente_id: cliente?.id || null,
+        cliente_nombre: cliente ? null : nuevaCotizacion.nombre.trim() || null,
+        validez_dias: nuevaCotizacion.validez,
+        notas: nuevaCotizacion.notas.trim() || null,
+        items: carrito.map((i) => ({ id: i.id, cantidad: i.cantidad, precio: i.precio, detalle: i.detalle || null })),
+      });
+      setNuevaCotizacion(null);
+      setCotizacionGuardada(guardada);
+      setCarrito([]);
+      setCliente(null);
+      setMostrarBusquedaCliente(false);
+      setBusquedaCliente('');
+      setCarritoAbierto(false);
+    } catch (e) {
+      setNuevaCotizacion(null);
+      setMensaje({ tipo: 'error', texto: e.message });
+    } finally {
+      setGuardandoCotizacion(false);
+    }
+  };
+
+  // Deja de vender la cotización cargada (sigue pendiente en su pantalla).
+  const quitarCotizacion = () => {
+    setCotizacionEnVenta(null);
+    setCarrito([]);
+    setCliente(null);
+    onCotizacionUsada?.();
+  };
 
   const procesarVenta = async () => {
     if (tipoComprobante !== 'NINGUNO' && !facturacionConfigurada) {
@@ -484,7 +683,10 @@ export default function POS({
           detalle: i.detalle || null,
         })),
         total,
-        metodo_pago: metodoPago,
+        // Al crédito el servidor ignora el método: el pago queda pendiente.
+        metodo_pago: esCredito ? 'EFECTIVO' : metodoPago,
+        credito: esCredito ? { adelanto: adelantoNum, adelanto_metodo: creditoAdelantoMetodo, dias: creditoDias } : null,
+        cotizacion_id: cotizacionEnVenta?.id || null,
         monto_recibido:
           metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || total : esMixto ? recibidoNum : null,
         cambio: metodoPago === 'EFECTIVO' || esMixto ? cambio : null,
@@ -496,19 +698,29 @@ export default function POS({
         pedido_id: pedidoACobrar?.id || null,
       });
 
-      let comprobante = null;
-      let errorComprobante = null;
-      if (tipoComprobante !== 'NINGUNO') {
-        try {
-          comprobante = await api.comprobanteEmitir({
+      // La venta ya quedó registrada: se muestra de inmediato para seguir
+      // con el siguiente cliente. La boleta o factura se emite en segundo
+      // plano (SUNAT puede tardar unos segundos) y, cuando llega, se agrega
+      // a esta venta para poder imprimirla.
+      const emiteComprobante = tipoComprobante !== 'NINGUNO';
+      if (emiteComprobante) {
+        const folio = resultado.folio;
+        const paraEstaVenta = (cambios) => (actual) => (actual?.venta.folio === folio ? { ...actual, ...cambios } : actual);
+        api
+          .comprobanteEmitir({
             venta_id: resultado.venta_id,
             tipo: tipoComprobante,
             cliente_documento: cliente?.numero_documento || null,
             cliente_nombre: cliente?.nombre_razon_social || null,
+            // Solo se manda cuando la factura podía llevar detracción: el
+            // cajero la dejó marcada o la excluyó para esta venta.
+            ...(detraccionAplicable ? { detraccion: conDetraccion } : {}),
+          })
+          .then((comprobante) => setUltimaVentaParaImprimir(paraEstaVenta({ comprobante, comprobantePendiente: false })))
+          .catch((e) => {
+            setUltimaVentaParaImprimir(paraEstaVenta({ comprobantePendiente: false, errorComprobante: e.message }));
+            setMensaje({ tipo: 'error', texto: `Venta ${folio} registrada, pero falló el comprobante: ${e.message}` });
           });
-        } catch (e) {
-          errorComprobante = e.message;
-        }
       }
 
       const datosVenta = {
@@ -521,13 +733,20 @@ export default function POS({
           metodoPago,
           pagoOtro: esMixto ? mixtoOtro : null,
           pagoOtroMetodo: esMixto ? mixtoOtroMetodo : null,
+          credito: esCredito
+            ? { adelanto: adelantoNum, adelantoMetodo: creditoAdelantoMetodo, saldo: redondear2(total - adelantoNum), dias: creditoDias }
+            : null,
         },
         items: carrito.map((i) => ({
           nombre: i.detalle ? `${i.nombre} (${i.detalle})` : i.nombre,
           cantidad: i.cantidad,
           precio: i.precio,
         })),
-        comprobante,
+        comprobante: null,
+        // true mientras la boleta/factura se está emitiendo en segundo plano.
+        comprobantePendiente: emiteComprobante,
+        tipoComprobante,
+        errorComprobante: null,
         cliente,
         deMesa: cobrandoPedido,
       };
@@ -536,24 +755,28 @@ export default function POS({
       if (cobrandoPedido) onPedidoCobrado?.();
 
       setUltimaVentaParaImprimir(datosVenta);
-
-      if (errorComprobante) {
-        setMensaje({ tipo: 'error', texto: `Venta registrada, pero falló el comprobante: ${errorComprobante}` });
-      } else {
-        setMostrarModalVenta(true);
-        setCarritoAbierto(false);
-      }
+      setMostrarModalVenta(true);
+      setCarritoAbierto(false);
 
       setCarrito([]);
       setMontoRecibido('');
       // Un pago mixto es excepcional: la siguiente venta vuelve a Efectivo
       // para que nadie cobre en mixto por accidente.
       setMixtoMontoOtro('');
-      setMetodoPago((actual) => (actual === 'MIXTO' ? 'EFECTIVO' : actual));
+      // Lo mismo con el crédito.
+      setMetodoPago((actual) => (actual === 'MIXTO' || actual === 'CREDITO' ? 'EFECTIVO' : actual));
+      setCreditoAdelanto('');
+      setCreditoAdelantoMetodo('EFECTIVO');
+      setCreditoDias(30);
+      if (cotizacionEnVenta) {
+        setCotizacionEnVenta(null);
+        onCotizacionUsada?.();
+      }
       setCliente(null);
       setMostrarBusquedaCliente(false);
       setBusquedaCliente('');
       setTipoComprobante('BOLETA');
+      setConDetraccion(true);
       setTelefonoWhatsapp('');
       api.productos().then(setProductos);
     } catch (e) {
@@ -797,6 +1020,18 @@ export default function POS({
           </button>
         </div>
 
+        {cotizacionEnVenta && !cobrandoPedido && (
+          <div className="pos-cobro-pedido">
+            <div>
+              <span className="pos-cobro-pedido-etiqueta">Vendiendo</span>
+              <strong>Cotización N° {numeroCotizacion(cotizacionEnVenta.numero)}</strong>
+            </div>
+            <button type="button" onClick={quitarCotizacion}>
+              Quitar
+            </button>
+          </div>
+        )}
+
         {cobrandoPedido && (
           <div className="pos-cobro-pedido">
             <div>
@@ -831,6 +1066,19 @@ export default function POS({
               Nota simple
             </button>
           </div>
+          {detraccionAplicable && (
+            <label className={`pos-detraccion${conDetraccion ? '' : ' pos-detraccion-apagada'}`}>
+              <input type="checkbox" checked={conDetraccion} onChange={(e) => setConDetraccion(e.target.checked)} />
+              <span>
+                <strong>
+                  Sujeta a detracción ({formatoCantidad(detraccion.porcentaje)} %): S/ {montoDetraccion.toFixed(2)}
+                </strong>
+                {conDetraccion
+                  ? ` El cliente deposita ese monto en tu cuenta del Banco de la Nación (${detraccion.cuenta}) y te paga S/ ${(total - montoDetraccion).toFixed(2)}.`
+                  : ' Desmarcada: esta factura saldrá sin detracción.'}
+              </span>
+            </label>
+          )}
           {tipoComprobante === 'NINGUNO' && (
             <p className="pos-aviso-nota-simple">
               ⚠️ Sin comprobante tributario. Emitir ventas reales sin boleta/factura puede constituir
@@ -938,22 +1186,39 @@ export default function POS({
         <div className="pos-carrito-items">
           {carrito.length === 0 && <p className="pos-carrito-vacio">Carrito vacío</p>}
           {carrito.map((item) => (
-            <div key={item.clave || item.id} className="pos-carrito-item">
+            <div key={claveDe(item)} className="pos-carrito-item">
               <div className="pos-carrito-item-info">
                 <span className="pos-carrito-item-nombre">{item.nombre}</span>
                 {item.detalle && <span className="pos-carrito-item-detalle">{item.detalle}</span>}
                 <span className="pos-carrito-item-precio">
                   {cobrandoPedido ? `${item.cantidad} × ` : ''}S/ {item.precio.toFixed(2)} c/u
+                  {medidas && !cobrandoPedido && ` · S/ ${subtotalLinea(item.precio, item.cantidad).toFixed(2)}`}
                 </span>
               </div>
-              {!cobrandoPedido && (
-                <div className="pos-carrito-item-controles">
-                  <button onClick={() => cambiarCantidad(item.id, -1)}>−</button>
-                  <span>{item.cantidad}</span>
-                  <button onClick={() => cambiarCantidad(item.id, 1)}>+</button>
-                  <button className="pos-quitar" onClick={() => quitarDelCarrito(item.id)}>🗑</button>
-                </div>
-              )}
+              {!cobrandoPedido &&
+                (esLineaMedida(item) ? (
+                  <div className="pos-carrito-item-controles pos-carrito-item-medida">
+                    <span>
+                      {formatoCantidad(item.cantidad)} {abreviaturaUnidad(item.unidad_medida)}
+                    </span>
+                    <button className="pos-quitar" onClick={() => quitarDelCarrito(claveDe(item))}>🗑</button>
+                  </div>
+                ) : (
+                  <div className={`pos-carrito-item-controles${medidas ? ' pos-carrito-item-editable' : ''}`}>
+                    <button onClick={() => cambiarCantidad(claveDe(item), -1)}>−</button>
+                    {medidas ? (
+                      <CantidadEditable
+                        valor={item.cantidad}
+                        onCambiar={(cantidad) => fijarCantidad(claveDe(item), cantidad)}
+                        etiqueta={`Cantidad de ${item.nombre}`}
+                      />
+                    ) : (
+                      <span>{item.cantidad}</span>
+                    )}
+                    <button onClick={() => cambiarCantidad(claveDe(item), 1)}>+</button>
+                    <button className="pos-quitar" onClick={() => quitarDelCarrito(claveDe(item))}>🗑</button>
+                  </div>
+                ))}
             </div>
           ))}
         </div>
@@ -980,7 +1245,70 @@ export default function POS({
             >
               {esMixto ? 'MIXTO · EFECTIVO + OTRO' : '+ MIXTO · EFECTIVO + OTRO'}
             </button>
+            {credito && (
+              <button className={`pos-metodo-mixto${esCredito ? ' activo' : ''}`} onClick={() => setMetodoPago('CREDITO')}>
+                {esCredito ? 'CRÉDITO · PAGA DESPUÉS' : '+ CRÉDITO · PAGA DESPUÉS'}
+              </button>
+            )}
           </div>
+
+          {esCredito && (
+            <div className="pos-mixto">
+              <span className="pos-mixto-titulo">Venta al crédito</span>
+              {!cliente && <p className="pos-mixto-error">Elige arriba al cliente que va a deber.</p>}
+              {deudaActual && deudaActual.saldo > 0 && (
+                <p className="pos-credito-deuda">
+                  Este cliente ya debe S/ {deudaActual.saldo.toFixed(2)}
+                  {deudaActual.vencido > 0 ? ` (S/ ${deudaActual.vencido.toFixed(2)} vencido)` : ''}.
+                </p>
+              )}
+
+              <div className="pos-mixto-paso">
+                <span className="pos-mixto-label">1. ¿Deja un adelanto hoy? (opcional)</span>
+                <div className={`pos-mixto-campo${creditoAdelanto !== '' && !adelantoValido ? ' error' : ''}`}>
+                  <span>S/</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={creditoAdelanto}
+                    onChange={(e) => setCreditoAdelanto(e.target.value)}
+                    aria-label="Adelanto"
+                  />
+                </div>
+                {adelantoNum > 0 && (
+                  <div className="pos-mixto-chips">
+                    {METODOS_ADELANTO.map((m) => (
+                      <button key={m} type="button" className={creditoAdelantoMetodo === m ? 'activo' : ''} onClick={() => setCreditoAdelantoMetodo(m)}>
+                        {nombreMetodo(m)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="pos-mixto-paso">
+                <span className="pos-mixto-label">2. Plazo para pagar</span>
+                <div className="pos-mixto-chips">
+                  {PLAZOS_CREDITO.map((d) => (
+                    <button key={d} type="button" className={creditoDias === d ? 'activo' : ''} onClick={() => setCreditoDias(d)}>
+                      {d} días
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pos-mixto-calculado">
+                <span>Queda debiendo</span>
+                <strong>S/ {Math.max(0, total - adelantoNum).toFixed(2)}</strong>
+              </div>
+              {creditoAdelanto !== '' && !adelantoValido && (
+                <p className="pos-mixto-error">El adelanto debe ser menor al total. Si paga todo hoy, usa otro método.</p>
+              )}
+            </div>
+          )}
 
           {esMixto && (
             <div className="pos-mixto">
@@ -1108,16 +1436,132 @@ export default function POS({
           {mensaje && <p className={`pos-mensaje pos-mensaje-${mensaje.tipo}`}>{mensaje.texto}</p>}
 
           {ultimaVentaParaImprimir && !mostrarModalVenta && (
-            <button className="pos-imprimir" onClick={imprimirComprobante}>
-              Imprimir última boleta · {ultimaVentaParaImprimir.venta.folio}
+            <button className="pos-imprimir" onClick={imprimirComprobante} disabled={ultimaVentaParaImprimir.comprobantePendiente}>
+              {ultimaVentaParaImprimir.comprobantePendiente
+                ? `Emitiendo comprobante · ${ultimaVentaParaImprimir.venta.folio}`
+                : `Imprimir última boleta · ${ultimaVentaParaImprimir.venta.folio}`}
+            </button>
+          )}
+
+          {cotizaciones && carrito.length > 0 && !cobrandoPedido && !cotizacionEnVenta && (
+            <button
+              type="button"
+              className="pos-cotizar"
+              onClick={() => setNuevaCotizacion({ nombre: '', validez: 7, notas: '' })}
+              disabled={procesando}
+            >
+              Guardar como cotización
             </button>
           )}
 
           <button className="pos-cobrar" disabled={!puedeCobrar} onClick={procesarVenta}>
-            {procesando ? 'Procesando...' : `Cobrar S/ ${total.toFixed(2)}`}
+            {procesando
+              ? 'Procesando...'
+              : esCredito
+                ? `Registrar crédito S/ ${total.toFixed(2)}`
+                : `Cobrar S/ ${total.toFixed(2)}`}
           </button>
         </div>
       </div>
+
+      {nuevaCotizacion && (
+        <div className="pm-velo" onMouseDown={(e) => e.target === e.currentTarget && !guardandoCotizacion && setNuevaCotizacion(null)}>
+          <div className="pm-modal pm-modal-chico" role="dialog" aria-modal="true" aria-label="Guardar cotización">
+            <div className="pm-modal-cabecera">
+              <h2>Guardar cotización</h2>
+              <p>
+                {carrito.length} {carrito.length === 1 ? 'línea' : 'líneas'} · S/ {total.toFixed(2)}. No descuenta stock ni entra a caja.
+              </p>
+            </div>
+            <div className="pm-modal-cuerpo">
+              <div className="pm-campos">
+                <label className="pm-campo pm-campo-ancho">
+                  <span>Cliente</span>
+                  {cliente ? (
+                    <input value={cliente.nombre_razon_social} readOnly />
+                  ) : (
+                    <input
+                      autoFocus
+                      placeholder="Nombre del cliente (opcional)"
+                      maxLength={120}
+                      value={nuevaCotizacion.nombre}
+                      onChange={(e) => setNuevaCotizacion({ ...nuevaCotizacion, nombre: e.target.value })}
+                    />
+                  )}
+                </label>
+                <div className="pm-campo pm-campo-ancho">
+                  <span>Válida por</span>
+                  <div className="pm-opciones">
+                    {[7, 15, 30].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        className={nuevaCotizacion.validez === d ? 'activo' : ''}
+                        onClick={() => setNuevaCotizacion({ ...nuevaCotizacion, validez: d })}
+                      >
+                        {d} días
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label className="pm-campo pm-campo-ancho">
+                  <span>Nota (opcional)</span>
+                  <input
+                    placeholder="Incluye corte, entrega en obra..."
+                    maxLength={500}
+                    value={nuevaCotizacion.notas}
+                    onChange={(e) => setNuevaCotizacion({ ...nuevaCotizacion, notas: e.target.value })}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="pm-modal-pie">
+              <button className="pm-boton-secundario" onClick={() => setNuevaCotizacion(null)} disabled={guardandoCotizacion}>
+                Cancelar
+              </button>
+              <button className="pm-boton" onClick={guardarCotizacion} disabled={guardandoCotizacion}>
+                {guardandoCotizacion ? 'Guardando...' : 'Guardar cotización'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cotizacionGuardada && (
+        <div className="pos-venta-modal-overlay">
+          <div className="pos-venta-modal">
+            <div className="pos-venta-modal-check">✓</div>
+            <h2>Cotización guardada</h2>
+            <p className="pos-venta-modal-folio">N° {numeroCotizacion(cotizacionGuardada.numero)}</p>
+            <p className="pos-venta-modal-tipo">{cotizacionGuardada.cliente_nombre || 'Sin cliente'}</p>
+            <div className="pos-venta-modal-linea">
+              <span>Total</span>
+              <strong>S/ {cotizacionGuardada.total.toFixed(2)}</strong>
+            </div>
+            <div className="pos-venta-modal-linea">
+              <span>Válida por</span>
+              <strong>{cotizacionGuardada.validez_dias} días</strong>
+            </div>
+            <div className="pos-venta-modal-acciones">
+              <button className="pos-venta-modal-imprimir" onClick={() => window.print()}>
+                Imprimir cotización
+              </button>
+              <button className="pos-venta-modal-cerrar" onClick={() => setCotizacionGuardada(null)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {productoAMedir && (
+        <CalculadoraPieTablar
+          producto={productoAMedir}
+          yaEnCarrito={carrito.filter((i) => i.id === productoAMedir.id).reduce((s, i) => s + i.cantidad, 0)}
+          onAgregar={agregarMedida}
+          onCerrar={() => setProductoAMedir(null)}
+        />
+      )}
 
       {escanerAbierto && (
         <EscanerCodigoBarras
@@ -1137,8 +1581,17 @@ export default function POS({
             <p className="pos-venta-modal-tipo">
               {ultimaVentaParaImprimir.comprobante
                 ? `${ultimaVentaParaImprimir.comprobante.tipo === 'FACTURA' ? 'Factura' : 'Boleta'} ${ultimaVentaParaImprimir.comprobante.serie}-${String(ultimaVentaParaImprimir.comprobante.numero).padStart(6, '0')}`
-                : 'Nota de venta'}
+                : ultimaVentaParaImprimir.comprobantePendiente
+                  ? `Emitiendo ${ultimaVentaParaImprimir.tipoComprobante === 'FACTURA' ? 'factura' : 'boleta'}…`
+                  : ultimaVentaParaImprimir.errorComprobante
+                    ? 'Sin comprobante'
+                    : 'Nota de venta'}
             </p>
+            {ultimaVentaParaImprimir.errorComprobante && (
+              <p className="pos-venta-modal-error">
+                La venta quedó registrada, pero no se pudo emitir el comprobante: {ultimaVentaParaImprimir.errorComprobante}
+              </p>
+            )}
 
             <div className="pos-venta-modal-linea">
               <span>Total</span>
@@ -1150,6 +1603,12 @@ export default function POS({
                 <strong>S/ {ultimaVentaParaImprimir.venta.cambio.toFixed(2)}</strong>
               </div>
             )}
+            {ultimaVentaParaImprimir.venta.credito && (
+              <div className="pos-venta-modal-linea">
+                <span>Al crédito · queda debiendo</span>
+                <strong>S/ {ultimaVentaParaImprimir.venta.credito.saldo.toFixed(2)}</strong>
+              </div>
+            )}
 
             <div className="pos-venta-modal-whatsapp">
               <input
@@ -1158,14 +1617,22 @@ export default function POS({
                 value={telefonoWhatsapp}
                 onChange={(e) => setTelefonoWhatsapp(e.target.value)}
               />
-              <button className="pos-venta-modal-whatsapp-boton" onClick={enviarPorWhatsapp}>
+              <button
+                className="pos-venta-modal-whatsapp-boton"
+                onClick={enviarPorWhatsapp}
+                disabled={ultimaVentaParaImprimir.comprobantePendiente}
+              >
                 📲 Enviar por WhatsApp
               </button>
             </div>
 
             <div className="pos-venta-modal-acciones">
-              <button className="pos-venta-modal-imprimir" onClick={imprimirComprobante}>
-                🖨 Imprimir
+              <button
+                className="pos-venta-modal-imprimir"
+                onClick={imprimirComprobante}
+                disabled={ultimaVentaParaImprimir.comprobantePendiente}
+              >
+                {ultimaVentaParaImprimir.comprobantePendiente ? 'Emitiendo comprobante…' : '🖨 Imprimir'}
               </button>
               <button
                 className="pos-venta-modal-cerrar"
@@ -1241,7 +1708,13 @@ export default function POS({
         </div>
       )}
 
-      {ultimaVentaParaImprimir && (
+      {/* Mientras se muestra una cotización recién guardada, lo que se
+          imprime es la cotización y no el ticket de la última venta. */}
+      {cotizacionGuardada && (
+        <CotizacionImprimible cotizacion={cotizacionGuardada} nombreTienda={nombreTienda} direccion={direccion} telefono={telefono} ruc={ruc} />
+      )}
+
+      {ultimaVentaParaImprimir && !cotizacionGuardada && (
         <Recibo
           venta={ultimaVentaParaImprimir.venta}
           items={ultimaVentaParaImprimir.items}

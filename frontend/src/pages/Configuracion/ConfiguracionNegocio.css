@@ -1,0 +1,106 @@
+/* Configuración → Rubro y módulos. */
+
+/* Rubros impares: el último ocupa todo el ancho. */
+.neg-rubros .cfg-tipo:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+h3.cfg-subtitulo-seccion.neg-titulo-modulos {
+  margin-top: 24px;
+}
+
+.neg-modulos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.neg-modulo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 12px;
+  background: #fff;
+  color: #16181d;
+  text-align: left;
+  cursor: pointer;
+}
+
+.neg-modulo:disabled {
+  cursor: wait;
+}
+
+.neg-modulo.encendido {
+  border-color: var(--color-primario);
+  background: var(--color-primario-suave);
+}
+
+/* Interruptor */
+.neg-interruptor {
+  position: relative;
+  flex-shrink: 0;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: #d1d5db;
+  transition: background 0.15s;
+}
+
+.neg-interruptor::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s;
+}
+
+.neg-modulo.encendido .neg-interruptor {
+  background: var(--color-primario);
+}
+
+.neg-modulo.encendido .neg-interruptor::after {
+  transform: translateX(16px);
+}
+
+.neg-modulo-texto {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.neg-modulo-texto strong {
+  font-size: 14px;
+}
+
+.neg-modulo-texto span {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #6b7280;
+}
+
+.neg-estado {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #6b7280;
+}
+
+.neg-modulo.encendido .neg-estado {
+  color: var(--color-primario);
+}
+
+@media (max-width: 520px) {
+  .neg-estado {
+    display: none;
+  }
+}

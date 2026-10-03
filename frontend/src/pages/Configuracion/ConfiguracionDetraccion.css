@@ -1,0 +1,59 @@
+/* Configuración → Detracción en facturas (módulo DETRACCION). */
+
+.det-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.det-cabecera h3.cfg-subtitulo-seccion {
+  margin: 0;
+}
+
+.det-estado {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.det-estado-lista {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.det-card .cfg-campo-fila {
+  margin-top: 12px;
+}
+
+.det-otro-codigo {
+  margin-top: 6px;
+}
+
+.det-error,
+.det-aviso {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.det-error {
+  color: #b91c1c;
+}
+
+.det-aviso {
+  color: #92400e;
+}
+
+.det-ejemplo {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #f4f5f7;
+  font-size: 13px;
+  color: #16181d;
+}

@@ -65,6 +65,8 @@ export default function NavegacionMovil({
   logoUrl,
   versionLogo,
   restaurante = false,
+  etiquetas = {},
+  modulos = [],
   insignias = {},
 }) {
   const [masAbierto, setMasAbierto] = useState(false);
@@ -89,7 +91,7 @@ export default function NavegacionMovil({
   const nivelAviso = esAdmin ? nivelAvisoSuscripcion(diasRestantesSuscripcion) : null;
 
   // "Más" = todos los módulos que ese usuario puede ver, menos los fijos.
-  const gruposMas = gruposParaUsuario(usuario, { restaurante })
+  const gruposMas = gruposParaUsuario(usuario, { restaurante, etiquetas, modulos })
     .map((g) => ({ ...g, items: g.items.filter((i) => !tabsFijas.includes(i.id)) }))
     .filter((g) => g.items.length > 0);
   const masActivo = !tabsFijas.includes(pantalla);
@@ -149,7 +151,7 @@ export default function NavegacionMovil({
               </span>
               Vender
             </button>
-            <Tab id="PRODUCTOS" label="Productos" Icono={Package} pantalla={pantalla} onIr={ir} />
+            <Tab id="PRODUCTOS" label={etiquetas.PRODUCTOS || 'Productos'} Icono={Package} pantalla={pantalla} onIr={ir} />
           </>
         )}
         <button

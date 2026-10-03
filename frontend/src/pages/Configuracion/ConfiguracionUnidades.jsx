@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
 import { api } from '../../api/api';
-import { GRUPOS_UNIDADES, UNIDAD_BASE, unidadesRecomendadas } from '../../utils/unidades';
+import { GRUPOS_UNIDADES, UNIDAD_BASE } from '../../utils/unidades';
+import { rubroDe, unidadesRecomendadas } from '../../utils/rubros';
 import './ConfiguracionUnidades.css';
 
 const TOTAL = GRUPOS_UNIDADES.reduce((n, g) => n + g.unidades.length, 0);
@@ -15,7 +16,7 @@ function mismas(a, b) {
  * que usa su negocio. Solo esas aparecen al crear o editar un producto.
  * "Unidad" y las que ya usan productos no se pueden apagar.
  */
-export default function ConfiguracionUnidades({ restaurante = false }) {
+export default function ConfiguracionUnidades({ rubro }) {
   const [activas, setActivas] = useState(() => new Set());
   const [guardadas, setGuardadas] = useState(() => new Set());
   // unidad -> cuántos productos la usan
@@ -38,11 +39,12 @@ export default function ConfiguracionUnidades({ restaurante = false }) {
       .finally(() => setCargando(false));
   }, []);
 
-  // En un restaurante sus unidades van primero; en una tienda, al final.
-  const grupos = useMemo(
-    () => [...GRUPOS_UNIDADES].sort((a, b) => Number(!!b.restaurante === restaurante) - Number(!!a.restaurante === restaurante)),
-    [restaurante]
-  );
+  // Primero las unidades propias del rubro, luego las generales y al final
+  // las propias de otros rubros.
+  const grupos = useMemo(() => {
+    const orden = (g) => (!g.rubros ? 1 : g.rubros.includes(rubro) ? 0 : 2);
+    return [...GRUPOS_UNIDADES].sort((a, b) => orden(a) - orden(b));
+  }, [rubro]);
 
   const fija = (valor) => valor === UNIDAD_BASE || enUso.has(valor);
 
@@ -89,9 +91,9 @@ export default function ConfiguracionUnidades({ restaurante = false }) {
         <button
           type="button"
           className="uni-boton uni-boton-primario"
-          onClick={() => setActivas(conFijas(unidadesRecomendadas(restaurante)))}
+          onClick={() => setActivas(conFijas(unidadesRecomendadas(rubro)))}
         >
-          Usar las recomendadas para {restaurante ? 'Restaurante' : 'Tienda'}
+          Usar las recomendadas para {rubroDe(rubro).label}
         </button>
         <button
           type="button"

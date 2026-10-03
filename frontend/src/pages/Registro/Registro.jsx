@@ -1,27 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Coffee, Store } from 'lucide-react';
 import { api } from '../../api/api';
+import { MODULO_MESAS, RUBROS } from '../../utils/rubros';
 import '../Login/Login.css';
 import './Registro.css';
 
 const DEBOUNCE_MS = 500;
 
-// Tipo de negocio: decide qué módulos se activan. Se puede cambiar
-// después en Configuración, así que no es una decisión para siempre.
-const TIPOS_NEGOCIO = [
-  {
-    valor: 'TIENDA',
-    titulo: 'Tienda',
-    detalle: 'Bodega, minimarket, ferretería, farmacia...',
-    Icono: Store,
-  },
-  {
-    valor: 'RESTAURANTE',
-    titulo: 'Cafetería / Restaurante',
-    detalle: 'Atención en mesas, pedidos y comandas',
-    Icono: Coffee,
-  },
-];
+// El rubro decide con qué módulos, unidades y nombres de pantalla arranca
+// el negocio (utils/rubros.js). Se puede cambiar después en Configuración,
+// así que no es una decisión para siempre.
 
 export default function Registro({ onRegistroExitoso, onIrALogin }) {
   const [nombreNegocio, setNombreNegocio] = useState('');
@@ -29,7 +16,7 @@ export default function Registro({ onRegistroExitoso, onIrALogin }) {
   const [usuario, setUsuario] = useState('');
   const [password, setPassword] = useState('');
   const [ruc, setRuc] = useState('');
-  const [modoNegocio, setModoNegocio] = useState('TIENDA');
+  const [rubro, setRubro] = useState(RUBROS[0].valor);
 
   const [disponible, setDisponible] = useState(null); // null = sin chequear todavía
   const [verificando, setVerificando] = useState(false);
@@ -74,7 +61,9 @@ export default function Registro({ onRegistroExitoso, onIrALogin }) {
         usuario: usuario.trim(),
         password,
         ruc: ruc.trim() || null,
-        modo_negocio: modoNegocio,
+        rubro,
+        // Para un servidor que aún no conoce los rubros: lo de siempre.
+        modo_negocio: RUBROS.find((r) => r.valor === rubro)?.modulos.includes(MODULO_MESAS) ? 'RESTAURANTE' : 'TIENDA',
       });
 
       // El negocio ya existe con este usuario como súper admin — entra
@@ -95,19 +84,20 @@ export default function Registro({ onRegistroExitoso, onIrALogin }) {
       <form className="login-form registro-form" onSubmit={handleSubmit}>
         <h1>Registra tu negocio</h1>
 
-        <div className="registro-tipos" role="radiogroup" aria-label="Tipo de negocio">
-          {TIPOS_NEGOCIO.map(({ valor, titulo, detalle, Icono }) => (
+        <p className="registro-rubro-titulo">¿Qué rubro es tu negocio?</p>
+        <div className="registro-tipos" role="radiogroup" aria-label="Rubro del negocio">
+          {RUBROS.map(({ valor, label, descripcion, Icono }) => (
             <button
               key={valor}
               type="button"
               role="radio"
-              aria-checked={modoNegocio === valor}
-              className={`registro-tipo${modoNegocio === valor ? ' activo' : ''}`}
-              onClick={() => setModoNegocio(valor)}
+              aria-checked={rubro === valor}
+              className={`registro-tipo${rubro === valor ? ' activo' : ''}`}
+              onClick={() => setRubro(valor)}
             >
-              <Icono size={22} strokeWidth={2} />
-              <strong>{titulo}</strong>
-              <span>{detalle}</span>
+              <Icono size={20} strokeWidth={2} />
+              <strong>{label}</strong>
+              <span>{descripcion}</span>
             </button>
           ))}
         </div>

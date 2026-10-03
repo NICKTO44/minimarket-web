@@ -67,7 +67,7 @@ export const api = {
     }
     return data;
   },
-  registro: async ({ nombre_negocio, nombre_completo, usuario, password, ruc, modo_negocio }) => {
+  registro: async ({ nombre_negocio, nombre_completo, usuario, password, ruc, modo_negocio, rubro }) => {
     const res = await fetch(`${API_URL}/registro`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -78,6 +78,7 @@ export const api = {
         password,
         ruc: ruc || null,
         modo_negocio: modo_negocio || 'TIENDA',
+        rubro: rubro || null,
       }),
     });
     const data = await leerRespuesta(res);
@@ -185,6 +186,32 @@ export const api = {
   preparacionEntregado: (item_ids) =>
     request('/preparacion/entregado', { method: 'POST', body: JSON.stringify({ item_ids }) }),
   modificadores: () => request('/modificadores'),
+  negocioGuardar: (rubro, modulos) =>
+    request('/configuracion/negocio', { method: 'PUT', body: JSON.stringify({ rubro, modulos }) }),
+  categoriaIgv: (id, afectacion_igv) =>
+    request(`/categorias/${id}/igv`, { method: 'PUT', body: JSON.stringify({ afectacion_igv }) }),
+  productoIgv: (id, afectacion_igv) =>
+    request(`/productos/${id}/igv`, { method: 'PUT', body: JSON.stringify({ afectacion_igv }) }),
+  igvVenta: (ventaId) => request(`/igv/venta/${ventaId}`),
+  detraccion: () => request('/detraccion'),
+  // Cotizaciones (módulo COTIZACIONES)
+  cotizaciones: (estado) => request(`/cotizaciones${estado ? `?estado=${estado}` : ''}`),
+  cotizacion: (id) => request(`/cotizaciones/${id}`),
+  cotizacionCrear: (datos) => request('/cotizaciones', { method: 'POST', body: JSON.stringify(datos) }),
+  cotizacionAnular: (id) => request(`/cotizaciones/${id}/anular`, { method: 'POST' }),
+  // Ventas al crédito (módulo CREDITO)
+  creditos: (estado) => request(`/creditos${estado ? `?estado=${estado}` : ''}`),
+  credito: (id) => request(`/creditos/${id}`),
+  creditoAbonar: (id, datos) => request(`/creditos/${id}/abonos`, { method: 'POST', body: JSON.stringify(datos) }),
+  creditoDeudaCliente: (clienteId) => request(`/creditos/cliente/${clienteId}`),
+  // Guías de remisión (módulo GUIAS)
+  guias: () => request('/guias'),
+  guiasConfig: () => request('/guias/config'),
+  guiasConfigGuardar: (datos) => request('/configuracion/guias', { method: 'PUT', body: JSON.stringify(datos) }),
+  guiaVenta: (folio) => request(`/guias/venta/${encodeURIComponent(folio)}`),
+  guiaCrear: (datos) => request('/guias', { method: 'POST', body: JSON.stringify(datos) }),
+  guiaConsultar: (id) => request(`/guias/${id}/consultar`, { method: 'POST' }),
+  detraccionGuardar: (datos) => request('/configuracion/detraccion', { method: 'PUT', body: JSON.stringify(datos) }),
   unidades: () => request('/unidades'),
   unidadesGuardar: (activas) => request('/configuracion/unidades', { method: 'PUT', body: JSON.stringify({ activas }) }),
   cartaDia: () => request('/carta-dia'),

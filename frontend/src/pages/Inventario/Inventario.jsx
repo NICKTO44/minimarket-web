@@ -5,6 +5,8 @@ import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
 import { confirmar } from '../../utils/confirmar';
 import { comprimirImagen } from '../../utils/comprimirImagen';
 import { etiquetaUnidad, opcionesUnidad } from '../../utils/unidades';
+import { AFECTACIONES, etiquetaAfectacion } from '../../utils/igv';
+import CategoriasIgv from './CategoriasIgv';
 
 const FORM_VACIO = {
   codigo: '',
@@ -18,6 +20,8 @@ const FORM_VACIO = {
   lleva_vencimiento: false,
   precio_compra: '',
   controla_stock: true,
+  // 'HEREDAR' = el IGV de su categoría; o GRAVADO / EXONERADO / INAFECTO.
+  afectacion_igv: 'HEREDAR',
 };
 
 // Stock bajo solo aplica a productos que controlan stock (un café
@@ -27,7 +31,10 @@ const tieneStockBajo = (p) => p.controla_stock !== false && p.stock <= p.stock_m
 // Las unidades que se ofrecen son las que el negocio activó en
 // Configuración → Unidades (el catálogo completo está en utils/unidades.js).
 
-export default function Inventario({ restaurante = false }) {
+// servicios: el negocio tiene el módulo "Servicios y venta sin stock".
+// etiquetas: nombres propios del rubro ("Carta" en un restaurante).
+// esAdmin: solo el administrador cambia el IGV de categorías y productos.
+export default function Inventario({ servicios = false, etiquetas = {}, esAdmin = false }) {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [busqueda, setBusqueda] = useState('');
@@ -38,6 +45,7 @@ export default function Inventario({ restaurante = false }) {
   const [desactivados, setDesactivados] = useState([]);
   // Unidades activas del negocio (null = aún no llegan: se usan las de siempre).
   const [unidadesActivas, setUnidadesActivas] = useState(null);
+  const [verCategorias, setVerCategorias] = useState(false);
   const [verDesactivados, setVerDesactivados] = useState(false);
   const [cargando, setCargando] = useState(true);
 
@@ -147,6 +155,7 @@ export default function Inventario({ restaurante = false }) {
       lleva_vencimiento: p.lleva_vencimiento,
       precio_compra: String(p.precio_compra || ''),
       controla_stock: p.controla_stock !== false,
+      afectacion_igv: p.afectacion_propia || 'HEREDAR',
     });
     setImagenArchivo(null);
     setImagenPreview(p.imagen_url ? `${API_URL}${p.imagen_url}?t=${Date.now()}` : null);
@@ -256,7 +265,7 @@ export default function Inventario({ restaurante = false }) {
     }
 
     // Preparado al momento (cafetería): no pide stock.
-    const sinControlStock = restaurante && !form.controla_stock;
+    const sinControlStock = servicios && !form.controla_stock;
 
     if (sinControlStock) {
       // nada que validar
@@ -287,9 +296,9 @@ export default function Inventario({ restaurante = false }) {
       categoria_id: parseInt(form.categoria_id, 10),
       lleva_vencimiento: sinControlStock ? false : form.lleva_vencimiento,
       precio_compra: form.precio_compra ? parseFloat(form.precio_compra) : 0,
-      // Solo se manda en cafetería/restaurante; en una tienda el backend
+      // Solo se manda con el módulo de servicios; sin él el backend
       // deja el valor que ya tenía (controla stock, como siempre).
-      ...(restaurante ? { controla_stock: form.controla_stock } : {}),
+      ...(servicios ? { controla_stock: form.controla_stock } : {}),
     };
 
     setGuardando(true);
@@ -307,6 +316,21 @@ export default function Inventario({ restaurante = false }) {
             cantidad: parseFloat(loteInicialCantidad),
             fecha_vencimiento: loteInicialFecha,
           });
+        }
+      }
+
+      // IGV propio del producto (solo el administrador, y solo si cambió).
+      if (esAdmin && idParaImagen) {
+        const anterior = editandoId ? productos.find((x) => x.id === editandoId)?.afectacion_propia || 'HEREDAR' : 'HEREDAR';
+        if (form.afectacion_igv !== anterior) {
+          try {
+            await api.productoIgv(idParaImagen, form.afectacion_igv);
+          } catch (e) {
+            setEditandoId(idParaImagen);
+            setMensaje({ tipo: 'error', texto: `Producto guardado, pero no se pudo cambiar su IGV (${e.message}).` });
+            cargarTodo();
+            return;
+          }
         }
       }
 
@@ -374,10 +398,15 @@ export default function Inventario({ restaurante = false }) {
   return (
     <div className="inv-layout">
       <div className="inv-header">
-        <h1>Inventario</h1>
-        <button className="inv-boton-nuevo" onClick={abrirNuevo}>
-          + Nuevo producto
-        </button>
+        <h1>{etiquetas.tituloProductos || 'Inventario'}</h1>
+        <div className="inv-header-acciones">
+          <button className="inv-boton-categorias" onClick={() => setVerCategorias(true)}>
+            Categorías e IGV
+          </button>
+          <button className="inv-boton-nuevo" onClick={abrirNuevo}>
+            {etiquetas.nuevoProducto || '+ Nuevo producto'}
+          </button>
+        </div>
       </div>
 
       <div className="inv-filtros">
@@ -460,6 +489,9 @@ export default function Inventario({ restaurante = false }) {
                   <td>
                     {p.nombre}
                     {p.lleva_vencimiento && <span className="inv-badge-vencimiento">vence</span>}
+                    {p.afectacion_igv && p.afectacion_igv !== 'GRAVADO' && (
+                      <span className="inv-badge-sin-igv">{etiquetaAfectacion(p.afectacion_igv)}</span>
+                    )}
                   </td>
                   <td>{p.categoria_nombre || '—'}</td>
                   <td>S/ {p.precio.toFixed(2)}</td>
@@ -501,6 +533,15 @@ export default function Inventario({ restaurante = false }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {verCategorias && (
+        <CategoriasIgv
+          categorias={categorias}
+          esAdmin={esAdmin}
+          onCerrar={() => setVerCategorias(false)}
+          onCambiado={cargarTodo}
+        />
       )}
 
       {mostrarForm && (
@@ -614,6 +655,22 @@ export default function Inventario({ restaurante = false }) {
                 <label>Precio de venta (S/)</label>
                 <input type="number" value={form.precio} onChange={(e) => cambiarCampo('precio', e.target.value)} />
               </div>
+              {esAdmin && (
+                <div className="inv-campo">
+                  <label>IGV de este producto</label>
+                  <select value={form.afectacion_igv} onChange={(e) => cambiarCampo('afectacion_igv', e.target.value)}>
+                    <option value="HEREDAR">
+                      Igual que su categoría (
+                      {etiquetaAfectacion(categorias.find((c) => String(c.id) === form.categoria_id)?.afectacion_igv)})
+                    </option>
+                    {AFECTACIONES.map((a) => (
+                      <option key={a.valor} value={a.valor}>
+                        {a.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="inv-campo">
                 <label>Precio de compra (S/, opcional)</label>
                 <input
@@ -623,7 +680,7 @@ export default function Inventario({ restaurante = false }) {
                 />
               </div>
 
-              {restaurante && (
+              {servicios && (
                 <div className="inv-campo inv-campo-checkbox">
                   <label>
                     <input
@@ -631,19 +688,19 @@ export default function Inventario({ restaurante = false }) {
                       checked={!form.controla_stock}
                       onChange={(e) => cambiarCampo('controla_stock', !e.target.checked)}
                     />
-                    Preparado al momento (café, jugo, plato): se vende sin controlar stock
+                    {etiquetas.sinStock || 'Es un servicio o se vende sin controlar stock (corte, instalación, delivery)'}
                   </label>
                 </div>
               )}
 
-              {!form.lleva_vencimiento && (!restaurante || form.controla_stock) && (
+              {!form.lleva_vencimiento && (!servicios || form.controla_stock) && (
                 <div className="inv-campo">
                   <label>Stock {editandoId ? '' : 'inicial'}</label>
                   <input type="number" value={form.stock} onChange={(e) => cambiarCampo('stock', e.target.value)} />
                 </div>
               )}
 
-              {(!restaurante || form.controla_stock) && (
+              {(!servicios || form.controla_stock) && (
                 <>
                   <div className="inv-campo">
                     <label>Stock mínimo (alerta)</label>
@@ -668,7 +725,7 @@ export default function Inventario({ restaurante = false }) {
               )}
             </div>
 
-            {form.lleva_vencimiento && !editandoId && (!restaurante || form.controla_stock) && (
+            {form.lleva_vencimiento && !editandoId && (!servicios || form.controla_stock) && (
               <div className="inv-lote-caja">
                 <p className="inv-lote-titulo">Primer lote de este producto</p>
                 <p className="inv-lote-nota">

@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { api } from '../../api/api';
 import { montoEnLetras } from '../../utils/numeroALetras';
 import { construirCadenaQrSunat } from '../../utils/qrSunat';
+import { desgloseDeComprobante, etiquetaTasa } from '../../utils/igv';
 import './BoletaPublica.css';
 
 export default function BoletaPublica({ identificador, comprobanteId }) {
@@ -67,7 +68,7 @@ export default function BoletaPublica({ identificador, comprobanteId }) {
   }
 
   const numeroDocumento = datos.serie ? `${datos.serie}-${String(datos.numero).padStart(6, '0')}` : null;
-  const gravada = datos.total - datos.igv;
+  const desglose = desgloseDeComprobante(datos, datos.total);
   const totalUnidades = datos.items.reduce((sum, item) => sum + item.cantidad, 0);
 
   return (
@@ -136,10 +137,22 @@ export default function BoletaPublica({ identificador, comprobanteId }) {
         <div className="bp-linea"></div>
         <div className="bp-fila">
           <span>Op. Gravada</span>
-          <span>S/.{gravada.toFixed(2)}</span>
+          <span>S/.{desglose.gravadas.toFixed(2)}</span>
         </div>
+        {desglose.exoneradas > 0 && (
+          <div className="bp-fila">
+            <span>Op. Exonerada</span>
+            <span>S/.{desglose.exoneradas.toFixed(2)}</span>
+          </div>
+        )}
+        {desglose.inafectas > 0 && (
+          <div className="bp-fila">
+            <span>Op. Inafecta</span>
+            <span>S/.{desglose.inafectas.toFixed(2)}</span>
+          </div>
+        )}
         <div className="bp-fila">
-          <span>IGV (18%)</span>
+          <span>IGV ({etiquetaTasa(desglose.tasa)}%)</span>
           <span>S/.{datos.igv.toFixed(2)}</span>
         </div>
 

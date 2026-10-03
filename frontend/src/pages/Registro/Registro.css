@@ -39,11 +39,24 @@
 }
 
 /* Tipo de negocio (Tienda / Cafetería-Restaurante) */
+.login-form .registro-rubro-titulo {
+  margin: 0 0 -2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #16181d;
+  text-align: left;
+}
+
 .registro-tipos {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-bottom: 4px;
+}
+
+/* Rubros impares: el último ocupa todo el ancho. */
+.registro-tipos .registro-tipo:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 
 .login-form .registro-tipo {

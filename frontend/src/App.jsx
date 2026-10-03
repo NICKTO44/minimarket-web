@@ -24,11 +24,31 @@ import BoletaPublica from './pages/BoletaPublica/BoletaPublica';
 import Mesas from './pages/Mesas/Mesas';
 import Preparacion from './pages/Preparacion/Preparacion';
 import CartaDia from './pages/CartaDia/CartaDia';
+import Cotizaciones from './pages/Cotizaciones/Cotizaciones';
+import Creditos from './pages/Creditos/Creditos';
+import Guias from './pages/Guias/Guias';
 import AvisosListos from './components/AvisosListos';
 import { esCajero, esMesero, esPreparacion, PANTALLAS_MESERO, PANTALLAS_PREPARACION } from './utils/menu';
+import {
+  datosNegocio,
+  MODULO_COTIZACIONES,
+  MODULO_CREDITO,
+  MODULO_GUIAS,
+  MODULO_MEDIDAS,
+  MODULO_MESAS,
+  MODULO_SERVICIOS,
+  rubroDe,
+} from './utils/rubros';
 
 const STORAGE_KEY = 'minimarket_sesion';
 const TIENDA_STORAGE_KEY = 'minimarket_tienda';
+
+// Pantallas que solo existen con su módulo encendido.
+const MODULO_DE_PANTALLA = {
+  COTIZACIONES: MODULO_COTIZACIONES,
+  CREDITOS: MODULO_CREDITO,
+  GUIAS: MODULO_GUIAS,
+};
 
 function App() {
   const [logueado, setLogueado] = useState(false);
@@ -49,6 +69,8 @@ function App() {
   // pedido que se debe abrir en Mesas (al cancelar un cobro o desde un
   // aviso de "listo"). n cambia en cada pedido de apertura.
   const [pedidoACobrar, setPedidoACobrar] = useState(null);
+  // Cotización abierta desde su pantalla para venderla en el punto de venta.
+  const [cotizacionACargar, setCotizacionACargar] = useState(null);
   const [abrirPedido, setAbrirPedido] = useState(null);
   const [pedidosListos, setPedidosListos] = useState(0);
 
@@ -251,7 +273,11 @@ function App() {
 
   // ¿El negocio atiende en mesas? Mientras llega la configuración del
   // servidor se usa lo que dijo el login.
-  const restaurante = (configuracionTienda?.modo_negocio ?? tiendaRecordada?.modo_negocio) === 'RESTAURANTE';
+  // Rubro y módulos del negocio (núcleo universal + módulos encendidos).
+  const negocio = datosNegocio(configuracionTienda ?? tiendaRecordada);
+  const restaurante = negocio.modulos.includes(MODULO_MESAS);
+  // Nombres de pantalla propios del rubro ("Carta" en vez de "Productos").
+  const etiquetas = rubroDe(negocio.rubro).etiquetas;
   // El mesero solo toma pedidos (Mesas) y barra/cocina solo ve
   // Preparación; ambos pueden además armar la Carta de hoy.
   const soloMesas = restaurante && esMesero(usuarioActual);
@@ -266,6 +292,8 @@ function App() {
         : 'MESAS'
       : ['MESAS', 'PREPARACION', 'CARTA'].includes(pantalla) && !restaurante
         ? 'RESUMEN'
+        : MODULO_DE_PANTALLA[pantalla] && !negocio.modulos.includes(MODULO_DE_PANTALLA[pantalla])
+          ? 'RESUMEN'
         : pantalla === 'CARTA' && esCajero(usuarioActual)
           ? 'MESAS'
           : pantalla;
@@ -287,11 +315,12 @@ function App() {
     else setPantalla('MESAS');
   };
 
-  const handleModoNegocioCambiado = (modo) => {
-    setConfiguracionTienda((actual) => (actual ? { ...actual, modo_negocio: modo } : actual));
+  // Configuración cambió el rubro o los módulos: { rubro, modulos, modo_negocio }.
+  const handleNegocioCambiado = (cambio) => {
+    setConfiguracionTienda((actual) => (actual ? { ...actual, ...cambio } : actual));
     setTiendaRecordada((actual) => {
       if (!actual) return actual;
-      const actualizada = { ...actual, modo_negocio: modo };
+      const actualizada = { ...actual, ...cambio };
       localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(actualizada));
       return actualizada;
     });
@@ -302,6 +331,8 @@ function App() {
       <Sidebar
         pantalla={pantallaVisible}
         restaurante={restaurante}
+        etiquetas={etiquetas}
+        modulos={negocio.modulos}
         insignias={{ MESAS: pedidosListos }}
         onCambiarPantalla={setPantalla}
         usuario={usuarioActual}
@@ -336,6 +367,11 @@ function App() {
               telefono={configuracionTienda?.telefono}
               ruc={configuracionTienda?.ruc}
               identificadorNegocio={tiendaRecordada?.identificador}
+              medidas={negocio.modulos.includes(MODULO_MEDIDAS)}
+              cotizaciones={negocio.modulos.includes(MODULO_COTIZACIONES)}
+              credito={negocio.modulos.includes(MODULO_CREDITO)}
+              cotizacionACargar={cotizacionACargar}
+              onCotizacionUsada={() => setCotizacionACargar(null)}
               pedidoACobrar={pedidoACobrar}
               onCancelarCobroPedido={handleCancelarCobroPedido}
               onPedidoCobrado={() => setPedidoACobrar(null)}
@@ -345,11 +381,40 @@ function App() {
         {pantallaVisible === 'RESUMEN' && <Resumen onIrA={setPantalla} />}
         {pantallaVisible === 'CAJA' && <Caja usuario={usuarioActual} />}
         {pantallaVisible === 'HISTORIAL_CAJA' && <HistorialCaja />}
-        {pantallaVisible === 'PRODUCTOS' && <Inventario restaurante={restaurante} />}
+        {pantallaVisible === 'PRODUCTOS' && (
+          <Inventario
+            servicios={negocio.modulos.includes(MODULO_SERVICIOS)}
+            etiquetas={etiquetas}
+            esAdmin={usuarioActual?.rol_id === 1}
+          />
+        )}
         {pantallaVisible === 'STOCK' && <StockLotes />}
         {pantallaVisible === 'PROVEEDORES' && <Proveedores />}
         {pantallaVisible === 'DEVOLUCIONES' && <Devoluciones usuario={usuarioActual} />}
         {pantallaVisible === 'CLIENTES' && <Clientes />}
+        {pantallaVisible === 'COTIZACIONES' && (
+          <Cotizaciones
+            nombreTienda={nombreTienda}
+            direccion={configuracionTienda?.direccion}
+            telefono={configuracionTienda?.telefono}
+            ruc={configuracionTienda?.ruc}
+            onCargarEnVenta={(cotizacion) => {
+              setPedidoACobrar(null);
+              setCotizacionACargar(cotizacion);
+              setPantalla('POS');
+            }}
+            onIrAVender={() => setPantalla('POS')}
+          />
+        )}
+        {pantallaVisible === 'CREDITOS' && (
+          <Creditos
+            nombreTienda={nombreTienda}
+            direccion={configuracionTienda?.direccion}
+            telefono={configuracionTienda?.telefono}
+            ruc={configuracionTienda?.ruc}
+          />
+        )}
+        {pantallaVisible === 'GUIAS' && <Guias esAdmin={usuarioActual?.rol_id === 1} />}
         {pantallaVisible === 'COMPROBANTES' && (
           <Comprobantes
             usuario={usuarioActual}
@@ -372,7 +437,7 @@ function App() {
           <Configuracion
             onIdentidadActualizada={handleIdentidadActualizada}
             usuarioActualId={usuarioActual.id}
-            onModoNegocioCambiado={handleModoNegocioCambiado}
+            onNegocioCambiado={handleNegocioCambiado}
           />
         )}
       </div>
@@ -384,6 +449,8 @@ function App() {
       <NavegacionMovil
         pantalla={pantallaVisible}
         restaurante={restaurante}
+        etiquetas={etiquetas}
+        modulos={negocio.modulos}
         insignias={{ MESAS: pedidosListos }}
         onCambiarPantalla={setPantalla}
         usuario={usuarioActual}
