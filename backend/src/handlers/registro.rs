@@ -340,6 +340,15 @@ async fn registrar_negocio_interno(
             .execute("UPDATE configuracion_tienda SET modo_negocio = 'RESTAURANTE'", ())
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        // Arranca solo con las unidades de restaurante (Plato, Porción...):
+        // sin metros, sacos ni toneladas. Se cambia en Configuración → Unidades.
+        // Si fallara, el registro sigue: el negocio vería las unidades de siempre.
+        let _ = conn_nueva
+            .execute(
+                "UPDATE configuracion_tienda SET unidades_activas = ?1",
+                libsql::params![crate::handlers::unidades::recomendadas_restaurante()],
+            )
+            .await;
         crate::handlers::mesas::sembrar_mesas_iniciales(&conn_nueva)
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;

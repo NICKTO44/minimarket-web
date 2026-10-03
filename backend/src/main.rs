@@ -240,6 +240,8 @@ async fn main() {
         .route("/modificadores", post(handlers::mesas::crear_grupo_modificador))
         .route("/modificadores/:id", axum::routing::put(handlers::mesas::actualizar_grupo_modificador))
         .route("/modificadores/:id/desactivar", post(handlers::mesas::desactivar_grupo_modificador))
+        .route("/unidades", get(handlers::unidades::listar_unidades))
+        .route("/configuracion/unidades", axum::routing::put(handlers::unidades::guardar_unidades))
         .route("/carta-dia", get(handlers::carta::listar_carta))
         .route("/carta-dia", post(handlers::carta::agregar_plato))
         .route("/carta-dia/:id", axum::routing::put(handlers::carta::actualizar_plato))

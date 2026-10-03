@@ -138,7 +138,7 @@ pub async fn agregar_plato(
             .execute(
                 "INSERT INTO productos (codigo, nombre, precio, stock, stock_minimo, unidad_medida, categoria_id,
                                         controla_stock, carta_fecha, agotado)
-                 VALUES (?1, ?2, ?3, 0, 0, 'UNIDAD', ?4, 0, ?5, 0)",
+                 VALUES (?1, ?2, ?3, 0, 0, 'PLATO', ?4, 0, ?5, 0)",
                 libsql::params![codigo, nombre.clone(), precio, categoria_id, hoy.clone()],
             )
             .await;

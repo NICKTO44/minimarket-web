@@ -4,18 +4,11 @@ use std::sync::Arc;
 use crate::tenants::TenantDb;
 use crate::models::producto::*;
 
-/// Unidades de medida soportadas -- vive aquí, no en un CHECK de SQLite,
-/// para que agregar una nueva en el futuro sea solo un cambio de código
-/// + redeploy, sin tocar la estructura de ninguna base de tenant nunca
-/// más.
-const UNIDADES_VALIDAS: &[&str] = &[
-    "UNIDAD", "KG", "GRAMO", "LITRO", "ML", "PAQUETE", "CAJA", "DOCENA",
-    "PAR", "METRO", "GALON", "BOLSA", "ONZA", "LIBRA", "ROLLO", "YARDA",
-    "MILLAR", "JUEGO", "SACO", "TONELADA",
-];
-
+/// Unidades de medida soportadas: el catálogo vive en handlers/unidades.rs
+/// (no en un CHECK de SQLite), para que agregar una nueva sea solo un
+/// cambio de código + redeploy, sin tocar ninguna base de tenant.
 fn unidad_valida(unidad: &str) -> bool {
-    UNIDADES_VALIDAS.contains(&unidad)
+    crate::handlers::unidades::es_valida(unidad)
 }
 
 pub async fn listar_productos(
