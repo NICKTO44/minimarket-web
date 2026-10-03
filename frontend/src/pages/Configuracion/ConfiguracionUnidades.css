@@ -1,0 +1,110 @@
+/* Configuración → Unidades: una casilla por unidad, agrupadas. */
+.uni-acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0 4px;
+}
+
+.uni-boton {
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1.5px solid #e4e6eb;
+  background: #fff;
+  color: #16181d;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.uni-boton-primario {
+  background: var(--color-primario);
+  border-color: var(--color-primario);
+  color: var(--color-sobre-primario, #fff);
+}
+
+.uni-contador {
+  margin-left: auto;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #6b7280;
+}
+
+.uni-grupo {
+  margin-top: 16px;
+}
+
+.uni-grupo h4 {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.uni-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 8px;
+}
+
+.uni-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 7px 10px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: #fff;
+  color: #6b7280;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.uni-check {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  border: 1.5px solid #c9ccd3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.uni-chip.marcada {
+  border-color: var(--color-primario);
+  background: var(--color-primario-suave);
+  color: #16181d;
+}
+
+.uni-chip.marcada .uni-check {
+  background: var(--color-primario);
+  border-color: var(--color-primario);
+}
+
+/* No se puede apagar: "Unidad" y las que ya usan productos. */
+.uni-chip.fija {
+  border-style: dashed;
+  cursor: default;
+}
+
+.uni-texto small {
+  display: block;
+  margin-top: 1px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.uni-pie {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}

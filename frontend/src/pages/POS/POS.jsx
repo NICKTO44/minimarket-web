@@ -9,6 +9,7 @@ import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
 import { ChevronRight, ShoppingCart } from 'lucide-react';
 import { METODOS_OTRO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
 import { tituloPedido } from '../../utils/mesas';
+import { abreviaturaUnidad } from '../../utils/unidades';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -22,22 +23,12 @@ const REGLAS_DOCUMENTO = {
   RUC: { maxLength: 11, soloNumeros: true, label: 'RUC (11 dígitos)' },
 };
 
-// Abreviaturas de unidad para la etiqueta de stock de cada tarjeta
-// (mismas unidades que UNIDADES_VALIDAS en backend/src/handlers/productos.rs).
-const ABREVIATURA_UNIDAD = {
-  UNIDAD: 'und', KG: 'kg', GRAMO: 'g', LITRO: 'L', ML: 'ml', PAQUETE: 'paq',
-  CAJA: 'caja', DOCENA: 'doc', PAR: 'par', METRO: 'm', GALON: 'gal', BOLSA: 'bolsa',
-  ONZA: 'oz', LIBRA: 'lb', ROLLO: 'rollo', YARDA: 'yd', MILLAR: 'mill', JUEGO: 'jgo',
-  SACO: 'saco', TONELADA: 't',
-};
-
 // "26 und", "2.5 kg" -- el stock puede tener decimales (productos por peso).
 function etiquetaStock(producto) {
   const cantidad = Number.isInteger(producto.stock)
     ? producto.stock
     : Number(producto.stock.toFixed(2));
-  const unidad = ABREVIATURA_UNIDAD[producto.unidad_medida] || (producto.unidad_medida || 'und').toLowerCase();
-  return `${cantidad} ${unidad}`;
+  return `${cantidad} ${abreviaturaUnidad(producto.unidad_medida)}`;
 }
 
 const redondear2 = (n) => Math.round(n * 100) / 100;

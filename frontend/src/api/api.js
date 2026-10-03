@@ -185,6 +185,8 @@ export const api = {
   preparacionEntregado: (item_ids) =>
     request('/preparacion/entregado', { method: 'POST', body: JSON.stringify({ item_ids }) }),
   modificadores: () => request('/modificadores'),
+  unidades: () => request('/unidades'),
+  unidadesGuardar: (activas) => request('/configuracion/unidades', { method: 'PUT', body: JSON.stringify({ activas }) }),
   cartaDia: () => request('/carta-dia'),
   cartaAgregar: (nombre, precio) => request('/carta-dia', { method: 'POST', body: JSON.stringify({ nombre, precio }) }),
   cartaActualizar: (id, cambios) => request(`/carta-dia/${id}`, { method: 'PUT', body: JSON.stringify(cambios) }),

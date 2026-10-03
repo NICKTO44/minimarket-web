@@ -4,6 +4,7 @@ import './Inventario.css';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
 import { confirmar } from '../../utils/confirmar';
 import { comprimirImagen } from '../../utils/comprimirImagen';
+import { etiquetaUnidad, opcionesUnidad } from '../../utils/unidades';
 
 const FORM_VACIO = {
   codigo: '',
@@ -23,30 +24,8 @@ const FORM_VACIO = {
 // preparado al momento no tiene stock que reponer).
 const tieneStockBajo = (p) => p.controla_stock !== false && p.stock <= p.stock_minimo;
 
-// Misma lista que UNIDADES_VALIDAS en el backend (src/handlers/productos.rs)
-// -- si se agrega una unidad nueva allá, hay que agregarla aquí también.
-const UNIDADES_MEDIDA = [
-  { valor: 'UNIDAD', label: 'Unidad' },
-  { valor: 'KG', label: 'Kilogramo' },
-  { valor: 'GRAMO', label: 'Gramo' },
-  { valor: 'LITRO', label: 'Litro' },
-  { valor: 'ML', label: 'Mililitro' },
-  { valor: 'PAQUETE', label: 'Paquete' },
-  { valor: 'CAJA', label: 'Caja' },
-  { valor: 'DOCENA', label: 'Docena' },
-  { valor: 'PAR', label: 'Par' },
-  { valor: 'METRO', label: 'Metro' },
-  { valor: 'GALON', label: 'Galón' },
-  { valor: 'BOLSA', label: 'Bolsa' },
-  { valor: 'ONZA', label: 'Onza' },
-  { valor: 'LIBRA', label: 'Libra' },
-  { valor: 'ROLLO', label: 'Rollo' },
-  { valor: 'YARDA', label: 'Yarda' },
-  { valor: 'MILLAR', label: 'Millar' },
-  { valor: 'JUEGO', label: 'Juego' },
-  { valor: 'SACO', label: 'Saco' },
-  { valor: 'TONELADA', label: 'Tonelada' },
-];
+// Las unidades que se ofrecen son las que el negocio activó en
+// Configuración → Unidades (el catálogo completo está en utils/unidades.js).
 
 export default function Inventario({ restaurante = false }) {
   const [productos, setProductos] = useState([]);
@@ -57,6 +36,8 @@ export default function Inventario({ restaurante = false }) {
   // Productos desactivados ("archivados" porque ya tenían ventas o compras):
   // se ven aparte y se pueden reactivar.
   const [desactivados, setDesactivados] = useState([]);
+  // Unidades activas del negocio (null = aún no llegan: se usan las de siempre).
+  const [unidadesActivas, setUnidadesActivas] = useState(null);
   const [verDesactivados, setVerDesactivados] = useState(false);
   const [cargando, setCargando] = useState(true);
 
@@ -98,6 +79,7 @@ export default function Inventario({ restaurante = false }) {
       .finally(() => setCargando(false));
     // Aparte y sin bloquear: si fallara, el inventario igual se muestra.
     api.productosDesactivados().then(setDesactivados).catch(() => setDesactivados([]));
+    api.unidades().then((u) => setUnidadesActivas(u.activas)).catch(() => {});
   };
 
   useEffect(() => {
@@ -490,7 +472,7 @@ export default function Inventario({ restaurante = false }) {
                       </>
                     )}
                   </td>
-                  <td>{p.unidad_medida}</td>
+                  <td>{etiquetaUnidad(p.unidad_medida)}</td>
                   <td>
                     {verDesactivados ? (
                       <button className="inv-boton-reactivar" onClick={() => reactivarProducto(p)}>
@@ -621,7 +603,7 @@ export default function Inventario({ restaurante = false }) {
               <div className="inv-campo">
                 <label>Unidad de medida</label>
                 <select value={form.unidad_medida} onChange={(e) => cambiarCampo('unidad_medida', e.target.value)}>
-                  {UNIDADES_MEDIDA.map((u) => (
+                  {opcionesUnidad(unidadesActivas, form.unidad_medida).map((u) => (
                     <option key={u.valor} value={u.valor}>
                       {u.label}
                     </option>

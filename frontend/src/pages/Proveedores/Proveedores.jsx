@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/api';
+import { opcionesUnidad } from '../../utils/unidades';
 import './Proveedores.css';
 
 
@@ -43,6 +44,7 @@ export default function Proveedores() {
   const [nuevoProdNombre, setNuevoProdNombre] = useState('');
   const [nuevoProdCategoria, setNuevoProdCategoria] = useState('');
   const [nuevoProdUnidad, setNuevoProdUnidad] = useState('UNIDAD');
+  const [unidadesActivas, setUnidadesActivas] = useState(null);
   const [nuevoProdPrecioVenta, setNuevoProdPrecioVenta] = useState('');
   const [nuevoProdLleveVencimiento, setNuevoProdLleveVencimiento] = useState(false);
   const [nuevoProdCantidadCompra, setNuevoProdCantidadCompra] = useState('');
@@ -74,6 +76,8 @@ export default function Proveedores() {
       })
       .catch((e) => setMensaje({ tipo: 'error', texto: e.message }))
       .finally(() => setCargando(false));
+    // Unidades activas del negocio; si fallara se usan las de siempre.
+    api.unidades().then((u) => setUnidadesActivas(u.activas)).catch(() => {});
   };
 
   useEffect(() => {
@@ -579,12 +583,11 @@ export default function Proveedores() {
                   <div className="prov-campo">
                     <label>Unidad</label>
                     <select value={nuevoProdUnidad} onChange={(e) => setNuevoProdUnidad(e.target.value)}>
-                      <option value="UNIDAD">Unidad</option>
-                      <option value="KG">Kilogramo</option>
-                      <option value="GRAMO">Gramo</option>
-                      <option value="LITRO">Litro</option>
-                      <option value="ML">Mililitro</option>
-                      <option value="PAQUETE">Paquete</option>
+                      {opcionesUnidad(unidadesActivas, nuevoProdUnidad).map((u) => (
+                        <option key={u.valor} value={u.valor}>
+                          {u.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

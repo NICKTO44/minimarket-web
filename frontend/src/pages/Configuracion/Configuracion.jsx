@@ -5,6 +5,7 @@ import './Configuracion.css';
 import { confirmar } from '../../utils/confirmar';
 import { Coffee, Store } from 'lucide-react';
 import ConfiguracionRestaurante from './ConfiguracionRestaurante';
+import ConfiguracionUnidades from './ConfiguracionUnidades';
 
 const ROLES = [
   { id: 1, nombre: 'Administrador' },
@@ -244,6 +245,9 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
               Mesas y opciones
             </button>
           )}
+          <button className={vista === 'UNIDADES' ? 'activo' : ''} onClick={() => setVista('UNIDADES')}>
+            Unidades
+          </button>
         </div>
       </div>
 
@@ -281,6 +285,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
       )}
 
       {vista === 'RESTAURANTE' && restaurante && <ConfiguracionRestaurante />}
+      {vista === 'UNIDADES' && <ConfiguracionUnidades restaurante={restaurante} />}
 
       {vista === 'NEGOCIO' && (
         <div className="cfg-card">
