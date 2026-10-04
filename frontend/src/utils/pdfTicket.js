@@ -317,15 +317,23 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
   };
 }
 
-/** Descarga un archivo (bytes o Blob) con ese nombre. */
-export function descargarArchivo(contenidoArchivo, nombre, tipo = 'application/pdf') {
+/**
+ * Descarga un archivo (bytes o Blob) con ese nombre.
+ * nuevaPestana: en celular, para que el navegador no reemplace la pantalla
+ * del sistema por el archivo.
+ */
+export function descargarArchivo(contenidoArchivo, nombre, { tipo = 'application/pdf', nuevaPestana = false } = {}) {
   const blob = contenidoArchivo instanceof Blob ? contenidoArchivo : new Blob([contenidoArchivo], { type: tipo });
   const url = URL.createObjectURL(blob);
   const enlace = document.createElement('a');
   enlace.href = url;
   enlace.download = nombre;
+  if (nuevaPestana) {
+    enlace.target = '_blank';
+    enlace.rel = 'noopener';
+  }
   document.body.appendChild(enlace);
   enlace.click();
   enlace.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  setTimeout(() => URL.revokeObjectURL(url), nuevaPestana ? 60000 : 2000);
 }

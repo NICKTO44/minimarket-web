@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { api } from '../../api/api';
 import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
@@ -19,6 +19,9 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   const [ventaParaImprimir, setVentaParaImprimir] = useState(null);
   // Venta cuyo PDF se está preparando (para no pedirlo dos veces).
   const [exportando, setExportando] = useState(null);
+  // En celular el PDF se abre aquí dentro (no en el navegador): el archivo
+  // que se está viendo, para compartirlo o guardarlo. { archivo, url }
+  const [pdfArchivo, setPdfArchivo] = useState(null);
 
   // --- Visor de PDF embebido (reemplaza al iframe) ---
   const [pdfVisible, setPdfVisible] = useState(null);
@@ -91,9 +94,54 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   }, [pdfVisible]);
 
   const cerrarPdf = () => {
+    if (pdfArchivo) URL.revokeObjectURL(pdfArchivo.url);
+    setPdfArchivo(null);
     setPdfVisible(null);
     setPdfPaginas([]);
     setPdfError(null);
+  };
+
+  // Celular o tableta (pantalla táctil o angosta): ahí una descarga directa
+  // saca al usuario del sistema y no le dice dónde quedó el archivo.
+  const enCelular = () => window.matchMedia('(pointer: coarse), (max-width: 899px)').matches;
+
+  // El PDF ya listo: en computadora se descarga; en celular se abre en esta
+  // misma pantalla, con un botón para compartirlo o guardarlo.
+  const entregarPdf = (contenido, nombre) => {
+    if (!enCelular()) {
+      descargarArchivo(contenido, nombre);
+      return;
+    }
+    const archivo = new File([contenido], nombre, { type: 'application/pdf' });
+    const url = URL.createObjectURL(archivo);
+    setPdfArchivo({ archivo, url });
+    setPdfVisible(url);
+  };
+
+  // ¿Este celular puede abrir su menú de compartir con un archivo?
+  const puedeCompartir = (archivo) => {
+    try {
+      return !!navigator.canShare && navigator.canShare({ files: [archivo] });
+    } catch {
+      return false;
+    }
+  };
+
+  // Menú de compartir del celular: WhatsApp, correo, "Guardar en Archivos"...
+  // Se llama directo desde el toque del botón (el celular lo exige).
+  const compartirPdf = async () => {
+    if (!pdfArchivo) return;
+    const { archivo } = pdfArchivo;
+    if (!puedeCompartir(archivo)) {
+      descargarArchivo(archivo, archivo.name, { nuevaPestana: true });
+      return;
+    }
+    try {
+      await navigator.share({ files: [archivo], title: archivo.name });
+    } catch (e) {
+      // AbortError = la persona cerró el menú sin elegir: no es un error.
+      if (e?.name !== 'AbortError') descargarArchivo(archivo, archivo.name, { nuevaPestana: true });
+    }
   };
 
   // Imprime solo las páginas renderizadas (ver regla @media print en
@@ -215,7 +263,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
       if (comp.tipo === 'FACTURA' && comp.enlace_pdf && comp.id) {
         const respuesta = await fetch(api.comprobantePdfUrl(comp.id));
         if (!respuesta.ok) throw new Error('No se pudo descargar el PDF de la factura. Intenta de nuevo en un momento.');
-        descargarArchivo(await respuesta.blob(), `Factura-${comp.serie}-${String(comp.numero).padStart(6, '0')}.pdf`);
+        entregarPdf(await respuesta.blob(), `Factura-${comp.serie}-${String(comp.numero).padStart(6, '0')}.pdf`);
         return;
       }
       const datos = await datosDelTicket(comp);
@@ -232,7 +280,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         cajero: usuario?.nombre || '',
         fecha: fechaHoraLima(comp.fecha_emision),
       });
-      descargarArchivo(bytes, nombre);
+      entregarPdf(bytes, nombre);
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
     } finally {
@@ -339,7 +387,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         <div className="comp-pdf-modal-overlay">
           <div className="comp-pdf-modal">
             <div className="comp-pdf-modal-header comp-no-imprimir">
-              <h2>Comprobante</h2>
+              <h2>{pdfArchivo ? pdfArchivo.archivo.name : 'Comprobante'}</h2>
               <button
                 type="button"
                 className="comp-pdf-modal-x"
@@ -353,7 +401,16 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
             <div className="comp-pdf-paginas" ref={pdfContenedorRef}>
               {pdfCargando && <p className="comp-pdf-cargando comp-no-imprimir">Cargando vista previa...</p>}
 
-              {pdfError && (
+              {pdfError && pdfArchivo && (
+                <div className="comp-pdf-error comp-no-imprimir">
+                  <p>
+                    Tu PDF está listo, pero este celular no puede mostrar la vista previa. Toca «
+                    {puedeCompartir(pdfArchivo.archivo) ? 'Compartir o guardar' : 'Descargar'}» para enviarlo o guardarlo.
+                  </p>
+                </div>
+              )}
+
+              {pdfError && !pdfArchivo && (
                 <div className="comp-pdf-error comp-no-imprimir">
                   <p>{pdfError}</p>
                   <a href={pdfVisible} target="_blank" rel="noopener noreferrer">
@@ -378,13 +435,19 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
               <button className="comp-pdf-modal-cerrar" onClick={cerrarPdf}>
                 Cerrar
               </button>
-              <button
-                className="comp-pdf-modal-imprimir"
-                onClick={imprimirPdfEmbebido}
-                disabled={pdfCargando || !!pdfError || pdfPaginas.length === 0}
-              >
-                🖨 Imprimir
-              </button>
+              {pdfArchivo ? (
+                <button className="comp-pdf-modal-imprimir" onClick={compartirPdf}>
+                  {puedeCompartir(pdfArchivo.archivo) ? '📤 Compartir o guardar' : '⬇ Descargar'}
+                </button>
+              ) : (
+                <button
+                  className="comp-pdf-modal-imprimir"
+                  onClick={imprimirPdfEmbebido}
+                  disabled={pdfCargando || !!pdfError || pdfPaginas.length === 0}
+                >
+                  🖨 Imprimir
+                </button>
+              )}
             </div>
           </div>
         </div>
