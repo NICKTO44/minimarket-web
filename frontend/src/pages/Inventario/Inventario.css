@@ -674,3 +674,28 @@
   color: #166534;
   font-weight: 700;
 }
+
+/* Módulo "Reporte de ganancias": ayuda bajo el precio de compra y filtro */
+.inv-ayuda-costo {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+.inv-ayuda-costo.falta {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.inv-filtro-sin-precio {
+  border-color: #fcd9a0;
+  color: #92400e;
+}
+
+.inv-filtro-sin-precio.activo {
+  background: #fff7e8;
+  border-color: #b45309;
+  color: #92400e;
+}

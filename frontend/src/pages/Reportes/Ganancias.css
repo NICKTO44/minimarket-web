@@ -1,0 +1,549 @@
+/* Reporte de ganancias (módulo GANANCIAS). Se apoya en Reportes.css. */
+.gan {
+  /* Colores del gráfico: dos series, validadas para daltonismo. */
+  --gan-ganancia: #2a78d6;
+  --gan-costo: #eb6834;
+  --gan-linea: #eceef1;
+  transition: opacity 0.15s;
+}
+
+/* Mientras llega otro mes se conserva lo que había, atenuado (sin saltos). */
+.gan-actualizando {
+  opacity: 0.55;
+}
+
+/* Pestañas Ventas / Ganancias (solo con el módulo encendido) */
+.rep-pestanas {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  border-radius: 10px;
+  background: #e9ebef;
+}
+
+.rep-pestanas button {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.rep-pestanas button.activa {
+  background: white;
+  color: #16181d;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+}
+
+/* Elegir el mes */
+.gan-mes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.gan-mes strong {
+  min-width: 150px;
+  text-align: center;
+  font-size: 16px;
+  color: #16181d;
+}
+
+.gan-mes button {
+  width: 38px;
+  height: 38px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  background: white;
+  font-size: 20px;
+  line-height: 1;
+  color: #16181d;
+  cursor: pointer;
+}
+
+.gan-mes button:disabled {
+  color: #c5c9d0;
+  cursor: default;
+}
+
+.gan-mes .gan-mes-hoy {
+  width: auto;
+  padding: 0 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primario-texto);
+}
+
+/* Aviso: productos sin precio de compra */
+.gan-aviso {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid #fcd9a0;
+  border-radius: 10px;
+  background: #fff7e8;
+}
+
+.gan-aviso p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: #6b4208;
+}
+
+.gan-aviso button {
+  flex-shrink: 0;
+  padding: 9px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #b45309;
+  color: white;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gan-tarjetas {
+  margin-bottom: 14px;
+}
+
+.gan-tarjetas .rep-tarjeta-valor {
+  font-size: 22px;
+}
+
+.gan-cambio {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.gan-cambio.sube {
+  color: #166534;
+}
+
+.gan-cambio.baja {
+  color: #b91c1c;
+}
+
+.gan-notas {
+  margin: 0 0 22px;
+  padding: 0 0 0 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #6b7280;
+}
+
+.gan-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.gan-cabecera h2 {
+  margin: 0;
+}
+
+.gan-leyenda {
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: #4b5563;
+}
+
+.gan-leyenda li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gan-muestra {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.gan-muestra-ganancia {
+  background: var(--gan-ganancia);
+}
+
+.gan-muestra-costo {
+  background: var(--gan-costo);
+}
+
+.gan-tarjeta {
+  background: white;
+  border: 1px solid #e4e6eb;
+  border-radius: 12px;
+}
+
+/* ===== Gráfico de columnas: costo abajo, ganancia arriba ===== */
+.gan-grafico {
+  display: flex;
+  gap: 8px;
+  padding: 28px 16px 12px 12px;
+}
+
+.gan-eje {
+  position: relative;
+  width: 46px;
+  height: 180px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #9ca3af;
+}
+
+.gan-eje span {
+  position: absolute;
+  right: 0;
+  transform: translateY(50%);
+  white-space: nowrap;
+}
+
+.gan-columnas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+}
+
+.gan-lineas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 180px;
+  pointer-events: none;
+}
+
+.gan-lineas i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--gan-linea);
+}
+
+.gan-columna {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.gan-barra {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  border-radius: 6px 6px 0 0;
+}
+
+.gan-columna:hover .gan-barra,
+.gan-columna:focus-visible .gan-barra {
+  background: #f4f5f7;
+}
+
+.gan-columna:focus-visible {
+  outline: 2px solid var(--gan-ganancia);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.gan-segmento {
+  display: block;
+  width: 60%;
+  max-width: 24px;
+  min-height: 2px;
+  flex-shrink: 0;
+}
+
+.gan-segmento-ganancia {
+  background: var(--gan-ganancia);
+  border-radius: 4px 4px 0 0;
+  /* 2px del color del fondo separan los dos tramos */
+  margin-bottom: 2px;
+}
+
+.gan-segmento-costo {
+  background: var(--gan-costo);
+}
+
+/* Si el mes no tuvo ganancia, el tramo de costo es el de arriba. */
+.gan-segmento-costo:first-of-type,
+.gan-etiqueta + .gan-segmento-costo {
+  border-radius: 4px 4px 0 0;
+}
+
+.gan-columna:not(.elegida) .gan-segmento {
+  opacity: 0.55;
+}
+
+.gan-columna:not(.elegida):hover .gan-segmento,
+.gan-columna:not(.elegida):focus-visible .gan-segmento {
+  opacity: 0.85;
+}
+
+.gan-etiqueta {
+  margin-bottom: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #16181d;
+  white-space: nowrap;
+}
+
+.gan-columna-mes {
+  height: 24px;
+  line-height: 24px;
+  font-size: 11.5px;
+  color: #6b7280;
+  border-top: 1px solid #d9dce2;
+  width: 100%;
+  text-align: center;
+}
+
+.gan-columna.elegida .gan-columna-mes {
+  font-weight: 700;
+  color: #16181d;
+}
+
+.gan-globo {
+  position: absolute;
+  bottom: calc(100% - 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #16181d;
+  color: #d5d8de;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.22);
+  pointer-events: none;
+}
+
+.gan-globo.izquierda {
+  left: 0;
+  transform: none;
+}
+
+.gan-globo.derecha {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.gan-globo b {
+  color: white;
+  font-size: 12.5px;
+}
+
+.gan-globo strong {
+  color: white;
+}
+
+.gan-clave {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  margin-right: 2px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+/* Tabla: los mismos 12 meses, con sus números */
+.gan-tabla-meses {
+  border: none;
+  border-top: 1px solid #e4e6eb;
+  border-radius: 0 0 12px 12px;
+}
+
+.gan-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.gan-fuerte {
+  font-weight: 700;
+}
+
+.gan-perdida {
+  color: #b91c1c !important;
+}
+
+.gan-fila-elegida td {
+  background: var(--color-primario-suave);
+}
+
+.gan-enlace-mes {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.gan-enlace-mes:hover {
+  text-decoration: underline;
+}
+
+.gan-marca {
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f1f2f4;
+  color: #6b7280;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.gan-categoria {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+.gan-sin-costo {
+  color: #b45309 !important;
+  font-size: 12.5px !important;
+  font-weight: 600;
+}
+
+.gan-orden {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.gan-orden.activo {
+  color: #16181d;
+}
+
+.gan-conmutador {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: #e9ebef;
+}
+
+.gan-conmutador button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.gan-conmutador button.activo {
+  background: white;
+  color: #16181d;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+}
+
+.gan-pie {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9ca3af;
+}
+
+@media (max-width: 640px) {
+  .rep-pestanas {
+    display: flex;
+  }
+
+  .rep-pestanas button {
+    flex: 1;
+  }
+
+  .gan-mes strong {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .gan-aviso {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .gan-tarjetas {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .gan-tarjetas .rep-tarjeta-destacada {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+
+  .gan-tarjetas .rep-tarjeta-valor {
+    font-size: 19px;
+  }
+
+  .gan-grafico {
+    padding: 26px 10px 10px 6px;
+    gap: 4px;
+  }
+
+  .gan-eje {
+    width: 38px;
+    font-size: 10px;
+  }
+
+  .gan-segmento {
+    width: 70%;
+  }
+
+  .gan-columna-mes {
+    font-size: 10px;
+  }
+}

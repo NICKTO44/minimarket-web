@@ -242,6 +242,10 @@ export const api = {
   reportesVentas: (inicio, fin) => request(`/reportes/ventas?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   reportesProductosVendidos: (inicio, fin) => request(`/reportes/productos-vendidos?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   reportesEstadisticas: (inicio, fin) => request(`/reportes/estadisticas?fecha_inicio=${inicio}&fecha_fin=${fin}`),
+  // Módulo "Reporte de ganancias" (solo administrador). mes: "2026-10".
+  reportesGanancias: (mes) => request(`/reportes/ganancias${mes ? `?mes=${mes}` : ''}`),
+  // Costo promedio de cada producto: [{ producto_id, costo_promedio }]
+  gananciasCostos: () => request('/ganancias/costos'),
   comprobantesListar: (filtros = {}) => {
     const params = new URLSearchParams(filtros).toString();
     return request(`/comprobantes${params ? `?${params}` : ''}`);
@@ -249,6 +253,26 @@ export const api = {
   comprobantePdfUrl: (id) => {
     const token = obtenerToken();
     return `${API_URL}/comprobantes/${id}/pdf${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
+  // XML firmado ('xml') o constancia de SUNAT ('cdr') de un comprobante.
+  // Devuelve el archivo y su extensión: el CDR puede llegar como XML o ZIP.
+  comprobanteArchivo: async (id, cual) => {
+    const token = obtenerToken();
+    const res = await fetch(`${API_URL}/comprobantes/${id}/${cual}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (res.status === 401) {
+      localStorage.removeItem(STORAGE_KEY);
+      window.location.reload();
+      throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
+    }
+    if (!res.ok) {
+      const texto = await res.text().catch(() => '');
+      // Un servidor que aún no tiene esta descarga responde 404 sin texto.
+      throw new Error(texto && texto.length < 200 ? texto : 'No se pudo descargar el archivo. Intenta de nuevo en un momento.');
+    }
+    const tipo = res.headers.get('content-type') || '';
+    return { blob: await res.blob(), extension: tipo.includes('zip') ? 'zip' : 'xml' };
   },
   productoSubirImagen: async (id, archivo) => {
     const token = obtenerToken();

@@ -17,8 +17,13 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   const [filtroEstado, setFiltroEstado] = useState('');
   const [mensaje, setMensaje] = useState(null);
   const [ventaParaImprimir, setVentaParaImprimir] = useState(null);
-  // Venta cuyo PDF se está preparando (para no pedirlo dos veces).
+  // Fila cuyo archivo se está preparando (para no pedirlo dos veces).
   const [exportando, setExportando] = useState(null);
+  // Menú "Descargar" abierto: { comp, opciones, estilo }.
+  const [menuDescarga, setMenuDescarga] = useState(null);
+  // En celular, el XML o el CDR ya listo para compartir o guardar:
+  // { archivo, titulo, nota }
+  const [archivoListo, setArchivoListo] = useState(null);
   // En celular el PDF se abre aquí dentro (no en el navegador): el archivo
   // que se está viendo, para compartirlo o guardarlo. { archivo, url }
   const [pdfArchivo, setPdfArchivo] = useState(null);
@@ -93,6 +98,20 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfVisible]);
 
+  // El menú de descarga se cierra con Escape o si cambia el tamaño de la
+  // ventana (quedaría lejos de su botón).
+  useEffect(() => {
+    if (!menuDescarga) return undefined;
+    const cerrar = () => setMenuDescarga(null);
+    const tecla = (e) => e.key === 'Escape' && cerrar();
+    window.addEventListener('keydown', tecla);
+    window.addEventListener('resize', cerrar);
+    return () => {
+      window.removeEventListener('keydown', tecla);
+      window.removeEventListener('resize', cerrar);
+    };
+  }, [menuDescarga]);
+
   const cerrarPdf = () => {
     if (pdfArchivo) URL.revokeObjectURL(pdfArchivo.url);
     setPdfArchivo(null);
@@ -100,6 +119,9 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     setPdfPaginas([]);
     setPdfError(null);
   };
+
+  // Una venta puede tener boleta y factura: cada una es su propia fila.
+  const claveFila = (comp) => `${comp.venta_id}-${comp.id ?? 0}`;
 
   // Celular o tableta (pantalla táctil o angosta): ahí una descarga directa
   // saca al usuario del sistema y no le dice dónde quedó el archivo.
@@ -129,19 +151,22 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
 
   // Menú de compartir del celular: WhatsApp, correo, "Guardar en Archivos"...
   // Se llama directo desde el toque del botón (el celular lo exige).
-  const compartirPdf = async () => {
-    if (!pdfArchivo) return;
-    const { archivo } = pdfArchivo;
+  // nuevaPestana: solo para el PDF, que el celular abriría encima del sistema.
+  const compartirArchivo = async (archivo, nuevaPestana) => {
     if (!puedeCompartir(archivo)) {
-      descargarArchivo(archivo, archivo.name, { nuevaPestana: true });
+      descargarArchivo(archivo, archivo.name, { nuevaPestana });
       return;
     }
     try {
       await navigator.share({ files: [archivo], title: archivo.name });
     } catch (e) {
       // AbortError = la persona cerró el menú sin elegir: no es un error.
-      if (e?.name !== 'AbortError') descargarArchivo(archivo, archivo.name, { nuevaPestana: true });
+      if (e?.name !== 'AbortError') descargarArchivo(archivo, archivo.name, { nuevaPestana });
     }
+  };
+
+  const compartirPdf = () => {
+    if (pdfArchivo) compartirArchivo(pdfArchivo.archivo, true);
   };
 
   // Imprime solo las páginas renderizadas (ver regla @media print en
@@ -258,7 +283,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   const exportarPdf = async (comp) => {
     if (exportando) return;
     setMensaje(null);
-    setExportando(comp.venta_id);
+    setExportando(claveFila(comp));
     try {
       if (comp.tipo === 'FACTURA' && comp.enlace_pdf && comp.id) {
         const respuesta = await fetch(api.comprobantePdfUrl(comp.id));
@@ -286,6 +311,93 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     } finally {
       setExportando(null);
     }
+  };
+
+  // XML firmado o constancia de SUNAT (CDR), tal como los entrega
+  // FacturaLibre. Llevan el nombre con el que SUNAT identifica al
+  // comprobante: RUC-tipo-serie-número (con "R-" delante en la constancia).
+  const descargarOficial = async (comp, cual) => {
+    if (exportando) return;
+    setMensaje(null);
+    setExportando(claveFila(comp));
+    try {
+      const { blob, extension } = await api.comprobanteArchivo(comp.id, cual);
+      const partes = [comp.ruc_emisor, comp.tipo === 'FACTURA' ? '01' : '03', comp.serie, comp.numero].filter(Boolean);
+      const nombre = `${cual === 'cdr' ? 'R-' : ''}${partes.join('-')}.${extension}`;
+      const tipo = extension === 'zip' ? 'application/zip' : 'application/xml';
+      if (!enCelular()) {
+        descargarArchivo(blob, nombre, { tipo });
+        return;
+      }
+      setArchivoListo({
+        archivo: new File([blob], nombre, { type: tipo }),
+        titulo: cual === 'cdr' ? 'Constancia de SUNAT (CDR)' : 'XML del comprobante',
+        nota:
+          cual === 'cdr'
+            ? 'Es la respuesta de SUNAT que confirma que el comprobante fue aceptado.'
+            : 'Es el archivo firmado que piden los contadores. Se abre con su sistema contable.',
+      });
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    } finally {
+      setExportando(null);
+    }
+  };
+
+  // Lo que se puede descargar de una fila. El PDF siempre; el XML y la
+  // constancia solo de boletas y facturas aceptadas por SUNAT.
+  const opcionesDescarga = (comp) => {
+    const opciones = [
+      {
+        cual: 'pdf',
+        titulo: 'PDF',
+        detalle: comp.tipo === 'NINGUNO' ? 'La nota de venta' : 'Para imprimir o enviar al cliente',
+      },
+    ];
+    // tiene_xml llega con el servidor que ya ofrece estas descargas.
+    if (comp.id && comp.estado === 'ACEPTADO' && comp.tiene_xml !== undefined) {
+      opciones.push({
+        cual: 'xml',
+        titulo: 'XML',
+        detalle: comp.tiene_xml ? 'Archivo firmado, para el contador' : 'No disponible en este comprobante',
+        falta: !comp.tiene_xml,
+      });
+      opciones.push({
+        cual: 'cdr',
+        titulo: 'CDR',
+        detalle: comp.tiene_cdr ? 'Constancia de aceptación de SUNAT' : 'SUNAT todavía no la entrega',
+        falta: !comp.tiene_cdr,
+      });
+    }
+    return opciones;
+  };
+
+  // "Descargar": con una sola opción baja el PDF de frente; con varias abre
+  // el menú pegado al botón (en celular, una hoja desde abajo).
+  const abrirDescarga = (evento, comp) => {
+    const opciones = opcionesDescarga(comp);
+    if (opciones.length === 1) {
+      exportarPdf(comp);
+      return;
+    }
+    const boton = evento.currentTarget.getBoundingClientRect();
+    const alto = 58 * opciones.length + 20;
+    const haciaArriba = boton.bottom + alto + 8 > window.innerHeight && boton.top > alto + 8;
+    setMenuDescarga({
+      comp,
+      opciones,
+      estilo: {
+        right: Math.max(8, window.innerWidth - boton.right),
+        ...(haciaArriba ? { bottom: window.innerHeight - boton.top + 6 } : { top: boton.bottom + 6 }),
+      },
+    });
+  };
+
+  const elegirDescarga = (cual) => {
+    const comp = menuDescarga.comp;
+    setMenuDescarga(null);
+    if (cual === 'pdf') exportarPdf(comp);
+    else descargarOficial(comp, cual);
   };
 
   return (
@@ -328,7 +440,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
             </thead>
             <tbody>
               {comprobantes.map((c) => (
-                <tr key={c.venta_id}>
+                <tr key={claveFila(c)}>
                   <td>
                     {c.tipo === 'NINGUNO' ? (
                       <span className="comp-tipo comp-tipo-ninguno">Nota simple</span>
@@ -359,11 +471,14 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                     </button>
                     <button
                       className="comp-boton-imprimir comp-boton-pdf"
-                      onClick={() => exportarPdf(c)}
-                      disabled={exportando === c.venta_id}
-                      aria-label={`Descargar PDF de la venta ${c.folio_venta}`}
+                      onClick={(e) => abrirDescarga(e, c)}
+                      disabled={exportando === claveFila(c)}
+                      aria-label={`Descargar la venta ${c.folio_venta}`}
+                      aria-haspopup={opcionesDescarga(c).length > 1 ? 'menu' : undefined}
                     >
-                      {exportando === c.venta_id ? 'Preparando…' : '⬇ PDF'}
+                      {exportando === claveFila(c)
+                        ? 'Preparando…'
+                        : `⬇ Descargar${opcionesDescarga(c).length > 1 ? ' ▾' : ''}`}
                     </button>
                     <button className="comp-boton-whatsapp" onClick={() => abrirEnvioWhatsapp(c)}>
                       📲
@@ -380,6 +495,51 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {menuDescarga && (
+        <div className="comp-descarga-fondo" onClick={() => setMenuDescarga(null)}>
+          <div className="comp-descarga-menu" role="menu" style={menuDescarga.estilo} onClick={(e) => e.stopPropagation()}>
+            <p className="comp-descarga-titulo">
+              {menuDescarga.comp.tipo === 'FACTURA' ? 'Factura' : 'Boleta'} {menuDescarga.comp.serie}-
+              {String(menuDescarga.comp.numero).padStart(6, '0')}
+            </p>
+            {menuDescarga.opciones.map((o) => (
+              <button
+                key={o.cual}
+                type="button"
+                role="menuitem"
+                className="comp-descarga-opcion"
+                disabled={o.falta}
+                onClick={() => elegirDescarga(o.cual)}
+              >
+                <strong>{o.titulo}</strong>
+                <span>{o.detalle}</span>
+              </button>
+            ))}
+            <button type="button" className="comp-descarga-cancelar" onClick={() => setMenuDescarga(null)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {archivoListo && (
+        <div className="comp-whatsapp-modal-overlay" onClick={() => setArchivoListo(null)}>
+          <div className="comp-whatsapp-modal comp-archivo-listo" onClick={(e) => e.stopPropagation()}>
+            <h2>{archivoListo.titulo}</h2>
+            <p className="comp-archivo-nombre">{archivoListo.archivo.name}</p>
+            <p className="comp-whatsapp-modal-nota">{archivoListo.nota}</p>
+            <div className="comp-whatsapp-modal-acciones">
+              <button className="comp-whatsapp-modal-cancelar" onClick={() => setArchivoListo(null)}>
+                Cerrar
+              </button>
+              <button className="comp-pdf-modal-imprimir" onClick={() => compartirArchivo(archivoListo.archivo, false)}>
+                {puedeCompartir(archivoListo.archivo) ? '📤 Compartir o guardar' : '⬇ Guardar en el celular'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

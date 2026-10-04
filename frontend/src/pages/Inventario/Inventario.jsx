@@ -29,6 +29,8 @@ const FORM_VACIO = {
 // Stock bajo solo aplica a productos que controlan stock (un café
 // preparado al momento no tiene stock que reponer).
 const tieneStockBajo = (p) => p.controla_stock !== false && p.stock <= p.stock_minimo;
+// Para el reporte de ganancias: productos con stock que no dicen cuánto costaron.
+const sinPrecioCompra = (p) => p.controla_stock !== false && !(p.precio_compra > 0);
 
 // Un modelo (módulo "Tallas y colores"): una fila con el resumen y, al
 // desplegarla, una fila por cada talla y color con su código, precio y stock.
@@ -97,12 +99,27 @@ function FilasModelo({ grupo, abierto, onAlternar, onEditar }) {
 // variantes: el negocio tiene el módulo "Tallas y colores" (ropa y calzado):
 // los productos de un mismo modelo se muestran juntos y se crean de una vez.
 // Apagado, esta pantalla es la de siempre.
-export default function Inventario({ servicios = false, etiquetas = {}, esAdmin = false, variantes = false }) {
+// ganancias: el negocio tiene el módulo "Reporte de ganancias": el precio de
+// compra pasa a ser obligatorio y se muestra el costo promedio. Apagado, el
+// precio de compra sigue siendo opcional, como siempre.
+// verSinPrecio: abrir ya filtrado por "sin precio de compra" (desde Reportes).
+export default function Inventario({
+  servicios = false,
+  etiquetas = {},
+  esAdmin = false,
+  variantes = false,
+  ganancias = false,
+  verSinPrecio = false,
+  onSinPrecioVisto,
+}) {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
   const [soloStockBajo, setSoloStockBajo] = useState(false);
+  const [soloSinPrecio, setSoloSinPrecio] = useState(ganancias && verSinPrecio);
+  // Costo promedio de cada producto (módulo de ganancias): { id: costo }
+  const [costos, setCostos] = useState({});
   // Productos desactivados ("archivados" porque ya tenían ventas o compras):
   // se ven aparte y se pueden reactivar.
   const [desactivados, setDesactivados] = useState([]);
@@ -155,10 +172,19 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
     // Aparte y sin bloquear: si fallara, el inventario igual se muestra.
     api.productosDesactivados().then(setDesactivados).catch(() => setDesactivados([]));
     api.unidades().then((u) => setUnidadesActivas(u.activas)).catch(() => {});
+    if (ganancias) {
+      api
+        .gananciasCostos()
+        .then((lista) => setCostos(Object.fromEntries(lista.map((c) => [c.producto_id, c.costo_promedio]))))
+        .catch(() => {});
+    }
   };
 
   useEffect(() => {
     cargarTodo();
+    // El pedido de abrir filtrado ya se atendió: la próxima vez se abre normal.
+    if (verSinPrecio) onSinPrecioVisto?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const productosFiltrados = useMemo(() => {
@@ -173,8 +199,11 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
     if (soloStockBajo && !verDesactivados) {
       lista = lista.filter(tieneStockBajo);
     }
+    if (soloSinPrecio && !verDesactivados) {
+      lista = lista.filter(sinPrecioCompra);
+    }
     return lista;
-  }, [productos, desactivados, verDesactivados, busqueda, filtroCategoria, soloStockBajo]);
+  }, [productos, desactivados, verDesactivados, busqueda, filtroCategoria, soloStockBajo, soloSinPrecio]);
 
   // Con tallas y colores, las tallas de un modelo van en una sola fila.
   const filasTabla = useMemo(
@@ -351,6 +380,15 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
     // Preparado al momento (cafetería): no pide stock.
     const sinControlStock = servicios && !form.controla_stock;
 
+    // Reporte de ganancias encendido: el precio de compra es obligatorio.
+    if (ganancias && !sinControlStock && !(parseFloat(form.precio_compra) > 0)) {
+      setMensaje({
+        tipo: 'error',
+        texto: 'Falta el precio de compra: con el reporte de ganancias activo es obligatorio (lo que te cuesta, con IGV).',
+      });
+      return;
+    }
+
     if (sinControlStock) {
       // nada que validar
     } else if (!form.lleva_vencimiento) {
@@ -481,6 +519,40 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
   };
 
   const stockBajoCantidad = productos.filter(tieneStockBajo).length;
+  const sinPrecioCantidad = ganancias ? productos.filter(sinPrecioCompra).length : 0;
+
+  // Reporte de ganancias: qué pasará con el costo del producto al guardar.
+  const ayudaCosto = (() => {
+    if (!ganancias || !mostrarForm) return null;
+    if (servicios && !form.controla_stock) return { texto: 'En un servicio o producto sin stock el precio de compra es opcional.' };
+    const precio = parseFloat(form.precio_compra);
+    if (!(precio > 0)) {
+      return { falta: true, texto: 'Obligatorio: lo que te cuesta cada unidad, con IGV. Sin él no se puede calcular tu ganancia.' };
+    }
+    const actual = editandoId ? productos.find((p) => p.id === editandoId) : null;
+    if (!actual) {
+      return { texto: form.lleva_vencimiento ? 'Los lotes que agregues entran a este precio.' : 'El stock inicial entra a este precio.' };
+    }
+    const costoHoy = costos[actual.id] ?? (actual.precio_compra > 0 ? actual.precio_compra : null);
+    const stockNuevo = parseFloat(form.stock);
+    if (!form.lleva_vencimiento && stockNuevo > actual.stock + 1e-9) {
+      const entran = stockNuevo - actual.stock;
+      const habia = Math.max(actual.stock, 0);
+      const promedio = habia > 0 && costoHoy > 0 ? (habia * costoHoy + entran * precio) / (habia + entran) : precio;
+      return {
+        texto: `Entran ${+entran.toFixed(3)} a S/ ${precio.toFixed(2)} cada una. Revisa que sea lo que pagaste: el costo promedio quedará en S/ ${promedio.toFixed(2)}.`,
+      };
+    }
+    if (Math.abs(precio - (actual.precio_compra || 0)) > 0.005) {
+      return {
+        texto: `Cambias el precio de compra sin que entre mercadería: se toma como corrección y el costo pasa a S/ ${precio.toFixed(2)}.`,
+      };
+    }
+    if (costoHoy && Math.abs(costoHoy - precio) > 0.005) {
+      return { texto: `Costo promedio de lo que tienes en la tienda: S/ ${costoHoy.toFixed(2)}.` };
+    }
+    return null;
+  })();
 
   return (
     <div className="inv-layout">
@@ -534,6 +606,14 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
             onClick={() => setSoloStockBajo((v) => !v)}
           >
             ⚠ Stock bajo {stockBajoCantidad > 0 && `(${stockBajoCantidad})`}
+          </button>
+        )}
+        {!verDesactivados && (sinPrecioCantidad > 0 || soloSinPrecio) && (
+          <button
+            className={`inv-filtro-stock inv-filtro-sin-precio ${soloSinPrecio ? 'activo' : ''}`}
+            onClick={() => setSoloSinPrecio((v) => !v)}
+          >
+            Sin precio de compra ({sinPrecioCantidad})
           </button>
         )}
         {(desactivados.length > 0 || verDesactivados) && (
@@ -789,12 +869,13 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
                 </div>
               )}
               <div className="inv-campo">
-                <label>Precio de compra (S/, opcional)</label>
+                <label>{ganancias ? 'Precio de compra (S/, con IGV)' : 'Precio de compra (S/, opcional)'}</label>
                 <input
                   type="number"
                   value={form.precio_compra}
                   onChange={(e) => cambiarCampo('precio_compra', e.target.value)}
                 />
+                {ayudaCosto && <small className={`inv-ayuda-costo${ayudaCosto.falta ? ' falta' : ''}`}>{ayudaCosto.texto}</small>}
               </div>
 
               {servicios && (
@@ -938,6 +1019,7 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
       {modeloForm && (
         <FormularioModelo
           grupo={modeloForm.grupo}
+          ganancias={ganancias}
           categorias={categorias}
           unidadesActivas={unidadesActivas}
           onCerrar={() => setModeloForm(null)}

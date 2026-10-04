@@ -22,3 +22,12 @@ export function fechaHoraLima(texto) {
   const fecha = new Date(conZona ? t : `${t.replace(' ', 'T')}Z`);
   return Number.isNaN(fecha.getTime()) ? t : fecha.toLocaleString('es-PE', { timeZone: 'America/Lima' });
 }
+
+/**
+ * La fecha de hoy en Perú ("2026-10-04"), más o menos N días. Perú es UTC-5
+ * todo el año. No se usa la fecha del navegador en UTC: a las 8 p. m. en
+ * Perú ya sería "mañana".
+ */
+export function hoyLima(dias = 0) {
+  return new Date(Date.now() - 5 * 3600 * 1000 + dias * 86400 * 1000).toISOString().slice(0, 10);
+}

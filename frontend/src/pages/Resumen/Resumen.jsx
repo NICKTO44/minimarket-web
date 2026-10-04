@@ -9,9 +9,11 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { api } from '../../api/api';
+import { hoyLima } from '../../utils/formato';
 import './Resumen.css';
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+// El día de hoy en Perú (el servidor corta los reportes en esa hora).
+const hoy = () => hoyLima();
 
 export default function Resumen({ onIrA }) {
   const [caja, setCaja] = useState(null);

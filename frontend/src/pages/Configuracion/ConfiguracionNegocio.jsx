@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../../api/api';
 import { confirmar } from '../../utils/confirmar';
-import { MODULO_MESAS, MODULOS, RUBROS, rubroDe } from '../../utils/rubros';
+import { MODULO_GANANCIAS, MODULO_MESAS, MODULOS, RUBROS, rubroDe } from '../../utils/rubros';
 import './ConfiguracionNegocio.css';
 
 function nombresModulos(valores) {
@@ -44,7 +44,9 @@ export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMen
       textoConfirmar: 'Cambiar rubro',
       icono: 'aviso',
     });
-    if (ok) guardar(nuevo.valor, nuevo.modulos, `Rubro cambiado a ${nuevo.label}.`);
+    // El reporte de ganancias no depende del rubro: si estaba encendido, sigue.
+    const conservados = modulos.filter((m) => m === MODULO_GANANCIAS);
+    if (ok) guardar(nuevo.valor, [...nuevo.modulos, ...conservados], `Rubro cambiado a ${nuevo.label}.`);
   };
 
   const alternarModulo = async (modulo) => {
@@ -57,6 +59,31 @@ export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMen
           ? 'Se agrega "Mesas" al menú, los roles Mesero y Barra/Cocina, la carta de hoy y las opciones de productos. Tus ventas, caja e inventario siguen igual. Si no hay mesas, se crean 6 de ejemplo.'
           : 'Se ocultan Mesas, Preparación, la carta de hoy y las opciones de productos. No se borra nada: si lo vuelves a activar, todo sigue ahí.',
         textoConfirmar: encender ? 'Activar' : 'Desactivar',
+        icono: 'aviso',
+      });
+      if (!ok) return;
+    }
+    if (modulo.valor === MODULO_GANANCIAS) {
+      let mensaje =
+        'Se oculta el reporte de ganancias y el precio de compra vuelve a ser opcional. No se borra nada: si lo activas de nuevo, lo ya registrado sigue ahí.';
+      if (encender) {
+        // Cuántos productos habrá que completar (si no se puede contar, se avisa igual).
+        const faltan = await api
+          .productos()
+          .then((lista) => lista.filter((p) => !p.carta_dia && p.controla_stock !== false && !(p.precio_compra > 0)).length)
+          .catch(() => null);
+        mensaje =
+          'Al activar esta opción es obligatorio colocar el precio de compra de cada producto (lo que te cuesta, con IGV) para tener un reporte detallado. Desde ahora no se podrá guardar un producto sin ese precio, y cada venta guardará cuánto costó lo vendido.' +
+          (faltan > 0
+            ? ` Hoy tienes ${faltan} producto${faltan === 1 ? '' : 's'} sin precio de compra: los verás en Productos, en el filtro "Sin precio de compra".`
+            : '') +
+          ' El reporte aparece en Reportes → Ganancias y solo lo ve el administrador.';
+      }
+      const ok = await confirmar({
+        titulo: encender ? '¿Activar el reporte de ganancias?' : '¿Desactivar el reporte de ganancias?',
+        mensaje,
+        textoConfirmar: encender ? 'Activar' : 'Desactivar',
+        tipo: 'normal',
         icono: 'aviso',
       });
       if (!ok) return;

@@ -30,7 +30,17 @@ function filasDe(grupo) {
   return filas;
 }
 
-export default function FormularioModelo({ grupo = null, categorias, unidadesActivas, onCerrar, onGuardado, onQuitarVariante, onCategorias }) {
+// ganancias: con el módulo "Reporte de ganancias" el precio de compra es obligatorio.
+export default function FormularioModelo({
+  grupo = null,
+  categorias,
+  unidadesActivas,
+  onCerrar,
+  onGuardado,
+  onQuitarVariante,
+  onCategorias,
+  ganancias = false,
+}) {
   const editando = !!grupo;
   // Categorías: se puede crear una nueva sin salir de este formulario.
   const [listaCategorias, setListaCategorias] = useState(categorias);
@@ -242,6 +252,12 @@ export default function FormularioModelo({ grupo = null, categorias, unidadesAct
     setMensaje(null);
     if (!nombre.trim()) return setMensaje({ tipo: 'error', texto: 'Escribe el nombre del modelo (por ejemplo: Polo básico).' });
     if (!categoriaId) return setMensaje({ tipo: 'error', texto: 'Elige la categoría.' });
+    if (ganancias && !(aNumero(precioCompra) > 0)) {
+      return setMensaje({
+        tipo: 'error',
+        texto: 'Falta el precio de compra: con el reporte de ganancias activo es obligatorio (lo que te cuesta, con IGV).',
+      });
+    }
     if (incluidas.length === 0) {
       return setMensaje({
         tipo: 'error',
@@ -398,8 +414,15 @@ export default function FormularioModelo({ grupo = null, categorias, unidadesAct
             </select>
           </div>
           <div className="inv-campo">
-            <label>Precio de compra (S/, opcional)</label>
+            <label>{ganancias ? 'Precio de compra (S/, con IGV)' : 'Precio de compra (S/, opcional)'}</label>
             <input type="number" inputMode="decimal" value={precioCompra} onChange={(e) => setPrecioCompra(e.target.value)} />
+            {ganancias && (
+              <small className={`inv-ayuda-costo${aNumero(precioCompra) > 0 ? '' : ' falta'}`}>
+                {aNumero(precioCompra) > 0
+                  ? 'Vale para todas las tallas. Si a una talla le subes el stock, lo que entra se promedia a este precio.'
+                  : 'Obligatorio: lo que te cuesta cada prenda, con IGV. Sin él no se puede calcular tu ganancia.'}
+              </small>
+            )}
           </div>
           <div className="inv-campo">
             <label>Avisar cuando queden (por talla)</label>

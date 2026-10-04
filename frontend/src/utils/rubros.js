@@ -16,6 +16,8 @@ export const MODULO_CREDITO = 'CREDITO';
 export const MODULO_GUIAS = 'GUIAS';
 export const MODULO_VARIANTES = 'VARIANTES';
 export const MODULO_CAMBIOS = 'CAMBIOS';
+// No pertenece a ningún rubro: viene apagado y lo enciende quien lo quiera.
+export const MODULO_GANANCIAS = 'GANANCIAS';
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -63,6 +65,12 @@ export const MODULOS = [
     valor: MODULO_CAMBIOS,
     label: 'Cambio de prenda',
     descripcion: 'El cliente devuelve una prenda y se lleva otra en la misma operación; solo se cobra o se devuelve la diferencia.',
+  },
+  {
+    valor: MODULO_GANANCIAS,
+    label: 'Reporte de ganancias',
+    descripcion:
+      'Cuánto ganaste cada mes: lo que vendiste contra lo que te costó, con comparativa entre meses. Al activarlo, el precio de compra es obligatorio en cada producto.',
   },
 ];
 

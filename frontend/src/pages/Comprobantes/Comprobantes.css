@@ -447,3 +447,147 @@
   flex-shrink: 0;
   margin-left: 10px;
 }
+
+/* ===== Menú "Descargar": PDF, XML y constancia de SUNAT (CDR) =====
+   Va fijo en la pantalla, pegado a su botón (la tabla tiene su propio
+   deslizamiento y lo cortaría). En celular es una hoja desde abajo. */
+.comp-descarga-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 420;
+}
+
+.comp-descarga-menu {
+  position: fixed;
+  width: 268px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  box-sizing: border-box;
+  background: white;
+  border: 1px solid #e4e6eb;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.18);
+}
+
+.comp-descarga-titulo,
+.comp-descarga-cancelar {
+  display: none;
+}
+
+.comp-descarga-opcion {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.comp-descarga-opcion:hover:not(:disabled),
+.comp-descarga-opcion:focus-visible {
+  background: #f4f5f7;
+  outline: none;
+}
+
+.comp-descarga-opcion strong {
+  display: block;
+  font-size: 14px;
+  color: #16181d;
+}
+
+.comp-descarga-opcion span {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.35;
+}
+
+.comp-descarga-opcion:disabled {
+  cursor: default;
+}
+
+.comp-descarga-opcion:disabled strong {
+  color: #9ca3af;
+}
+
+.comp-descarga-opcion:disabled span {
+  color: #b45309;
+}
+
+/* XML o CDR listo en el celular */
+.comp-archivo-nombre {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #f4f5f7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: #16181d;
+  overflow-wrap: anywhere;
+}
+
+/* Los avisos se ven aunque la lista esté deslizada hacia abajo */
+.comp-mensaje {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+@media (max-width: 640px) {
+  .comp-descarga-fondo {
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .comp-descarga-menu {
+    top: auto !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0;
+    width: auto;
+    max-width: none;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+    border: none;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .comp-descarga-titulo {
+    display: block;
+    margin: 2px 4px 10px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #16181d;
+  }
+
+  .comp-descarga-opcion {
+    padding: 13px 14px;
+    margin-bottom: 8px;
+    border: 1.5px solid #e4e6eb;
+    border-radius: 10px;
+  }
+
+  .comp-descarga-opcion strong {
+    font-size: 15px;
+  }
+
+  .comp-descarga-opcion span {
+    font-size: 13px;
+  }
+
+  .comp-descarga-cancelar {
+    display: block;
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 10px;
+    background: #f1f2f4;
+    color: #4b5563;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+}

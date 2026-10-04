@@ -38,7 +38,7 @@ import {
   MODULO_MEDIDAS,
   MODULO_MESAS,
   MODULO_SERVICIOS,
-  MODULO_VARIANTES,
+  MODULO_GANANCIAS, MODULO_VARIANTES,
   rubroDe,
 } from './utils/rubros';
 
@@ -56,6 +56,8 @@ function App() {
   const [logueado, setLogueado] = useState(false);
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [pantalla, setPantalla] = useState('RESUMEN');
+  // Reportes → Ganancias pide abrir Productos ya filtrado por "sin precio de compra".
+  const [productosSinPrecio, setProductosSinPrecio] = useState(false);
   const [configuracionTienda, setConfiguracionTienda] = useState(null);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
   const [vistaAuth, setVistaAuth] = useState('login');
@@ -396,6 +398,9 @@ function App() {
             etiquetas={etiquetas}
             esAdmin={usuarioActual?.rol_id === 1}
             variantes={negocio.modulos.includes(MODULO_VARIANTES)}
+            ganancias={negocio.modulos.includes(MODULO_GANANCIAS)}
+            verSinPrecio={productosSinPrecio}
+            onSinPrecioVisto={() => setProductosSinPrecio(false)}
           />
         )}
         {pantallaVisible === 'STOCK' && <StockLotes />}
@@ -446,7 +451,15 @@ function App() {
             identificadorNegocio={tiendaRecordada?.identificador}
           />
         )}
-        {pantallaVisible === 'REPORTES' && <Reportes />}
+        {pantallaVisible === 'REPORTES' && (
+          <Reportes
+            ganancias={negocio.modulos.includes(MODULO_GANANCIAS) && usuarioActual?.rol_id === 1}
+            onVerSinPrecio={() => {
+              setProductosSinPrecio(true);
+              setPantalla('PRODUCTOS');
+            }}
+          />
+        )}
         {pantallaVisible === 'SUSCRIPCION' && usuarioActual?.rol_id === 1 && (
           <Suscripcion
             estadoSuscripcion={estadoSuscripcion}

@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { api } from '../../api/api';
 import './Reportes.css';
 import { describirPago } from '../../utils/metodoPago';
+import { fechaHoraLima, hoyLima } from '../../utils/formato';
+import Ganancias from './Ganancias';
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+// El día de hoy en Perú (el servidor corta los reportes en esa hora).
+const hoy = () => hoyLima();
 
 const RANGOS_RAPIDOS = [
   { label: 'Hoy', dias: 0 },
@@ -11,7 +14,10 @@ const RANGOS_RAPIDOS = [
   { label: '30 días', dias: 29 },
 ];
 
-export default function Reportes() {
+// ganancias: el negocio tiene encendido el módulo "Reporte de ganancias" y
+// quien mira es el administrador. Sin eso, esta pantalla es la de siempre.
+export default function Reportes({ ganancias = false, onVerSinPrecio }) {
+  const [pestana, setPestana] = useState('VENTAS');
   const [fechaInicio, setFechaInicio] = useState(hoy());
   const [fechaFin, setFechaFin] = useState(hoy());
   const [estadisticas, setEstadisticas] = useState(null);
@@ -43,12 +49,41 @@ export default function Reportes() {
   }, [fechaInicio, fechaFin]);
 
   const aplicarRangoRapido = (dias) => {
-    const fin = new Date();
-    const inicio = new Date();
-    inicio.setDate(inicio.getDate() - dias);
-    setFechaInicio(inicio.toISOString().slice(0, 10));
-    setFechaFin(fin.toISOString().slice(0, 10));
+    setFechaInicio(hoyLima(-dias));
+    setFechaFin(hoyLima());
   };
+
+  const pestanas = ganancias && (
+    <div className="rep-pestanas" role="tablist" aria-label="Tipo de reporte">
+      {[
+        ['VENTAS', 'Ventas'],
+        ['GANANCIAS', 'Ganancias'],
+      ].map(([valor, texto]) => (
+        <button
+          key={valor}
+          type="button"
+          role="tab"
+          aria-selected={pestana === valor}
+          className={pestana === valor ? 'activa' : ''}
+          onClick={() => setPestana(valor)}
+        >
+          {texto}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (ganancias && pestana === 'GANANCIAS') {
+    return (
+      <div className="rep-layout">
+        <div className="rep-header">
+          <h1>Reportes</h1>
+        </div>
+        {pestanas}
+        <Ganancias onVerSinPrecio={onVerSinPrecio} />
+      </div>
+    );
+  }
 
   return (
     <div className="rep-layout">
@@ -62,6 +97,8 @@ export default function Reportes() {
           ))}
         </div>
       </div>
+
+      {pestanas}
 
       <div className="rep-fechas">
         <div className="rep-campo-fecha">
@@ -152,7 +189,7 @@ export default function Reportes() {
                   {ventas.map((v) => (
                     <tr key={v.id}>
                       <td>{v.folio}</td>
-                      <td>{new Date(v.fecha_hora).toLocaleString('es-PE')}</td>
+                      <td>{fechaHoraLima(v.fecha_hora)}</td>
                       <td>{v.cajero}</td>
                       <td>{describirPago(v)}</td>
                       <td>
