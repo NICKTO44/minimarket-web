@@ -2,6 +2,7 @@ use axum::{extract::{Extension, Path, Query}, Json, http::StatusCode};
 use std::sync::Arc;
 use serde::Deserialize;
 
+use crate::handlers::ganancias;
 use crate::tenants::TenantDb;
 use crate::models::lote::{Lote, NuevoLote, LoteAlerta, LoteAccionResponse};
 
@@ -11,6 +12,15 @@ pub async fn agregar_lote(
 ) -> Result<Json<Lote>, StatusCode> {
     let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Reporte de ganancias encendido: el lote es mercadería que entra al
+    // precio de compra del producto. Apagado, nada de esto se ejecuta.
+    let donde_ganancias = ganancias::Donde::Producto(payload.producto_id);
+    let antes_ganancias = if ganancias::activo(&conn).await {
+        Some(ganancias::foto(&conn, &donde_ganancias).await)
+    } else {
+        None
+    };
+
     conn.execute(
         "INSERT INTO lotes_producto (producto_id, cantidad, fecha_vencimiento, numero_lote) VALUES (?1, ?2, ?3, ?4)",
         libsql::params![payload.producto_id, payload.cantidad, payload.fecha_vencimiento.clone(), payload.numero_lote.clone()],
@@ -19,6 +29,10 @@ pub async fn agregar_lote(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let id = conn.last_insert_rowid();
+
+    if let Some(antes) = &antes_ganancias {
+        ganancias::conciliar(&conn, antes, &donde_ganancias, "LOTE", Some(id), false).await;
+    }
 
     Ok(Json(Lote {
         id,

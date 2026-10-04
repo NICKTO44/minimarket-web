@@ -198,20 +198,32 @@ pub async fn procesar_venta(
     // cobra (admin o cajero) vende en ella, la haya abierto quien la haya
     // abierto. Es la misma regla de los triggers de caja (migración 0004):
     // primero la caja propia; si no, la abierta.
-    let (rol, caja_abierta, tasa_igv): (Option<String>, Option<i64>, Option<f64>) = {
-        let mut filas = conn
-            .query(
-                "SELECT (SELECT nombre FROM roles WHERE id = ?1),
+    //
+    // De paso se leen los módulos del negocio, solo para saber si tiene
+    // encendido el reporte de ganancias (ahí la venta guarda además el costo
+    // de cada producto). Si la base no tuviera esa columna, se lee como
+    // siempre y la venta sigue igual.
+    const PREVIO: &str = "SELECT (SELECT nombre FROM roles WHERE id = ?1),
                         (SELECT id FROM cajas WHERE estado = 'ABIERTA'
                           ORDER BY (usuario_id = ?2) DESC, id DESC LIMIT 1),
-                        (SELECT CAST(iva_porcentaje AS REAL) FROM configuracion_tienda LIMIT 1)",
-                libsql::params![claims.rol_id, usuario_id],
-            )
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+                        (SELECT CAST(iva_porcentaje AS REAL) FROM configuracion_tienda LIMIT 1)";
+    let (rol, caja_abierta, tasa_igv, con_ganancias): (Option<String>, Option<i64>, Option<f64>, bool) = {
+        let con_modulos = format!("{}, (SELECT modulos FROM configuracion_tienda LIMIT 1)", PREVIO);
+        let mut filas = match conn.query(&con_modulos, libsql::params![claims.rol_id, usuario_id]).await {
+            Ok(filas) => filas,
+            Err(_) => conn
+                .query(PREVIO, libsql::params![claims.rol_id, usuario_id])
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
+        };
         match filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-            Some(f) => (f.get::<String>(0).ok(), f.get::<i64>(1).ok(), f.get::<f64>(2).ok()),
-            None => (None, None, None),
+            Some(f) => (
+                f.get::<String>(0).ok(),
+                f.get::<i64>(1).ok(),
+                f.get::<f64>(2).ok(),
+                f.get::<String>(3).map(|m| crate::handlers::ganancias::encendido_en(&m)).unwrap_or(false),
+            ),
+            None => (None, None, None, false),
         }
     };
 
@@ -495,6 +507,13 @@ pub async fn procesar_venta(
             //     son gravadas, exoneradas o inafectas). No puede hacer fallar la venta.
             //     La tasa ya se leyó en la primera consulta.
             crate::handlers::igv::congelar_con_tasa(&conn, venta_id, crate::logica::igv::tasa_valida(tasa_igv)).await;
+
+            // 6b-2. Reporte de ganancias (solo si el negocio lo tiene encendido):
+            //     queda guardado lo que costaba cada producto al venderlo. No
+            //     puede hacer fallar la venta.
+            if con_ganancias {
+                crate::handlers::ganancias::congelar_costo(&conn, venta_id).await;
+            }
 
             // 6c. Venta al crédito: se abre la cuenta por cobrar y, si el cliente
             //     dejó un adelanto, entra como su primer abono.

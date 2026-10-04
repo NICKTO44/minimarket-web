@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use crate::handlers::ganancias;
 use crate::handlers::productos::unidad_valida;
 use crate::handlers::rubros::{exigir_modulo, MODULO_VARIANTES};
 use crate::tenants::TenantDb;
@@ -382,6 +383,11 @@ pub async fn crear_modelo(
     }
     let conn = tenant.0.connect().map_err(e500)?;
     exigir_modulo(&conn, MODULO_VARIANTES, NOMBRE_MODULO).await?;
+    // Reporte de ganancias encendido: el precio de compra es obligatorio.
+    let con_ganancias = ganancias::activo(&conn).await;
+    if con_ganancias {
+        ganancias::exigir_precio(true, Some(modelo.precio_compra))?;
+    }
     revisar_modelo(&conn, &modelo.nombre, payload.categoria_id, 0).await?;
     revisar_codigos(&conn, &modelo.variantes).await?;
 
@@ -394,6 +400,9 @@ pub async fn crear_modelo(
     };
     completar_codigos(&conn, modelo_id, &mut modelo.variantes).await?;
     insertar_nuevas(&conn, modelo_id, &modelo, payload.categoria_id).await?;
+    if con_ganancias {
+        ganancias::conciliar(&conn, &ganancias::Foto::new(), &ganancias::Donde::Modelo(modelo_id), "MODELO", None, true).await;
+    }
     guardado(&conn, modelo_id, modelo.nombre).await
 }
 
@@ -448,6 +457,15 @@ pub async fn actualizar_modelo(
     revisar_modelo(&conn, &modelo.nombre, payload.categoria_id, modelo_id).await?;
     revisar_codigos(&conn, &modelo.variantes).await?;
 
+    // Reporte de ganancias encendido: precio de compra obligatorio, y se
+    // anota cómo estaba cada talla para recalcular su costo promedio.
+    let antes_ganancias = if ganancias::activo(&conn).await {
+        ganancias::exigir_precio(true, Some(modelo.precio_compra))?;
+        Some(ganancias::foto(&conn, &ganancias::Donde::Modelo(modelo_id)).await)
+    } else {
+        None
+    };
+
     // Solo se escribe lo que cambió en cada talla (un viaje por cada una).
     for v in &modelo.variantes {
         let Some(id) = v.id else { continue };
@@ -489,6 +507,10 @@ pub async fn actualizar_modelo(
     )
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al actualizar el modelo: {}", e)))?;
+
+    if let Some(antes) = &antes_ganancias {
+        ganancias::conciliar(&conn, antes, &ganancias::Donde::Modelo(modelo_id), "MODELO", None, true).await;
+    }
 
     guardado(&conn, modelo_id, modelo.nombre).await
 }

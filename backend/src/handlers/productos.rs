@@ -1,6 +1,7 @@
 use axum::{extract::{Extension, Path}, Json, http::StatusCode};
 use std::sync::Arc;
 
+use crate::handlers::ganancias;
 use crate::tenants::TenantDb;
 use crate::models::producto::*;
 
@@ -268,6 +269,12 @@ pub async fn agregar_producto(
         return Err((StatusCode::CONFLICT, mensaje));
     }
 
+    // Reporte de ganancias encendido: el precio de compra es obligatorio.
+    let con_ganancias = ganancias::activo(&conn).await;
+    if con_ganancias {
+        ganancias::exigir_precio(payload.controla_stock.unwrap_or(true), payload.precio_compra)?;
+    }
+
     let lleva_vencimiento = payload.lleva_vencimiento.unwrap_or(false);
     let stock_inicial = if lleva_vencimiento { 0.0 } else { payload.stock };
 
@@ -291,6 +298,12 @@ pub async fn agregar_producto(
             "UPDATE productos SET controla_stock = ?1 WHERE id = ?2",
             libsql::params![controla as i64, producto_id],
         ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    // Su costo arranca en el precio de compra y el stock inicial cuenta
+    // como mercadería que entró.
+    if con_ganancias {
+        ganancias::conciliar(&conn, &ganancias::Foto::new(), &ganancias::Donde::Producto(producto_id), "PRODUCTO", None, true).await;
     }
 
     Ok(Json(ProductoResponse {
@@ -341,6 +354,18 @@ pub async fn actualizar_producto(
         payload.stock
     };
 
+    // Reporte de ganancias encendido: precio de compra obligatorio, y se
+    // anota cómo estaba el producto para recalcular su costo promedio si
+    // entra mercadería. Apagado, nada de esto se ejecuta.
+    let antes_ganancias = if ganancias::activo(&conn).await {
+        let antes = ganancias::foto(&conn, &ganancias::Donde::Producto(id)).await;
+        let controla = payload.controla_stock.unwrap_or_else(|| antes.get(&id).map(|f| f.controla_stock).unwrap_or(true));
+        ganancias::exigir_precio(controla, payload.precio_compra)?;
+        Some(antes)
+    } else {
+        None
+    };
+
     // Solo reemplazamos la imagen si el payload trae una URL nueva y no
     // vacía; si no, conservamos la que ya estaba guardada.
     let imagen_a_guardar = match payload.imagen_url.clone() {
@@ -368,6 +393,10 @@ pub async fn actualizar_producto(
             "UPDATE productos SET controla_stock = ?1 WHERE id = ?2",
             libsql::params![controla as i64, id],
         ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    if let Some(antes) = &antes_ganancias {
+        ganancias::conciliar(&conn, antes, &ganancias::Donde::Producto(id), "PRODUCTO", None, true).await;
     }
 
     Ok(Json(ProductoResponse {

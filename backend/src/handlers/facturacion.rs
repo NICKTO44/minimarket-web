@@ -195,6 +195,18 @@ pub async fn emitir_comprobante(
 
     let comprobante_id = conn.last_insert_rowid();
 
+    // El enlace del XML firmado va aparte y sin fallar: el comprobante ya
+    // quedó registrado y nada de la emisión depende de este dato (solo la
+    // descarga del XML desde Comprobantes).
+    if let Some(enlace_xml) = resultado.enlace_xml.clone() {
+        let _ = conn
+            .execute(
+                "UPDATE comprobantes_electronicos SET enlace_xml = ?1 WHERE id = ?2",
+                libsql::params![enlace_xml, comprobante_id],
+            )
+            .await;
+    }
+
     // Se guarda la detracción enviada para reimprimir el ticket igual. Va
     // aparte y sin fallar: una base sin la migración 0013 nunca llega aquí
     // con detracción, y si algo falla el comprobante ya quedó registrado.

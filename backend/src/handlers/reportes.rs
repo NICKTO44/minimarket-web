@@ -5,6 +5,10 @@ use std::sync::Arc;
 use crate::tenants::TenantDb;
 use crate::models::reporte::*;
 
+// Las fechas de la base están en UTC (así las guarda el servidor). Los
+// reportes cortan el día en hora de Perú (UTC-5): una venta de las 8 p. m.
+// pertenece a ese día, no al siguiente.
+
 #[derive(Deserialize)]
 pub struct RangoFechas {
     pub fecha_inicio: String,
@@ -22,7 +26,7 @@ pub async fn ventas_por_rango(
             "SELECT v.id, v.folio, v.fecha_hora, v.total, v.metodo_pago, u.nombre_completo, v.estado,
                     v.pago_efectivo, v.pago_otro, v.pago_otro_metodo
              FROM ventas v JOIN usuarios u ON v.usuario_id = u.id
-             WHERE date(v.fecha_hora) BETWEEN ?1 AND ?2
+             WHERE date(v.fecha_hora, '-5 hours') BETWEEN ?1 AND ?2
              ORDER BY v.fecha_hora DESC",
             libsql::params![rango.fecha_inicio.clone(), rango.fecha_fin.clone()],
         )
@@ -60,7 +64,7 @@ pub async fn productos_mas_vendidos(
              FROM detalles_venta dv
              JOIN productos p ON dv.producto_id = p.id
              JOIN ventas v ON dv.venta_id = v.id
-             WHERE date(v.fecha_hora) BETWEEN ?1 AND ?2 AND v.estado = 'COMPLETADA'
+             WHERE date(v.fecha_hora, '-5 hours') BETWEEN ?1 AND ?2 AND v.estado = 'COMPLETADA'
              GROUP BY p.id, p.nombre
              ORDER BY SUM(dv.cantidad) DESC
              LIMIT 10",
@@ -89,7 +93,7 @@ pub async fn estadisticas_completas(
 
     let mut r1 = conn.query(
         "SELECT COUNT(*), COALESCE(SUM(total),0.0), COALESCE(AVG(total),0.0)
-         FROM ventas WHERE date(fecha_hora) BETWEEN ?1 AND ?2 AND estado = 'COMPLETADA'",
+         FROM ventas WHERE date(fecha_hora, '-5 hours') BETWEEN ?1 AND ?2 AND estado = 'COMPLETADA'",
         libsql::params![rango.fecha_inicio.clone(), rango.fecha_fin.clone()],
     ).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -100,7 +104,7 @@ pub async fn estadisticas_completas(
 
     let mut r2 = conn.query(
         "SELECT COUNT(*), COALESCE(SUM(monto_reembolsado),0.0)
-         FROM devoluciones WHERE date(fecha_hora) BETWEEN ?1 AND ?2 AND estado = 'PROCESADA'",
+         FROM devoluciones WHERE date(fecha_hora, '-5 hours') BETWEEN ?1 AND ?2 AND estado = 'PROCESADA'",
         libsql::params![rango.fecha_inicio.clone(), rango.fecha_fin.clone()],
     ).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 

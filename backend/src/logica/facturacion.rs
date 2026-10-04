@@ -10,6 +10,8 @@ pub struct ResultadoEmision {
     pub numero: i64,
     pub mensaje: String,
     pub enlace_pdf: Option<String>,
+    /// XML firmado del comprobante (el archivo que piden los contadores).
+    pub enlace_xml: Option<String>,
     pub enlace_cdr: Option<String>,
     pub external_id: Option<String>,
     pub hash: Option<String>,
@@ -133,6 +135,8 @@ struct DatosRespuesta {
 struct LinksRespuesta {
     #[serde(default)]
     pdf: Option<String>,
+    #[serde(default)]
+    xml: Option<String>,
     #[serde(default)]
     cdr: Option<String>,
 }
@@ -284,6 +288,7 @@ pub async fn emitir_facturalibre(
                 numero: 0,
                 mensaje: format!("No se pudo conectar con FacturaLibre: {}", e),
                 enlace_pdf: None,
+                enlace_xml: None,
                 enlace_cdr: None,
                 external_id: None,
                 hash: None,
@@ -308,6 +313,7 @@ pub async fn emitir_facturalibre(
                 .unwrap_or_else(|| (serie.to_string(), 0));
 
             let enlace_pdf = r.links.as_ref().and_then(|l| l.pdf.clone());
+            let enlace_xml = r.links.as_ref().and_then(|l| l.xml.clone()).filter(|e| !e.trim().is_empty());
             let enlace_cdr = r.links.as_ref().and_then(|l| l.cdr.clone());
             let external_id = r.data.as_ref().and_then(|d| d.external_id.clone());
             let hash = r.data.as_ref().and_then(|d| d.hash.clone());
@@ -337,6 +343,7 @@ pub async fn emitir_facturalibre(
                 numero: numero_out,
                 mensaje,
                 enlace_pdf,
+                enlace_xml,
                 enlace_cdr,
                 external_id,
                 hash,
@@ -349,6 +356,7 @@ pub async fn emitir_facturalibre(
             numero: 0,
             mensaje: format!("Respuesta inesperada de FacturaLibre (revisar formato): {}", texto),
             enlace_pdf: None,
+            enlace_xml: None,
             enlace_cdr: None,
             external_id: None,
             hash: None,

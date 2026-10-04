@@ -41,6 +41,10 @@ pub const MODULO_VARIANTES: &str = "VARIANTES";
 /// Cambio de prenda: el cliente devuelve algo y se lleva otra cosa en la
 /// misma operación (handlers/cambios.rs).
 pub const MODULO_CAMBIOS: &str = "CAMBIOS";
+/// Reporte de ganancias: costo promedio por producto, costo guardado en
+/// cada venta y precio de compra obligatorio (handlers/ganancias.rs). No
+/// pertenece a ningún rubro: viene apagado y lo enciende quien lo quiera.
+pub const MODULO_GANANCIAS: &str = "GANANCIAS";
 
 const MODULOS: &[&str] = &[
     MODULO_MESAS,
@@ -52,6 +56,7 @@ const MODULOS: &[&str] = &[
     MODULO_GUIAS,
     MODULO_VARIANTES,
     MODULO_CAMBIOS,
+    MODULO_GANANCIAS,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.

@@ -2,6 +2,7 @@ use axum::{extract::{Extension, Path}, Json, http::StatusCode};
 use std::sync::Arc;
 use chrono::Local;
 
+use crate::handlers::ganancias;
 use crate::tenants::TenantDb;
 use crate::models::proveedor::*;
 use crate::models::auth::Claims;
@@ -151,6 +152,15 @@ pub async fn recibir_mercaderia(
 ) -> Result<Json<CompraResponse>, (StatusCode, String)> {
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Reporte de ganancias encendido: se anota cómo estaban los productos de
+    // la compra para promediar su costo con lo que entra. Apagado, nada.
+    let donde_ganancias = ganancias::Donde::Compra(payload.compra_id);
+    let antes_ganancias = if ganancias::activo(&conn).await {
+        Some(ganancias::foto(&conn, &donde_ganancias).await)
+    } else {
+        None
+    };
+
     for item in &payload.items {
         let conforme = item.cantidad_conforme.min(item.cantidad_recibida);
 
@@ -212,6 +222,11 @@ pub async fn recibir_mercaderia(
         "UPDATE compras SET estado = ?1, fecha_recepcion = datetime('now','localtime'), notas_recepcion = ?2, fecha_actualizacion = datetime('now','localtime') WHERE id = ?3",
         libsql::params![nuevo_estado, payload.notas_recepcion.clone(), payload.compra_id],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al actualizar compra: {}", e)))?;
+
+    // El stock ya subió (por el disparador de la compra o por los lotes).
+    if let Some(antes) = &antes_ganancias {
+        ganancias::conciliar(&conn, antes, &donde_ganancias, "COMPRA", Some(payload.compra_id), false).await;
+    }
 
     // Desglose: faltante = nunca llegó (pedido - recibido).
     // Dañado = llegó pero en mal estado (recibido - conforme).

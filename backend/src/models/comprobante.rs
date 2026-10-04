@@ -23,4 +23,8 @@ pub struct ComprobanteResumen {
     /// Solo la fecha (YYYY-MM-DD), sin hora — el formato exacto que
     /// exige el QR de SUNAT.
     pub fecha_emision_corta: Option<String>,
+    /// ¿Se puede descargar el XML firmado y la constancia de SUNAT (CDR)?
+    /// La pantalla de Comprobantes solo ofrece lo que existe.
+    pub tiene_xml: bool,
+    pub tiene_cdr: bool,
 }
