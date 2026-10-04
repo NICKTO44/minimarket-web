@@ -99,6 +99,23 @@ async fn main() {
                     }
                     println!("🔄 Migraciones automáticas: {} al día, {} con error(es).", ok, fallos);
 
+                    // Revisión (solo lectura): ventas que quedaron sin
+                    // productos por un corte a mitad de una venta. No toca
+                    // nada; solo avisa en el registro para decidir qué hacer.
+                    let mut incompletas = 0;
+                    for tienda in &tiendas {
+                        if let Ok(ventas) = migraciones::ventas_sin_productos(tienda).await {
+                            for (folio, fecha, total) in &ventas {
+                                println!(
+                                    "  ⚠️  {} ({}) — venta sin productos: {} · {} · S/ {:.2}",
+                                    tienda.nombre_negocio, tienda.identificador, folio, fecha, total
+                                );
+                            }
+                            incompletas += ventas.len();
+                        }
+                    }
+                    println!("🔎 Ventas sin productos (cortadas a mitad): {}.", incompletas);
+
                     // Índice central de usuarios: registra a los cajeros que
                     // se crearon antes de que crear_usuario los agregara
                     // (sin esto no pueden iniciar sesión en un dispositivo
@@ -259,6 +276,13 @@ async fn main() {
         .route("/guias/:id/consultar", post(handlers::guias::consultar))
         .route("/configuracion/guias", axum::routing::put(handlers::guias::guardar_config))
         .route("/configuracion/detraccion", axum::routing::put(handlers::detraccion::guardar_detraccion))
+        // Ropa y calzado: tallas y colores, y cambio de prenda.
+        .route("/modelos", post(handlers::variantes::crear_modelo))
+        .route("/modelos/:id", axum::routing::put(handlers::variantes::actualizar_modelo))
+        .route("/modelos/:id/imagen/:producto_id", post(handlers::variantes::compartir_imagen))
+        .route("/cambios/config", get(handlers::cambios::obtener_config))
+        .route("/cambios/venta/:identificador", get(handlers::cambios::venta_para_cambio))
+        .route("/configuracion/cambios", axum::routing::put(handlers::cambios::guardar_config))
         .route("/unidades", get(handlers::unidades::listar_unidades))
         .route("/configuracion/unidades", axum::routing::put(handlers::unidades::guardar_unidades))
         .route("/carta-dia", get(handlers::carta::listar_carta))

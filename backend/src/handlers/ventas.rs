@@ -52,49 +52,82 @@ fn validar_pago(payload: &NuevaVenta) -> Result<(Option<f64>, Option<f64>, Optio
     Ok((Some(efectivo), Some(otro), Some(metodo_otro)))
 }
 
-// Descuenta stock por FEFO: recorre lotes activos ordenados por fecha de
-// vencimiento y va restando hasta cubrir la cantidad vendida.
-async fn descontar_stock_fefo(
-    conn: &libsql::Connection,
-    producto_id: i64,
-    cantidad_requerida: f64,
-) -> Result<(), String> {
+/// true si el error es que la base (Turso) perdió la sesión abierta entre
+/// un paso y otro ("stream not found"): no es un error de datos, se puede
+/// volver a intentar.
+fn es_corte_de_sesion(mensaje: &str) -> bool {
+    let m = mensaje.to_lowercase();
+    m.contains("stream not found") || m.contains("stream closed") || m.contains("stream expired") || m.contains("invalid baton")
+}
+
+// Descuenta stock por FEFO (primero lo que vence antes) de TODOS los
+// productos perecibles de la venta en dos viajes a la base, sin importar
+// cuántos sean: uno lee sus lotes y otro los descuenta. Va dentro de la
+// transacción de la venta, que debe ser corta.
+// `pedidos`: (producto_id, cantidad vendida) ya sumada por producto.
+async fn descontar_stock_fefo(conn: &libsql::Connection, pedidos: &[(i64, f64)]) -> Result<(), String> {
+    if pedidos.is_empty() {
+        return Ok(());
+    }
+    // Los ids son enteros: se escriben directo en la lista.
+    let productos = pedidos.iter().map(|(id, _)| id.to_string()).collect::<Vec<_>>().join(",");
     let mut rows = conn
         .query(
-            "SELECT id, cantidad FROM lotes_producto
-             WHERE producto_id = ?1 AND activo = 1 AND cantidad > 0
-             ORDER BY fecha_vencimiento ASC",
-            libsql::params![producto_id],
+            &format!(
+                "SELECT id, producto_id, CAST(cantidad AS REAL) FROM lotes_producto
+                 WHERE producto_id IN ({}) AND activo = 1 AND cantidad > 0
+                 ORDER BY producto_id, fecha_vencimiento ASC, id ASC",
+                productos
+            ),
+            (),
         )
         .await
         .map_err(|e| format!("Error al leer lotes: {}", e))?;
 
-    let mut lotes: Vec<(i64, f64)> = Vec::new();
+    // producto_id -> sus lotes (id, cantidad), del que vence antes al que vence después.
+    let mut lotes: std::collections::HashMap<i64, Vec<(i64, f64)>> = std::collections::HashMap::new();
     while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
-        lotes.push((row.get(0).unwrap_or_default(), row.get(1).unwrap_or_default()));
+        lotes
+            .entry(row.get::<i64>(1).unwrap_or_default())
+            .or_default()
+            .push((row.get(0).unwrap_or_default(), row.get(2).unwrap_or(0.0)));
     }
 
-    let disponible_total: f64 = lotes.iter().map(|(_, c)| c).sum();
-    if disponible_total < cantidad_requerida {
-        return Err(format!(
-            "Stock insuficiente por vencimiento (disponible: {}, solicitado: {})",
-            disponible_total, cantidad_requerida
-        ));
+    // (lote_id, cuánto se le descuenta)
+    let mut descuentos: Vec<(i64, f64)> = Vec::new();
+    for (producto_id, cantidad_requerida) in pedidos {
+        let del_producto = lotes.get(producto_id).map(Vec::as_slice).unwrap_or(&[]);
+        let disponible_total: f64 = del_producto.iter().map(|(_, c)| c).sum();
+        if disponible_total + 1e-6 < *cantidad_requerida {
+            return Err(format!(
+                "Stock insuficiente por vencimiento (disponible: {}, solicitado: {})",
+                disponible_total, cantidad_requerida
+            ));
+        }
+        let mut restante = *cantidad_requerida;
+        for (lote_id, cantidad_lote) in del_producto {
+            if restante <= 1e-9 {
+                break;
+            }
+            let a_descontar = cantidad_lote.min(restante);
+            descuentos.push((*lote_id, a_descontar));
+            restante -= a_descontar;
+        }
+    }
+    if descuentos.is_empty() {
+        return Ok(());
     }
 
-    let mut restante = cantidad_requerida;
-    for (lote_id, cantidad_lote) in lotes {
-        if restante <= 0.0 { break; }
-        let a_descontar = if cantidad_lote >= restante { restante } else { cantidad_lote };
-        conn.execute(
-            "UPDATE lotes_producto SET cantidad = cantidad - ?1 WHERE id = ?2",
-            libsql::params![a_descontar, lote_id],
-        )
-        .await
-        .map_err(|e| format!("Error al descontar lote: {}", e))?;
-        restante -= a_descontar;
-    }
-
+    // Solo números ya validados: se escriben directo en la sentencia. El
+    // trigger de lotes recalcula el stock de cada producto.
+    let casos: String = descuentos.iter().map(|(id, cantidad)| format!(" WHEN {} THEN {}", id, cantidad)).collect();
+    let lista: String = descuentos.iter().map(|(id, _)| id.to_string()).collect::<Vec<_>>().join(",");
+    conn.execute(
+        &format!("UPDATE lotes_producto SET cantidad = MAX(cantidad - CASE id{} ELSE 0 END, 0) WHERE id IN ({})", casos, lista),
+        (),
+    )
+    .await
+    .map_err(|e| format!("Error al descontar lote: {}", e))?;
     Ok(())
 }
 
@@ -215,6 +248,19 @@ pub async fn procesar_venta(
         (payload.metodo_pago.clone(), efectivo, otro, metodo_otro, payload.monto_recibido, payload.cambio)
     };
 
+    // 1c. Cambio de prenda (módulo CAMBIOS): se revisa lo que el cliente
+    // devuelve antes de registrar nada. La venta es por el total de lo que
+    // se lleva; la devolución se registra después, por el mismo medio.
+    let cambio_prenda = match &payload.cambio_prenda {
+        Some(c) => {
+            if credito.is_some() || payload.pedido_id.is_some() || payload.cotizacion_id.is_some() {
+                return Err((StatusCode::BAD_REQUEST, "Un cambio de prenda no se puede combinar con crédito, un pedido de mesa ni una cotización.".into()));
+            }
+            Some(crate::handlers::cambios::preparar(&conn, c, &metodo_pago).await?)
+        }
+        None => None,
+    };
+
     // 2. Validar stock disponible por producto (perecible o no). De paso
     // se toma el nombre y la unidad REALES del producto (no los que manda
     // el frontend) para guardarlos en la venta tal como son hoy. Los
@@ -306,166 +352,235 @@ pub async fn procesar_venta(
         descuento_total += desc;
     }
 
-    // 5. Insertar venta
-    let (venta_id, folio): (i64, String) = {
-        let mut filas = conn
-            .query(
-                "INSERT INTO ventas (folio, cliente_id, subtotal, descuento, total, metodo_pago, monto_recibido, cambio, usuario_id, estado,
-                                     pago_efectivo, pago_otro, pago_otro_metodo)
-                 VALUES ((SELECT 'V-' || ?1 || '-' || printf('%04d', COALESCE(MAX(CAST(substr(folio, -4) AS INTEGER)), 0) + 1)
-                            FROM ventas WHERE folio LIKE 'V-' || ?1 || '%'),
-                         ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'COMPLETADA', ?10, ?11, ?12)
-                 RETURNING id, folio",
-                libsql::params![
-                    fecha_actual, payload.cliente_id, subtotal, descuento_total, payload.total,
-                    metodo_pago, monto_recibido, cambio, usuario_id,
-                    pago_efectivo, pago_otro, pago_otro_metodo
-                ],
-            )
+    // ------------------------------------------------------------------
+    // Desde aquí se ESCRIBE, y todo va en una sola transacción: la venta,
+    // el stock, los detalles, el crédito, el pedido de mesa y el cambio de
+    // prenda se guardan juntos o no se guarda nada. Así un corte con la base
+    // a mitad de camino nunca deja una venta cobrada sin productos ni stock.
+    // Si el corte ocurre antes de confirmar, se intenta una vez más.
+    // ------------------------------------------------------------------
+    let mut intento = 0;
+    let (venta_id, folio, cambio_prenda) = loop {
+        intento += 1;
+        let tx = conn
+            .transaction_with_behavior(libsql::TransactionBehavior::Immediate)
             .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar venta: {}", e)))?;
-        match filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-            Some(f) => (f.get(0).unwrap_or_default(), f.get(1).unwrap_or_default()),
-            None => return Err((StatusCode::INTERNAL_SERVER_ERROR, "No se pudo registrar la venta.".into())),
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo iniciar la venta: {}", e)))?;
+        let resultado: Result<(i64, String, Option<crate::handlers::cambios::CambioHecho>), (StatusCode, String)> = async {
+            // Dentro de la transacción TODO pasa por `tx` (con el nombre
+            // `conn` para que ningún paso use por error la conexión de afuera).
+            let conn: &libsql::Connection = &tx;
+
+            // 5. Insertar venta
+            let (venta_id, folio): (i64, String) = {
+                let mut filas = conn
+                    .query(
+                        "INSERT INTO ventas (folio, cliente_id, subtotal, descuento, total, metodo_pago, monto_recibido, cambio, usuario_id, estado,
+                                             pago_efectivo, pago_otro, pago_otro_metodo)
+                         VALUES ((SELECT 'V-' || ?1 || '-' || printf('%04d', COALESCE(MAX(CAST(substr(folio, -4) AS INTEGER)), 0) + 1)
+                                    FROM ventas WHERE folio LIKE 'V-' || ?1 || '%'),
+                                 ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'COMPLETADA', ?10, ?11, ?12)
+                         RETURNING id, folio",
+                        libsql::params![
+                            fecha_actual.clone(), payload.cliente_id, subtotal, descuento_total, payload.total,
+                            metodo_pago.clone(), monto_recibido, cambio, usuario_id,
+                            pago_efectivo, pago_otro, pago_otro_metodo.clone()
+                        ],
+                    )
+                    .await
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar venta: {}", e)))?;
+                let datos: (i64, String) = match filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+                    Some(f) => (f.get(0).unwrap_or_default(), f.get(1).unwrap_or_default()),
+                    None => return Err((StatusCode::INTERNAL_SERVER_ERROR, "No se pudo registrar la venta.".into())),
+                };
+                // La respuesta se lee hasta el final antes de seguir: si se suelta a
+                // medias, el servidor de la base puede dar por perdida la sesión.
+                while filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?.is_some() {}
+                datos
+            };
+
+            // 6. Descontar stock e insertar los detalles.
+            // Con lo vendido de cada producto ya sumado: los que tienen
+            // vencimiento, por lotes (FEFO); el resto, todos en UNA sentencia.
+            let mut a_descontar: Vec<(i64, f64)> = Vec::new();
+            let mut perecibles: Vec<(i64, f64)> = Vec::new();
+            for p in &payload.productos {
+                let (lleva_vencimiento, controla_stock) = datos_producto.get(&p.id).map(|d| (d.2, d.3)).unwrap_or((false, true));
+                if !controla_stock {
+                    // Preparado al momento: no hay stock que descontar.
+                } else if lleva_vencimiento {
+                    match perecibles.iter_mut().find(|(id, _)| *id == p.id) {
+                        Some(previo) => previo.1 += p.cantidad,
+                        None => perecibles.push((p.id, p.cantidad)),
+                    }
+                } else if let Some(previo) = a_descontar.iter_mut().find(|(id, _)| *id == p.id) {
+                    previo.1 += p.cantidad;
+                } else {
+                    a_descontar.push((p.id, p.cantidad));
+                }
+            }
+            descontar_stock_fefo(conn, &perecibles).await.map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+            if !a_descontar.is_empty() {
+                // Solo números (ids enteros y cantidades ya validadas como finitas):
+                // se escriben directo en la sentencia.
+                let casos: String = a_descontar.iter().map(|(id, cantidad)| format!(" WHEN {} THEN {}", id, cantidad)).collect();
+                let lista: String = a_descontar.iter().map(|(id, _)| id.to_string()).collect::<Vec<_>>().join(",");
+                conn.execute(
+                    &format!("UPDATE productos SET stock = stock - CASE id{} ELSE 0 END WHERE id IN ({})", casos, lista),
+                    (),
+                )
+                .await
+                .map_err(|e| (StatusCode::BAD_REQUEST, format!("Error al descontar stock: {}", e)))?;
+            }
+
+            // Detalles: un INSERT de varias filas (por tandas, por el límite de
+            // parámetros de SQLite).
+            const COLUMNAS_DETALLE: usize = 9;
+            const FILAS_POR_TANDA: usize = 100;
+            for tanda in payload.productos.chunks(FILAS_POR_TANDA) {
+                let mut marcas: Vec<String> = Vec::with_capacity(tanda.len());
+                let mut valores: Vec<libsql::Value> = Vec::with_capacity(tanda.len() * COLUMNAS_DETALLE);
+                for (i, p) in tanda.iter().enumerate() {
+                    let sub = redondear_2(p.precio * p.cantidad);
+                    let desc = p.descuento_monto.unwrap_or(0.0).max(0.0).min(sub);
+                    let total_linea = sub - desc;
+
+                    // Nombre y unidad congelados al momento de la venta (migración 0005):
+                    // si después se renombra el producto, esta venta sigue mostrando
+                    // el nombre con el que se vendió, igual que su comprobante SUNAT.
+                    let (nombre_base, unidad_venta) = datos_producto
+                        .get(&p.id)
+                        .map(|d| (d.0.clone(), d.1.clone()))
+                        .unwrap_or_else(|| (p.nombre.clone(), "UNIDAD".to_string()));
+                    // Las opciones de un pedido de mesa o las medidas van con el
+                    // nombre: "Capuchino (Grande, Leche de almendras)".
+                    let nombre_venta = match p.detalle.as_deref().map(str::trim) {
+                        Some(detalle) if !detalle.is_empty() => {
+                            format!("{} ({})", nombre_base, detalle.chars().take(120).collect::<String>())
+                        }
+                        _ => nombre_base,
+                    };
+
+                    let b = i * COLUMNAS_DETALLE;
+                    marcas.push(format!(
+                        "(?{}, ?{}, ?{}, ?{}, ?{}, ?{}, ?{}, ?{}, ?{})",
+                        b + 1, b + 2, b + 3, b + 4, b + 5, b + 6, b + 7, b + 8, b + 9
+                    ));
+                    valores.extend([
+                        libsql::Value::Integer(venta_id),
+                        libsql::Value::Integer(p.id),
+                        libsql::Value::Real(p.cantidad),
+                        libsql::Value::Real(p.precio),
+                        libsql::Value::Real(sub),
+                        libsql::Value::Real(desc),
+                        libsql::Value::Real(total_linea),
+                        libsql::Value::Text(nombre_venta),
+                        libsql::Value::Text(unidad_venta),
+                    ]);
+                }
+                conn.execute(
+                    &format!(
+                        "INSERT INTO detalles_venta (venta_id, producto_id, cantidad, precio_unitario, subtotal, descuento_linea, total_linea,
+                                                     nombre_producto, unidad_medida)
+                         VALUES {}",
+                        marcas.join(", ")
+                    ),
+                    libsql::params_from_iter(valores),
+                )
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar detalle: {}", e)))?;
+            }
+
+            // 6b. Deja congelado cómo se cobró el IGV (tasa del negocio y qué líneas
+            //     son gravadas, exoneradas o inafectas). No puede hacer fallar la venta.
+            //     La tasa ya se leyó en la primera consulta.
+            crate::handlers::igv::congelar_con_tasa(&conn, venta_id, crate::logica::igv::tasa_valida(tasa_igv)).await;
+
+            // 6c. Venta al crédito: se abre la cuenta por cobrar y, si el cliente
+            //     dejó un adelanto, entra como su primer abono.
+            if let (Some((adelanto, adelanto_metodo, vence)), Some(cliente_id)) = (&credito, payload.cliente_id) {
+                crate::handlers::creditos::crear_para_venta(
+                    &conn, venta_id, cliente_id, payload.total, vence, *adelanto, adelanto_metodo, usuario_id,
+                )
+                .await?;
+            }
+
+            // 6d. Si salió de una cotización, queda vendida (no puede hacer fallar la venta).
+            if let Some(cotizacion_id) = payload.cotizacion_id {
+                crate::handlers::cotizaciones::marcar_vendida(&conn, cotizacion_id, venta_id).await;
+            }
+
+            // 7. Si fue el cobro de un pedido de mesa: se cierra y la mesa queda libre.
+            if let Some(pedido_id) = payload.pedido_id {
+                conn.execute("UPDATE ventas SET pedido_id = ?1 WHERE id = ?2", libsql::params![pedido_id, venta_id])
+                    .await
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+                conn.execute(
+                    "UPDATE pedidos SET estado = 'COBRADO', venta_id = ?1, fecha_cierre = datetime('now', 'localtime')
+                     WHERE id = ?2 AND estado = 'ABIERTO'",
+                    libsql::params![venta_id, pedido_id],
+                )
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+                // Si una MESA paga, lo que barra/cocina ya tenía LISTO se da por
+                // entregado (ya lo consumieron). Lo que aún se prepara sigue en
+                // Preparación y el mozo recibe su aviso. En para llevar/delivery no
+                // se toca: ahí se paga antes y se entrega después.
+                // La venta ya está registrada: si esto falla (p. ej. la base aún no
+                // tiene la migración 0008) no se revierte nada, solo se ignora.
+                let _ = conn
+                    .execute(
+                        "UPDATE pedido_items SET fecha_entregado = datetime('now', 'localtime')
+                         WHERE pedido_id = ?1 AND estado = 'ENVIADO' AND fecha_listo IS NOT NULL
+                           AND fecha_entregado IS NULL
+                           AND (SELECT tipo FROM pedidos WHERE id = ?1) = 'MESA'",
+                        libsql::params![pedido_id],
+                    )
+                    .await;
+            }
+
+            // 8. Cambio de prenda: entra la devolución de lo que el cliente trajo.
+            let cambio_hecho = match &cambio_prenda {
+                Some(listo) => Some(
+                    crate::handlers::cambios::registrar(&conn, listo, venta_id, &folio, payload.total, &metodo_pago, usuario_id).await?,
+                ),
+                None => None,
+            };
+
+            Ok((venta_id, folio, cambio_hecho))
+        }
+        .await;
+
+        match resultado {
+            Ok(datos) => {
+                tx.commit().await.map_err(|e| {
+                    eprintln!("❌ Venta sin confirmar (COMMIT): {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "No se pudo confirmar la venta por un corte con la base de datos. Antes de cobrar otra vez, revisa en Comprobantes si quedó registrada.".to_string(),
+                    )
+                })?;
+                break datos;
+            }
+            Err(error) => {
+                // Nada de lo anterior queda guardado.
+                let _ = tx.rollback().await;
+                if intento < 2 && es_corte_de_sesion(&error.1) {
+                    eprintln!("⚠️  Corte con la base durante una venta, se reintenta: {}", error.1);
+                    continue;
+                }
+                if es_corte_de_sesion(&error.1) {
+                    eprintln!("❌ Venta no registrada por corte con la base: {}", error.1);
+                    return Err((
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "Se cortó la conexión con la base de datos y la venta NO se registró. Vuelve a cobrar.".to_string(),
+                    ));
+                }
+                return Err(error);
+            }
         }
     };
 
-    // 6. Descontar stock e insertar los detalles.
-    // Productos con vencimiento: por lotes (FEFO), línea por línea. El resto:
-    // todos en UNA sentencia, con lo vendido de cada producto ya sumado.
-    let mut a_descontar: Vec<(i64, f64)> = Vec::new();
-    for p in &payload.productos {
-        let (lleva_vencimiento, controla_stock) = datos_producto.get(&p.id).map(|d| (d.2, d.3)).unwrap_or((false, true));
-        if !controla_stock {
-            // Preparado al momento: no hay stock que descontar.
-        } else if lleva_vencimiento {
-            descontar_stock_fefo(&conn, p.id, p.cantidad).await
-                .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-        } else if let Some(previo) = a_descontar.iter_mut().find(|(id, _)| *id == p.id) {
-            previo.1 += p.cantidad;
-        } else {
-            a_descontar.push((p.id, p.cantidad));
-        }
-    }
-    if !a_descontar.is_empty() {
-        // Solo números (ids enteros y cantidades ya validadas como finitas):
-        // se escriben directo en la sentencia.
-        let casos: String = a_descontar.iter().map(|(id, cantidad)| format!(" WHEN {} THEN {}", id, cantidad)).collect();
-        let lista: String = a_descontar.iter().map(|(id, _)| id.to_string()).collect::<Vec<_>>().join(",");
-        conn.execute(
-            &format!("UPDATE productos SET stock = stock - CASE id{} ELSE 0 END WHERE id IN ({})", casos, lista),
-            (),
-        )
-        .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Error al descontar stock: {}", e)))?;
-    }
-
-    // Detalles: un INSERT de varias filas (por tandas, por el límite de
-    // parámetros de SQLite).
-    const COLUMNAS_DETALLE: usize = 9;
-    const FILAS_POR_TANDA: usize = 100;
-    for tanda in payload.productos.chunks(FILAS_POR_TANDA) {
-        let mut marcas: Vec<String> = Vec::with_capacity(tanda.len());
-        let mut valores: Vec<libsql::Value> = Vec::with_capacity(tanda.len() * COLUMNAS_DETALLE);
-        for (i, p) in tanda.iter().enumerate() {
-            let sub = redondear_2(p.precio * p.cantidad);
-            let desc = p.descuento_monto.unwrap_or(0.0).max(0.0).min(sub);
-            let total_linea = sub - desc;
-
-            // Nombre y unidad congelados al momento de la venta (migración 0005):
-            // si después se renombra el producto, esta venta sigue mostrando
-            // el nombre con el que se vendió, igual que su comprobante SUNAT.
-            let (nombre_base, unidad_venta) = datos_producto
-                .get(&p.id)
-                .map(|d| (d.0.clone(), d.1.clone()))
-                .unwrap_or_else(|| (p.nombre.clone(), "UNIDAD".to_string()));
-            // Las opciones de un pedido de mesa o las medidas van con el
-            // nombre: "Capuchino (Grande, Leche de almendras)".
-            let nombre_venta = match p.detalle.as_deref().map(str::trim) {
-                Some(detalle) if !detalle.is_empty() => {
-                    format!("{} ({})", nombre_base, detalle.chars().take(120).collect::<String>())
-                }
-                _ => nombre_base,
-            };
-
-            let b = i * COLUMNAS_DETALLE;
-            marcas.push(format!(
-                "(?{}, ?{}, ?{}, ?{}, ?{}, ?{}, ?{}, ?{}, ?{})",
-                b + 1, b + 2, b + 3, b + 4, b + 5, b + 6, b + 7, b + 8, b + 9
-            ));
-            valores.extend([
-                libsql::Value::Integer(venta_id),
-                libsql::Value::Integer(p.id),
-                libsql::Value::Real(p.cantidad),
-                libsql::Value::Real(p.precio),
-                libsql::Value::Real(sub),
-                libsql::Value::Real(desc),
-                libsql::Value::Real(total_linea),
-                libsql::Value::Text(nombre_venta),
-                libsql::Value::Text(unidad_venta),
-            ]);
-        }
-        conn.execute(
-            &format!(
-                "INSERT INTO detalles_venta (venta_id, producto_id, cantidad, precio_unitario, subtotal, descuento_linea, total_linea,
-                                             nombre_producto, unidad_medida)
-                 VALUES {}",
-                marcas.join(", ")
-            ),
-            libsql::params_from_iter(valores),
-        )
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar detalle: {}", e)))?;
-    }
-
-    // 6b. Deja congelado cómo se cobró el IGV (tasa del negocio y qué líneas
-    //     son gravadas, exoneradas o inafectas). No puede hacer fallar la venta.
-    //     La tasa ya se leyó en la primera consulta.
-    crate::handlers::igv::congelar_con_tasa(&conn, venta_id, crate::logica::igv::tasa_valida(tasa_igv)).await;
-
-    // 6c. Venta al crédito: se abre la cuenta por cobrar y, si el cliente
-    //     dejó un adelanto, entra como su primer abono.
-    if let (Some((adelanto, adelanto_metodo, vence)), Some(cliente_id)) = (&credito, payload.cliente_id) {
-        crate::handlers::creditos::crear_para_venta(
-            &conn, venta_id, cliente_id, payload.total, vence, *adelanto, adelanto_metodo, usuario_id,
-        )
-        .await?;
-    }
-
-    // 6d. Si salió de una cotización, queda vendida (no puede hacer fallar la venta).
-    if let Some(cotizacion_id) = payload.cotizacion_id {
-        crate::handlers::cotizaciones::marcar_vendida(&conn, cotizacion_id, venta_id).await;
-    }
-
-    // 7. Si fue el cobro de un pedido de mesa: se cierra y la mesa queda libre.
-    if let Some(pedido_id) = payload.pedido_id {
-        conn.execute("UPDATE ventas SET pedido_id = ?1 WHERE id = ?2", libsql::params![pedido_id, venta_id])
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        conn.execute(
-            "UPDATE pedidos SET estado = 'COBRADO', venta_id = ?1, fecha_cierre = datetime('now', 'localtime')
-             WHERE id = ?2 AND estado = 'ABIERTO'",
-            libsql::params![venta_id, pedido_id],
-        )
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-        // Si una MESA paga, lo que barra/cocina ya tenía LISTO se da por
-        // entregado (ya lo consumieron). Lo que aún se prepara sigue en
-        // Preparación y el mozo recibe su aviso. En para llevar/delivery no
-        // se toca: ahí se paga antes y se entrega después.
-        // La venta ya está registrada: si esto falla (p. ej. la base aún no
-        // tiene la migración 0008) no se revierte nada, solo se ignora.
-        let _ = conn
-            .execute(
-                "UPDATE pedido_items SET fecha_entregado = datetime('now', 'localtime')
-                 WHERE pedido_id = ?1 AND estado = 'ENVIADO' AND fecha_listo IS NOT NULL
-                   AND fecha_entregado IS NULL
-                   AND (SELECT tipo FROM pedidos WHERE id = ?1) = 'MESA'",
-                libsql::params![pedido_id],
-            )
-            .await;
-    }
-
-    Ok(Json(VentaResult { venta_id, folio }))
+    Ok(Json(VentaResult { venta_id, folio, cambio_prenda }))
 }

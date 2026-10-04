@@ -84,3 +84,29 @@ pub async fn aplicar_migraciones_a_tienda(
 
     Ok(aplicadas)
 }
+/// Solo LEE: ventas que quedaron registradas sin ningún producto. Es la
+/// huella de una venta que se cortó a mitad de camino antes de que todo se
+/// guardara en una sola transacción (ver handlers/ventas.rs). Devuelve
+/// (folio, fecha, total) de las últimas 20. No modifica nada.
+pub async fn ventas_sin_productos(tienda: &TiendaConexion) -> Result<Vec<(String, String, f64)>, String> {
+    let db = Builder::new_remote(tienda.db_url.clone(), tienda.db_token.clone())
+        .build()
+        .await
+        .map_err(|e| format!("no se pudo conectar a la base: {}", e))?;
+    let conn = db.connect().map_err(|e| e.to_string())?;
+    let mut filas = conn
+        .query(
+            "SELECT v.folio, v.fecha_hora, CAST(v.total AS REAL) FROM ventas v
+             WHERE v.estado = 'COMPLETADA'
+               AND NOT EXISTS (SELECT 1 FROM detalles_venta d WHERE d.venta_id = v.id)
+             ORDER BY v.id DESC LIMIT 20",
+            (),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut ventas = Vec::new();
+    while let Some(f) = filas.next().await.map_err(|e| e.to_string())? {
+        ventas.push((f.get(0).unwrap_or_default(), f.get(1).unwrap_or_default(), f.get(2).unwrap_or(0.0)));
+    }
+    Ok(ventas)
+}

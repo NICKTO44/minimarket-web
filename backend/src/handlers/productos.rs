@@ -7,7 +7,7 @@ use crate::models::producto::*;
 /// Unidades de medida soportadas: el catálogo vive en handlers/unidades.rs
 /// (no en un CHECK de SQLite), para que agregar una nueva sea solo un
 /// cambio de código + redeploy, sin tocar ninguna base de tenant.
-fn unidad_valida(unidad: &str) -> bool {
+pub(crate) fn unidad_valida(unidad: &str) -> bool {
     crate::handlers::unidades::es_valida(unidad)
 }
 
@@ -55,8 +55,16 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
             COALESCE(p.afectacion_igv, c.afectacion_igv, 'GRAVADO'), p.afectacion_igv, COALESCE(c.afectacion_igv, 'GRAVADO'){} AND (p.carta_fecha IS NULL OR (?1 = 1 AND p.carta_fecha = ?2)){}",
         SQL_BASE, SQL_DESDE, SQL_ORDEN
     );
-    let intento_igv = conn.query(&con_igv, libsql::params![activo, hoy.clone()]).await;
-    let (mut rows, columnas) = if let Ok(rows) = intento_igv {
+    // Tallas y colores (migración 0017): modelo, talla y color de cada producto.
+    let con_modelo = con_igv.replacen(
+        SQL_DESDE,
+        &format!(", p.modelo_id, p.modelo_nombre, p.talla, p.color{}", SQL_DESDE),
+        1,
+    );
+    let intento_modelo = conn.query(&con_modelo, libsql::params![activo, hoy.clone()]).await;
+    let (mut rows, columnas) = if let Ok(rows) = intento_modelo {
+        (rows, 4)
+    } else if let Ok(rows) = conn.query(&con_igv, libsql::params![activo, hoy.clone()]).await {
         (rows, 3)
     } else {
       match conn.query(&con_carta, libsql::params![activo, hoy]).await {
@@ -103,6 +111,10 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
             afectacion_igv: if columnas >= 3 { row.get(18).unwrap_or_else(|_| "GRAVADO".to_string()) } else { "GRAVADO".to_string() },
             afectacion_propia: if columnas >= 3 { row.get(19).ok() } else { None },
             afectacion_categoria: if columnas >= 3 { row.get(20).unwrap_or_else(|_| "GRAVADO".to_string()) } else { "GRAVADO".to_string() },
+            modelo_id: if columnas >= 4 { row.get::<i64>(21).ok() } else { None },
+            modelo_nombre: if columnas >= 4 { row.get::<String>(22).ok() } else { None },
+            talla: if columnas >= 4 { row.get::<String>(23).ok().filter(|t| !t.is_empty()) } else { None },
+            color: if columnas >= 4 { row.get::<String>(24).ok().filter(|t| !t.is_empty()) } else { None },
         });
     }
 
@@ -156,6 +168,10 @@ pub async fn productos_stock_bajo(
             afectacion_igv: "GRAVADO".to_string(),
             afectacion_propia: None,
             afectacion_categoria: "GRAVADO".to_string(),
+            modelo_id: None,
+            modelo_nombre: None,
+            talla: None,
+            color: None,
         });
     }
 

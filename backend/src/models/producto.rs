@@ -29,6 +29,13 @@ pub struct Producto {
     /// Valor propio del producto; None = hereda el de su categoría.
     pub afectacion_propia: Option<String>,
     pub afectacion_categoria: String,
+    /// Tallas y colores (módulo VARIANTES): los productos con el mismo
+    /// modelo_id son las tallas/colores de un mismo modelo. None en un
+    /// producto normal.
+    pub modelo_id: Option<i64>,
+    pub modelo_nombre: Option<String>,
+    pub talla: Option<String>,
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

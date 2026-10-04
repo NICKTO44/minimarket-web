@@ -42,10 +42,17 @@ pub struct NuevaVenta {
     /// Cotización de la que salió esta venta: al cobrarla queda VENDIDA.
     #[serde(default)]
     pub cotizacion_id: Option<i64>,
+    /// Cambio de prenda (módulo CAMBIOS): lo que el cliente devuelve de una
+    /// venta anterior. Los productos de esta venta son lo que se lleva.
+    #[serde(default)]
+    pub cambio_prenda: Option<crate::handlers::cambios::CambioVenta>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct VentaResult {
     pub venta_id: i64,
     pub folio: String,
+    /// Solo cuando la venta fue un cambio de prenda.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cambio_prenda: Option<crate::handlers::cambios::CambioHecho>,
 }

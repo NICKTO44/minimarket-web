@@ -128,6 +128,8 @@ pub async fn agregar_plato(
         .map_err(e500)?
         .and_then(|f| f.get(0).ok())
         .ok_or_else(|| error(StatusCode::INTERNAL_SERVER_ERROR, "No se pudo preparar la categoría de la carta."))?;
+    // Se lee la respuesta hasta el final antes de seguir (ver ventas.rs).
+    while filas.next().await.map_err(e500)?.is_some() {}
     drop(filas);
 
     // El código es interno (nadie lo escanea): fecha + un número al azar.

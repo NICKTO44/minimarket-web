@@ -35,6 +35,12 @@ pub const MODULO_COTIZACIONES: &str = "COTIZACIONES";
 pub const MODULO_CREDITO: &str = "CREDITO";
 /// Guía de remisión remitente electrónica.
 pub const MODULO_GUIAS: &str = "GUIAS";
+/// Tallas y colores: un modelo con una fila por talla/color, cada una con
+/// su código de barras, precio y stock (handlers/variantes.rs).
+pub const MODULO_VARIANTES: &str = "VARIANTES";
+/// Cambio de prenda: el cliente devuelve algo y se lleva otra cosa en la
+/// misma operación (handlers/cambios.rs).
+pub const MODULO_CAMBIOS: &str = "CAMBIOS";
 
 const MODULOS: &[&str] = &[
     MODULO_MESAS,
@@ -44,6 +50,8 @@ const MODULOS: &[&str] = &[
     MODULO_COTIZACIONES,
     MODULO_CREDITO,
     MODULO_GUIAS,
+    MODULO_VARIANTES,
+    MODULO_CAMBIOS,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
@@ -67,6 +75,11 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
         "MADERERA",
         &[MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_DETRACCION, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_GUIAS],
         &["UNIDAD", "PIE_TABLAR", "PIEZA", "PLANCHA", "METRO", "M2", "M3", "KG", "GALON", "CAJA", "MILLAR"],
+    ),
+    (
+        "ROPA",
+        &[MODULO_CREDITO, MODULO_VARIANTES, MODULO_CAMBIOS],
+        &["UNIDAD", "PAR", "DOCENA", "PAQUETE", "CAJA", "JUEGO"],
     ),
     (RUBRO_GENERAL, &[], &[]),
 ];

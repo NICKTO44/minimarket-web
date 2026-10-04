@@ -284,6 +284,8 @@ pub async fn crear(
         .map_err(e500)?
         .and_then(|f| f.get(0).ok())
         .ok_or_else(|| e500("No se pudo guardar la cotización."))?;
+    // Se lee la respuesta hasta el final antes de seguir (ver ventas.rs).
+    while filas.next().await.map_err(e500)?.is_some() {}
     drop(filas);
 
     for l in &lineas {
