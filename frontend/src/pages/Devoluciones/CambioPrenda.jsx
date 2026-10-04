@@ -3,7 +3,7 @@
 // lleva se elige en el punto de venta, que cobra o devuelve solo la diferencia.
 import { useState } from 'react';
 import { api } from '../../api/api';
-import { fechaCorta } from '../../utils/formato';
+import { fechaCorta, fechaHoraLima } from '../../utils/formato';
 
 const redondear2 = (n) => Math.round(n * 100) / 100;
 
@@ -116,7 +116,7 @@ export default function CambioPrenda({ onIniciarCambio }) {
                 </span>
               )}
             </div>
-            <span className="dev-venta-fecha">{new Date(venta.fecha_hora).toLocaleString('es-PE')}</span>
+            <span className="dev-venta-fecha">{fechaHoraLima(venta.fecha_hora)}</span>
           </div>
           <div className="dev-venta-total">Total de la venta: S/ {venta.total.toFixed(2)}</div>
 

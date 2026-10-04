@@ -4,6 +4,8 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api } from '../../api/api';
 import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
+import { fechaHoraLima } from '../../utils/formato';
+import { descargarArchivo, pdfDeVenta } from '../../utils/pdfTicket';
 import './Comprobantes.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -15,6 +17,8 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   const [filtroEstado, setFiltroEstado] = useState('');
   const [mensaje, setMensaje] = useState(null);
   const [ventaParaImprimir, setVentaParaImprimir] = useState(null);
+  // Venta cuyo PDF se está preparando (para no pedirlo dos veces).
+  const [exportando, setExportando] = useState(null);
 
   // --- Visor de PDF embebido (reemplaza al iframe) ---
   const [pdfVisible, setPdfVisible] = useState(null);
@@ -132,6 +136,53 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     setEnviandoWhatsapp(null);
   };
 
+  // Datos del ticket propio de una venta (nota simple, boleta, o comprobante
+  // sin PDF oficial), con los datos reales que ya trae la fila (hash, RUC
+  // emisor, fecha) para que el QR salga correcto. Lo usan Imprimir y PDF.
+  const datosDelTicket = async (comp) => {
+    const detalle = await api.ventaParaDevolucion(comp.folio_venta);
+    // Desglose de IGV como se cobró (tasa, gravado, exonerado). Si el
+    // servidor aún no lo ofrece, se imprime como siempre (todo al 18 %).
+    const igvVenta = await api.igvVenta(comp.venta_id).catch(() => null);
+
+    const tipoDocCliente =
+      comp.tipo === 'FACTURA'
+        ? '6'
+        : comp.cliente_documento
+          ? comp.cliente_documento.length === 11
+            ? '6'
+            : '1'
+          : '0';
+
+    return {
+      venta: { folio: detalle.folio, total: detalle.total, montoRecibido: null, cambio: null },
+      items: detalle.productos.map((p) => ({ nombre: p.nombre, cantidad: p.cantidad, precio: p.precio_unitario })),
+      comprobante: comp.id
+        ? {
+            tipo: comp.tipo,
+            serie: comp.serie,
+            numero: comp.numero,
+            estado: comp.estado,
+            hash: comp.hash,
+            ruc_emisor: comp.ruc_emisor,
+            fecha_emision: comp.fecha_emision_corta,
+            igv: igvVenta?.igv ?? comp.monto - comp.monto / 1.18,
+            total_venta: comp.monto,
+            igv_tasa: igvVenta?.igv_tasa,
+            op_gravadas: igvVenta?.op_gravadas,
+            op_exoneradas: igvVenta?.op_exoneradas,
+            op_inafectas: igvVenta?.op_inafectas,
+            detraccion_porcentaje: igvVenta?.detraccion_porcentaje,
+            detraccion_monto: igvVenta?.detraccion_monto,
+            detraccion_cuenta: igvVenta?.detraccion_cuenta,
+            cliente_tipo_documento_codigo: tipoDocCliente,
+            cliente_numero_documento: comp.cliente_documento || '-',
+          }
+        : null,
+      cliente: detalle.cliente || null,
+    };
+  };
+
   const reimprimir = async (comp) => {
     setMensaje(null);
 
@@ -144,52 +195,48 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     }
 
     // Boleta, o comprobante sin PDF real (nota simple, o rechazado) —
-    // usamos nuestro ticket propio, con los datos reales que ya trae
-    // esta fila (hash, RUC emisor, fecha) para que el QR salga correcto.
+    // usamos nuestro ticket propio.
     try {
-      const detalle = await api.ventaParaDevolucion(comp.folio_venta);
-      // Desglose de IGV como se cobró (tasa, gravado, exonerado). Si el
-      // servidor aún no lo ofrece, se imprime como siempre (todo al 18 %).
-      const igvVenta = await api.igvVenta(comp.venta_id).catch(() => null);
-
-      const tipoDocCliente =
-        comp.tipo === 'FACTURA'
-          ? '6'
-          : comp.cliente_documento
-            ? comp.cliente_documento.length === 11
-              ? '6'
-              : '1'
-            : '0';
-
-      setVentaParaImprimir({
-        venta: { folio: detalle.folio, total: detalle.total, montoRecibido: null, cambio: null },
-        items: detalle.productos.map((p) => ({ nombre: p.nombre, cantidad: p.cantidad, precio: p.precio_unitario })),
-        comprobante: comp.id
-          ? {
-              tipo: comp.tipo,
-              serie: comp.serie,
-              numero: comp.numero,
-              hash: comp.hash,
-              ruc_emisor: comp.ruc_emisor,
-              fecha_emision: comp.fecha_emision_corta,
-              igv: igvVenta?.igv ?? comp.monto - comp.monto / 1.18,
-              total_venta: comp.monto,
-              igv_tasa: igvVenta?.igv_tasa,
-              op_gravadas: igvVenta?.op_gravadas,
-              op_exoneradas: igvVenta?.op_exoneradas,
-              op_inafectas: igvVenta?.op_inafectas,
-              detraccion_porcentaje: igvVenta?.detraccion_porcentaje,
-              detraccion_monto: igvVenta?.detraccion_monto,
-              detraccion_cuenta: igvVenta?.detraccion_cuenta,
-              cliente_tipo_documento_codigo: tipoDocCliente,
-              cliente_numero_documento: comp.cliente_documento || '-',
-            }
-          : null,
-        cliente: detalle.cliente || null,
-      });
+      setVentaParaImprimir(await datosDelTicket(comp));
       setTimeout(() => window.print(), 200);
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
+    }
+  };
+
+  // Descarga el comprobante como archivo PDF: el mismo documento que sale
+  // con "Imprimir". La factura aceptada baja su PDF oficial de FacturaLibre;
+  // la boleta y la nota simple, nuestro ticket.
+  const exportarPdf = async (comp) => {
+    if (exportando) return;
+    setMensaje(null);
+    setExportando(comp.venta_id);
+    try {
+      if (comp.tipo === 'FACTURA' && comp.enlace_pdf && comp.id) {
+        const respuesta = await fetch(api.comprobantePdfUrl(comp.id));
+        if (!respuesta.ok) throw new Error('No se pudo descargar el PDF de la factura. Intenta de nuevo en un momento.');
+        descargarArchivo(await respuesta.blob(), `Factura-${comp.serie}-${String(comp.numero).padStart(6, '0')}.pdf`);
+        return;
+      }
+      const datos = await datosDelTicket(comp);
+      const { bytes, nombre } = pdfDeVenta({
+        ...datos,
+        // La fila ya trae al cliente: va en el PDF aunque la venta no lo detalle.
+        cliente:
+          datos.cliente ||
+          (comp.cliente_nombre ? { nombre_razon_social: comp.cliente_nombre, numero_documento: comp.cliente_documento || null } : null),
+        nombreTienda,
+        direccion,
+        telefono,
+        ruc,
+        cajero: usuario?.nombre || '',
+        fecha: fechaHoraLima(comp.fecha_emision),
+      });
+      descargarArchivo(bytes, nombre);
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    } finally {
+      setExportando(null);
     }
   };
 
@@ -257,10 +304,18 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                       <span className="comp-badge comp-badge-ninguno">Sin comprobante</span>
                     )}
                   </td>
-                  <td>{new Date(c.fecha_emision).toLocaleString('es-PE')}</td>
+                  <td>{fechaHoraLima(c.fecha_emision)}</td>
                   <td>
                     <button className="comp-boton-imprimir" onClick={() => reimprimir(c)}>
                       🖨 Imprimir
+                    </button>
+                    <button
+                      className="comp-boton-imprimir comp-boton-pdf"
+                      onClick={() => exportarPdf(c)}
+                      disabled={exportando === c.venta_id}
+                      aria-label={`Descargar PDF de la venta ${c.folio_venta}`}
+                    >
+                      {exportando === c.venta_id ? 'Preparando…' : '⬇ PDF'}
                     </button>
                     <button className="comp-boton-whatsapp" onClick={() => abrirEnvioWhatsapp(c)}>
                       📲

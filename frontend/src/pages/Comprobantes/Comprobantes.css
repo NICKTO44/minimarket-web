@@ -425,3 +425,12 @@
 .comp-whatsapp-modal-enviar:hover {
   background: #0f7b37;
 }
+/* Descargar el comprobante como PDF */
+.comp-boton-pdf {
+  margin-left: 6px;
+}
+
+.comp-boton-pdf:disabled {
+  color: #9ca3af;
+  cursor: wait;
+}
