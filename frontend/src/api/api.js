@@ -211,6 +211,13 @@ export const api = {
   guiaVenta: (folio) => request(`/guias/venta/${encodeURIComponent(folio)}`),
   guiaCrear: (datos) => request('/guias', { method: 'POST', body: JSON.stringify(datos) }),
   guiaConsultar: (id) => request(`/guias/${id}/consultar`, { method: 'POST' }),
+  // Ropa y calzado: tallas y colores (módulo VARIANTES) y cambio de prenda (módulo CAMBIOS)
+  modeloCrear: (datos) => request('/modelos', { method: 'POST', body: JSON.stringify(datos) }),
+  modeloActualizar: (id, datos) => request(`/modelos/${id}`, { method: 'PUT', body: JSON.stringify(datos) }),
+  modeloCompartirImagen: (id, productoId) => request(`/modelos/${id}/imagen/${productoId}`, { method: 'POST' }),
+  cambiosConfig: () => request('/cambios/config'),
+  cambiosConfigGuardar: (dias) => request('/configuracion/cambios', { method: 'PUT', body: JSON.stringify({ dias }) }),
+  cambioVenta: (identificador) => request(`/cambios/venta/${encodeURIComponent(identificador)}`),
   detraccionGuardar: (datos) => request('/configuracion/detraccion', { method: 'PUT', body: JSON.stringify(datos) }),
   unidades: () => request('/unidades'),
   unidadesGuardar: (activas) => request('/configuracion/unidades', { method: 'PUT', body: JSON.stringify({ activas }) }),

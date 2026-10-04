@@ -1599,3 +1599,116 @@
 .pos-venta-modal-whatsapp-boton:hover {
   background: #0f7b37;
 }
+/* ---------- Tallas y colores: tarjeta de un modelo ---------- */
+.pos-producto-modelo {
+  position: relative;
+}
+
+.pos-modelo-etiqueta {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--pos-texto);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.pos-modelo-etiqueta.agotado {
+  background: var(--pos-error);
+}
+
+.pos-producto-precio small {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pos-texto-tenue);
+}
+
+/* ---------- Cambio de prenda ---------- */
+.pos-cambio-aviso {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1.5px solid #f3d38a;
+  border-radius: 12px;
+  background: #fff8e6;
+  color: #6b4a00;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.pos-cambio-aviso-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.pos-cambio-aviso-cabecera strong {
+  font-size: 13.5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pos-cambio-aviso-cabecera button {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border: 1.5px solid #e2b95a;
+  border-radius: 8px;
+  background: #fff;
+  color: #6b4a00;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pos-cambio-aviso-linea {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+.pos-cambio-aviso-linea span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pos-cambio-aviso-linea span:last-child {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.pos-cambio-aviso p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.pos-cambio-totales > div:not(.pos-total-row) {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13.5px;
+  color: #4b5563;
+  padding: 2px 0;
+}
+
+.pos-cambio-totales .pos-total-row {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed #d8dce3;
+}
+
+.pos-cambio-nota {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff8e6;
+  color: #6b4a00;
+  font-size: 13px;
+  font-weight: 600;
+}

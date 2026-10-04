@@ -86,7 +86,7 @@ export default function Registro({ onRegistroExitoso, onIrALogin }) {
 
         <p className="registro-rubro-titulo">¿Qué rubro es tu negocio?</p>
         <div className="registro-tipos" role="radiogroup" aria-label="Rubro del negocio">
-          {RUBROS.map(({ valor, label, descripcion, Icono }) => (
+          {RUBROS.map(({ valor, label, Icono }) => (
             <button
               key={valor}
               type="button"
@@ -95,12 +95,14 @@ export default function Registro({ onRegistroExitoso, onIrALogin }) {
               className={`registro-tipo${rubro === valor ? ' activo' : ''}`}
               onClick={() => setRubro(valor)}
             >
-              <Icono size={20} strokeWidth={2} />
+              <Icono size={18} strokeWidth={2} />
               <strong>{label}</strong>
-              <span>{descripcion}</span>
             </button>
           ))}
         </div>
+        {/* La descripción solo del rubro elegido: la lista queda corta y el
+            formulario no se va hacia abajo. */}
+        <p className="registro-rubro-descripcion">{RUBROS.find((r) => r.valor === rubro)?.descripcion}</p>
 
         <input
           type="text"

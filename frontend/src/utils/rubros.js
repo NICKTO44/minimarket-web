@@ -4,7 +4,7 @@
 // arrancan encendidos, qué unidades se sugieren y cómo se llaman algunas
 // pantallas ("Carta" en vez de "Productos" en un restaurante).
 // Debe coincidir con backend/src/handlers/rubros.rs.
-import { Axe, Hammer, ShoppingBasket, Store, UtensilsCrossed } from 'lucide-react';
+import { Axe, Hammer, Shirt, ShoppingBasket, Store, UtensilsCrossed } from 'lucide-react';
 import { UNIDADES_CLASICAS } from './unidades';
 
 export const MODULO_MESAS = 'MESAS';
@@ -14,6 +14,8 @@ export const MODULO_DETRACCION = 'DETRACCION';
 export const MODULO_COTIZACIONES = 'COTIZACIONES';
 export const MODULO_CREDITO = 'CREDITO';
 export const MODULO_GUIAS = 'GUIAS';
+export const MODULO_VARIANTES = 'VARIANTES';
+export const MODULO_CAMBIOS = 'CAMBIOS';
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -51,6 +53,16 @@ export const MODULOS = [
     valor: MODULO_GUIAS,
     label: 'Guías de remisión',
     descripcion: 'Emite la guía de remisión electrónica para trasladar lo vendido (requiere FacturaLibre configurado).',
+  },
+  {
+    valor: MODULO_VARIANTES,
+    label: 'Tallas y colores',
+    descripcion: 'Un modelo con sus tallas y colores: cada una con su propio código de barras, precio y stock, y se elige al vender.',
+  },
+  {
+    valor: MODULO_CAMBIOS,
+    label: 'Cambio de prenda',
+    descripcion: 'El cliente devuelve una prenda y se lleva otra en la misma operación; solo se cobra o se devuelve la diferencia.',
   },
 ];
 
@@ -98,6 +110,15 @@ export const RUBROS = [
     Icono: Axe,
     modulos: [MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_DETRACCION, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_GUIAS],
     unidades: ['UNIDAD', 'PIE_TABLAR', 'PIEZA', 'PLANCHA', 'METRO', 'M2', 'M3', 'KG', 'GALON', 'CAJA', 'MILLAR'],
+    etiquetas: {},
+  },
+  {
+    valor: 'ROPA',
+    label: 'Ropa y calzado',
+    descripcion: 'Prendas y zapatos por talla y color, cada una con su precio y su código; cambios de prenda y separados.',
+    Icono: Shirt,
+    modulos: [MODULO_CREDITO, MODULO_VARIANTES, MODULO_CAMBIOS],
+    unidades: ['UNIDAD', 'PAR', 'DOCENA', 'PAQUETE', 'CAJA', 'JUEGO'],
     etiquetas: {},
   },
   {

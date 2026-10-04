@@ -218,3 +218,107 @@
 .dev-boton-procesar:disabled {
   background: #d1d5db;
 }   
+/* ---------- Cambio de prenda (módulo CAMBIOS) ---------- */
+.dev-pestanas {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  margin: 10px 0 14px;
+  border-radius: 12px;
+  background: #e9ebef;
+}
+
+.dev-pestanas button {
+  flex: 1;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: #4b5563;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dev-pestanas button.activo {
+  background: #fff;
+  color: #16181d;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.dev-cambio-aviso {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff8e6;
+  color: #6b4a00;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dev-item-agotado .dev-item-nombre {
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.dev-cambio-controles {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.dev-cambio-marcar {
+  padding: 9px 14px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 9px;
+  background: #fff;
+  color: #16181d;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dev-cambio-marcar.activo {
+  border-color: var(--color-primario);
+  background: var(--color-primario-suave);
+  color: var(--color-primario-texto);
+}
+
+.dev-cambio-falla {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.dev-item-controles .dev-cambio-falla input {
+  width: auto;
+  padding: 0;
+}
+
+.dev-cambio-total strong {
+  color: #166534;
+}
+
+.dev-boton-procesar.dev-cambio-boton {
+  background: var(--color-primario);
+}
+
+.dev-boton-procesar.dev-cambio-boton:disabled {
+  background: #d1d5db;
+}
+
+@media (max-width: 640px) {
+  .dev-pestanas button {
+    font-size: 13px;
+    padding: 10px 6px;
+  }
+
+  .dev-cambio-controles {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

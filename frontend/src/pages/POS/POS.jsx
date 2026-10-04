@@ -15,6 +15,8 @@ import CalculadoraPieTablar from '../../components/CalculadoraPieTablar';
 import CotizacionImprimible from '../../components/CotizacionImprimible';
 import { numeroCotizacion } from '../../utils/formato';
 import '../../components/PantallaModulo.css';
+import SelectorTalla from '../../components/SelectorTalla';
+import { agruparPorModelo } from '../../utils/variantes';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -132,6 +134,15 @@ export default function POS({
   // Cotización que se abrió desde su pantalla para venderla.
   cotizacionACargar = null,
   onCotizacionUsada,
+  // Módulo "Tallas y colores": las tallas de un modelo van en una sola
+  // tarjeta y se elige la talla al tocarla. Apagado, la grilla es la de siempre.
+  variantes = false,
+  // Módulo "Cambio de prenda": plazo de cambio que se imprime en el ticket.
+  cambios = false,
+  // Cambio de prenda en curso (viene de Devoluciones): lo que el cliente
+  // devuelve; lo que se agregue al carrito es lo que se lleva.
+  cambioEnCurso = null,
+  onCambioTerminado,
   // Cafetería / Restaurante: pedido de una mesa que se está cobrando.
   pedidoACobrar = null,
   onCancelarCobroPedido,
@@ -192,6 +203,10 @@ export default function POS({
   const [tipoComprobante, setTipoComprobante] = useState('BOLETA');
   // Producto por pie tablar cuya calculadora está abierta (módulo Medidas).
   const [productoAMedir, setProductoAMedir] = useState(null);
+  // Modelo del que se está eligiendo la talla (módulo "Tallas y colores").
+  const [modeloAElegir, setModeloAElegir] = useState(null);
+  // Días que el cliente tiene para cambiar (módulo "Cambio de prenda").
+  const [diasCambio, setDiasCambio] = useState(0);
   // Detracción del negocio (null = no la usa o aún no carga) y si esta
   // factura la lleva (el cajero puede excluir una venta que no está sujeta).
   const [detraccion, setDetraccion] = useState(null);
@@ -239,6 +254,15 @@ export default function POS({
       .then((d) => setDetraccion(d?.lista ? d : null))
       .catch(() => setDetraccion(null));
   }, []);
+
+  // Plazo de cambio para el ticket: solo lo pide un negocio con ese módulo.
+  useEffect(() => {
+    if (!cambios) return;
+    api
+      .cambiosConfig()
+      .then((c) => setDiasCambio(c?.dias || 0))
+      .catch(() => {});
+  }, [cambios]);
 
   const [nuevoTipoDocumento, setNuevoTipoDocumento] = useState('DNI');
   const [nuevoDocumento, setNuevoDocumento] = useState('');
@@ -439,6 +463,27 @@ export default function POS({
     return base;
   }, [productos, busqueda, ordenPrecio]);
 
+  // Tallas y colores: una tarjeta por modelo (con las tallas que pasaron el
+  // buscador). Sin el módulo, una tarjeta por producto, como siempre.
+  const tarjetas = useMemo(
+    () => (variantes ? agruparPorModelo(productosFiltrados) : productosFiltrados),
+    [variantes, productosFiltrados]
+  );
+
+  // Abre el selector con TODAS las tallas del modelo, no solo las buscadas.
+  const elegirTallaDe = (grupo) => {
+    if (cobrandoPedido) {
+      setMensaje({
+        tipo: 'error',
+        texto: `Estás cobrando ${tituloPedido(pedidoACobrar)}. Para agregar algo, vuelve a la mesa y agrégalo al pedido.`,
+      });
+      return;
+    }
+    const completo = agruparPorModelo(productos).find((g) => g.esModelo && g.modelo_id === grupo.modelo_id) || grupo;
+    if (completo.variantes.length === 1) agregarAlCarrito(completo.variantes[0]);
+    else setModeloAElegir(completo);
+  };
+
   const marcarImagenFallida = (id) => {
     setImagenesFallidas((prev) => {
       if (prev.has(id)) return prev;
@@ -511,6 +556,13 @@ export default function POS({
       return;
     }
 
+    // Tallas y colores: lo escrito deja un solo modelo -> se elige su talla.
+    if (variantes && tarjetas.length === 1 && tarjetas[0].esModelo) {
+      elegirTallaDe(tarjetas[0]);
+      setBusqueda('');
+      return;
+    }
+
     setMensaje({ tipo: 'error', texto: `No se encontró ningún producto con código o nombre "${texto}"` });
   };
 
@@ -572,6 +624,13 @@ export default function POS({
   const detraccionAplicable = !!detraccion && tipoComprobante === 'FACTURA' && total > detraccion.minimo;
   const montoDetraccion = detraccionAplicable ? redondear2((total * detraccion.porcentaje) / 100) : 0;
 
+  // Cambio de prenda: lo devuelto va a favor del cliente y solo se cobra (o
+  // se devuelve) la diferencia. Sin cambio en curso, se cobra el total.
+  const enCambio = !!cambioEnCurso && !cobrandoPedido;
+  const aFavor = enCambio ? cambioEnCurso.valor : 0;
+  const aCobrar = enCambio ? redondear2(Math.max(0, total - aFavor)) : total;
+  const aDevolver = enCambio ? redondear2(Math.max(0, aFavor - total)) : 0;
+
   const esMixto = metodoPago === 'MIXTO';
   const esCredito = metodoPago === 'CREDITO';
   const adelantoNum = redondear2(parseFloat(String(creditoAdelanto).replace(',', '.')) || 0);
@@ -593,10 +652,10 @@ export default function POS({
 
   const cambio = useMemo(() => {
     const recibido = parseFloat(montoRecibido) || 0;
-    if (metodoPago === 'EFECTIVO') return Math.max(0, recibido - total);
+    if (metodoPago === 'EFECTIVO') return Math.max(0, recibido - aCobrar);
     if (metodoPago === 'MIXTO') return redondear2(Math.max(0, recibido - mixtoEfectivo));
     return 0;
-  }, [montoRecibido, total, metodoPago, mixtoEfectivo]);
+  }, [montoRecibido, aCobrar, metodoPago, mixtoEfectivo]);
 
   // Estado del pago mixto: null = listo para cobrar; si no, un texto
   // que explica qué falta (solo se muestra como error cuando ya hay
@@ -623,7 +682,7 @@ export default function POS({
     carrito.length > 0 &&
     !procesando &&
     (!clienteEsObligatorio || cliente) &&
-    (metodoPago !== 'EFECTIVO' || parseFloat(montoRecibido) >= total) &&
+    (metodoPago !== 'EFECTIVO' || (enCambio && aCobrar === 0) || parseFloat(montoRecibido) >= aCobrar) &&
     (!esCredito || adelantoValido) &&
     estadoMixto.listo;
 
@@ -687,8 +746,18 @@ export default function POS({
         metodo_pago: esCredito ? 'EFECTIVO' : metodoPago,
         credito: esCredito ? { adelanto: adelantoNum, adelanto_metodo: creditoAdelantoMetodo, dias: creditoDias } : null,
         cotizacion_id: cotizacionEnVenta?.id || null,
+        // Cambio de prenda: lo que el cliente devuelve de su venta anterior.
+        ...(enCambio
+          ? {
+              cambio_prenda: {
+                venta_id: cambioEnCurso.venta_id,
+                productos: cambioEnCurso.items.map((i) => ({ detalle_id: i.detalle_id, cantidad: i.cantidad, con_falla: !!i.con_falla })),
+                motivo: cambioEnCurso.motivo || null,
+              },
+            }
+          : {}),
         monto_recibido:
-          metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || total : esMixto ? recibidoNum : null,
+          metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || aCobrar : esMixto ? recibidoNum : null,
         cambio: metodoPago === 'EFECTIVO' || esMixto ? cambio : null,
         usuario_id: usuario.id,
         cliente_id: cliente?.id || null,
@@ -728,9 +797,20 @@ export default function POS({
           folio: resultado.folio,
           total,
           montoRecibido:
-            metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || total : esMixto ? recibidoNum : null,
+            metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || aCobrar : esMixto ? recibidoNum : null,
           cambio: metodoPago === 'EFECTIVO' || esMixto ? cambio : null,
           metodoPago,
+          // Cambio de prenda: lo devuelto, lo que valía y la diferencia.
+          cambioPrenda: enCambio
+            ? {
+                folioOriginal: cambioEnCurso.folio,
+                items: cambioEnCurso.items,
+                valor: aFavor,
+                aCobrar,
+                aDevolver,
+                folioDevolucion: resultado.cambio_prenda?.folio_devolucion || null,
+              }
+            : null,
           pagoOtro: esMixto ? mixtoOtro : null,
           pagoOtroMetodo: esMixto ? mixtoOtroMetodo : null,
           credito: esCredito
@@ -750,6 +830,9 @@ export default function POS({
         cliente,
         deMesa: cobrandoPedido,
       };
+
+      // El cambio quedó hecho: la pantalla vuelve a ser una venta normal.
+      if (enCambio) onCambioTerminado?.();
 
       // El pedido quedó cobrado y su mesa libre.
       if (cobrandoPedido) onPedidoCobrado?.();
@@ -942,41 +1025,67 @@ export default function POS({
           </select>
         </div>
         <div className="pos-grid">
-          {productosFiltrados.map((p) => (
-            <button
-              key={p.id}
-              className={`pos-producto-card${p.agotado ? ' pos-producto-agotado' : ''}`}
-              aria-disabled={p.agotado || undefined}
-              onClick={() => agregarAlCarrito(p)}
-            >
-              {p.imagen_url && !imagenesFallidas.has(p.id) ? (
-                <img
-                  className="pos-producto-imagen"
-                  src={`${API_URL}${p.imagen_url}`}
-                  alt={p.nombre}
-                  onError={() => marcarImagenFallida(p.id)}
-                />
-              ) : (
-                <div className="pos-producto-imagen pos-producto-imagen-vacia">📦</div>
-              )}
-              <span className="pos-producto-nombre">{p.nombre}</span>
-              <span className="pos-producto-fila">
-                <span className="pos-producto-precio">S/ {p.precio.toFixed(2)}</span>
-                {p.agotado && <span className="pos-producto-stock pos-producto-stock-bajo">Agotado</span>}
-                {/* Rojo con el mismo criterio que el reporte de stock bajo
-                    (stock <= stock_minimo, ver productos.rs). */}
-                {p.controla_stock !== false && (
-                  <span
-                    className={`pos-producto-stock${p.stock <= p.stock_minimo ? ' pos-producto-stock-bajo' : ''}`}
-                    title={`Stock: ${p.stock}`}
-                  >
-                    {etiquetaStock(p)}
-                  </span>
+          {tarjetas.map((p) =>
+            p.esModelo ? (
+              <button key={p.id} className="pos-producto-card pos-producto-modelo" onClick={() => elegirTallaDe(p)}>
+                {p.imagen_url && !imagenesFallidas.has(p.id) ? (
+                  <img
+                    className="pos-producto-imagen"
+                    src={`${API_URL}${p.imagen_url}`}
+                    alt={p.nombre}
+                    onError={() => marcarImagenFallida(p.id)}
+                  />
+                ) : (
+                  <div className="pos-producto-imagen pos-producto-imagen-vacia">👕</div>
                 )}
-              </span>
-            </button>
-          ))}
-          {productosFiltrados.length === 0 && (
+                <span className={`pos-modelo-etiqueta${p.stockTotal <= 0 ? ' agotado' : ''}`}>
+                  {p.stockTotal <= 0
+                    ? 'Agotado'
+                    : `${p.variantes.length} ${p.tallas.length > 0 ? 'tallas' : 'colores'}`}
+                </span>
+                <span className="pos-producto-nombre">{p.nombre}</span>
+                <span className="pos-producto-fila">
+                  <span className="pos-producto-precio">
+                    {p.precioMin !== p.precioMax && <small>desde </small>}S/ {p.precioMin.toFixed(2)}
+                  </span>
+                </span>
+              </button>
+            ) : (
+              <button
+                key={p.id}
+                className={`pos-producto-card${p.agotado ? ' pos-producto-agotado' : ''}`}
+                aria-disabled={p.agotado || undefined}
+                onClick={() => agregarAlCarrito(p)}
+              >
+                {p.imagen_url && !imagenesFallidas.has(p.id) ? (
+                  <img
+                    className="pos-producto-imagen"
+                    src={`${API_URL}${p.imagen_url}`}
+                    alt={p.nombre}
+                    onError={() => marcarImagenFallida(p.id)}
+                  />
+                ) : (
+                  <div className="pos-producto-imagen pos-producto-imagen-vacia">📦</div>
+                )}
+                <span className="pos-producto-nombre">{p.nombre}</span>
+                <span className="pos-producto-fila">
+                  <span className="pos-producto-precio">S/ {p.precio.toFixed(2)}</span>
+                  {p.agotado && <span className="pos-producto-stock pos-producto-stock-bajo">Agotado</span>}
+                  {/* Rojo con el mismo criterio que el reporte de stock bajo
+                      (stock <= stock_minimo, ver productos.rs). */}
+                  {p.controla_stock !== false && (
+                    <span
+                      className={`pos-producto-stock${p.stock <= p.stock_minimo ? ' pos-producto-stock-bajo' : ''}`}
+                      title={`Stock: ${p.stock}`}
+                    >
+                      {etiquetaStock(p)}
+                    </span>
+                  )}
+                </span>
+              </button>
+            )
+          )}
+          {tarjetas.length === 0 && (
             <p className="pos-sin-resultados">No se encontraron productos</p>
           )}
         </div>
@@ -1183,8 +1292,29 @@ export default function POS({
           </div>
         )}
 
+        {enCambio && (
+          <div className="pos-cambio-aviso">
+            <div className="pos-cambio-aviso-cabecera">
+              <strong>Cambio de prenda · {cambioEnCurso.folio}</strong>
+              <button type="button" onClick={() => onCambioTerminado?.()} disabled={procesando}>
+                Cancelar cambio
+              </button>
+            </div>
+            {cambioEnCurso.items.map((i) => (
+              <div key={i.detalle_id} className="pos-cambio-aviso-linea">
+                <span>
+                  Devuelve: {formatoCantidad(i.cantidad)} × {i.nombre}
+                  {i.con_falla ? ' (con falla)' : ''}
+                </span>
+                <span>S/ {(i.valor_unitario * i.cantidad).toFixed(2)}</span>
+              </div>
+            ))}
+            <p>Agrega abajo lo que el cliente se lleva.</p>
+          </div>
+        )}
+
         <div className="pos-carrito-items">
-          {carrito.length === 0 && <p className="pos-carrito-vacio">Carrito vacío</p>}
+          {carrito.length === 0 && <p className="pos-carrito-vacio">{enCambio ? 'Elige la prenda nueva' : 'Carrito vacío'}</p>}
           {carrito.map((item) => (
             <div key={claveDe(item)} className="pos-carrito-item">
               <div className="pos-carrito-item-info">
@@ -1224,10 +1354,29 @@ export default function POS({
         </div>
 
         <div className={`pos-resumen${esMixto ? ' pos-resumen-mixto' : ''}`}>
-          <div className="pos-total-row">
-            <span>Total</span>
-            <span className="pos-total-monto">S/ {total.toFixed(2)}</span>
-          </div>
+          {enCambio ? (
+            <div className="pos-cambio-totales">
+              <div>
+                <span>Lo que se lleva</span>
+                <span>S/ {total.toFixed(2)}</span>
+              </div>
+              <div>
+                <span>A favor por lo devuelto</span>
+                <span>− S/ {aFavor.toFixed(2)}</span>
+              </div>
+              {carrito.length > 0 && (
+                <div className="pos-total-row">
+                  <span>{aDevolver > 0 ? 'Se devuelve al cliente' : 'Diferencia a cobrar'}</span>
+                  <span className="pos-total-monto">S/ {(aDevolver > 0 ? aDevolver : aCobrar).toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="pos-total-row">
+              <span>Total</span>
+              <span className="pos-total-monto">S/ {total.toFixed(2)}</span>
+            </div>
+          )}
 
           <div className="pos-metodo-pago">
             {['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'YAPE_PLIN'].map((m) => (
@@ -1239,13 +1388,15 @@ export default function POS({
                 {m.replace('_', '/')}
               </button>
             ))}
-            <button
-              className={`pos-metodo-mixto${esMixto ? ' activo' : ''}`}
-              onClick={() => setMetodoPago('MIXTO')}
-            >
-              {esMixto ? 'MIXTO · EFECTIVO + OTRO' : '+ MIXTO · EFECTIVO + OTRO'}
-            </button>
-            {credito && (
+            {!enCambio && (
+              <button
+                className={`pos-metodo-mixto${esMixto ? ' activo' : ''}`}
+                onClick={() => setMetodoPago('MIXTO')}
+              >
+                {esMixto ? 'MIXTO · EFECTIVO + OTRO' : '+ MIXTO · EFECTIVO + OTRO'}
+              </button>
+            )}
+            {credito && !enCambio && (
               <button className={`pos-metodo-mixto${esCredito ? ' activo' : ''}`} onClick={() => setMetodoPago('CREDITO')}>
                 {esCredito ? 'CRÉDITO · PAGA DESPUÉS' : '+ CRÉDITO · PAGA DESPUÉS'}
               </button>
@@ -1421,7 +1572,7 @@ export default function POS({
             </div>
           )}
 
-          {metodoPago === 'EFECTIVO' && (
+          {metodoPago === 'EFECTIVO' && !(enCambio && (aCobrar === 0 || carrito.length === 0)) && (
             <div className="pos-efectivo">
               <input
                 type="number"
@@ -1429,8 +1580,13 @@ export default function POS({
                 value={montoRecibido}
                 onChange={(e) => setMontoRecibido(e.target.value)}
               />
-              <span className="pos-cambio">Cambio: S/ {cambio.toFixed(2)}</span>
+              <span className="pos-cambio">{enCambio ? 'Vuelto' : 'Cambio'}: S/ {cambio.toFixed(2)}</span>
             </div>
+          )}
+          {enCambio && carrito.length > 0 && aDevolver > 0 && (
+            <p className="pos-cambio-nota">
+              Lo nuevo vale menos: entrega S/ {aDevolver.toFixed(2)} al cliente por {nombreMetodo(metodoPago)}.
+            </p>
           )}
 
           {mensaje && <p className={`pos-mensaje pos-mensaje-${mensaje.tipo}`}>{mensaje.texto}</p>}
@@ -1443,7 +1599,7 @@ export default function POS({
             </button>
           )}
 
-          {cotizaciones && carrito.length > 0 && !cobrandoPedido && !cotizacionEnVenta && (
+          {cotizaciones && carrito.length > 0 && !cobrandoPedido && !cotizacionEnVenta && !enCambio && (
             <button
               type="button"
               className="pos-cotizar"
@@ -1457,9 +1613,17 @@ export default function POS({
           <button className="pos-cobrar" disabled={!puedeCobrar} onClick={procesarVenta}>
             {procesando
               ? 'Procesando...'
-              : esCredito
-                ? `Registrar crédito S/ ${total.toFixed(2)}`
-                : `Cobrar S/ ${total.toFixed(2)}`}
+              : enCambio
+                ? carrito.length === 0
+                  ? 'Elige lo que se lleva'
+                  : aDevolver > 0
+                  ? `Hacer el cambio · devolver S/ ${aDevolver.toFixed(2)}`
+                  : aCobrar > 0
+                    ? `Hacer el cambio · cobrar S/ ${aCobrar.toFixed(2)}`
+                    : 'Hacer el cambio'
+                : esCredito
+                  ? `Registrar crédito S/ ${total.toFixed(2)}`
+                  : `Cobrar S/ ${total.toFixed(2)}`}
           </button>
         </div>
       </div>
@@ -1563,6 +1727,23 @@ export default function POS({
         />
       )}
 
+      {modeloAElegir && (
+        <SelectorTalla
+          grupo={modeloAElegir}
+          enCarrito={Object.fromEntries(
+            modeloAElegir.variantes.map((v) => [
+              v.id,
+              carrito.filter((i) => i.id === v.id).reduce((suma, i) => suma + i.cantidad, 0),
+            ])
+          )}
+          onElegir={(variante) => {
+            agregarAlCarrito(variante);
+            setModeloAElegir(null);
+          }}
+          onCerrar={() => setModeloAElegir(null)}
+        />
+      )}
+
       {escanerAbierto && (
         <EscanerCodigoBarras
           onCodigoDetectado={manejarCodigoEscaneado}
@@ -1575,7 +1756,7 @@ export default function POS({
         <div className="pos-venta-modal-overlay">
           <div className="pos-venta-modal">
             <div className="pos-venta-modal-check">✓</div>
-            <h2>Venta registrada</h2>
+            <h2>{ultimaVentaParaImprimir.venta.cambioPrenda ? 'Cambio registrado' : 'Venta registrada'}</h2>
             <p className="pos-venta-modal-folio">{ultimaVentaParaImprimir.venta.folio}</p>
 
             <p className="pos-venta-modal-tipo">
@@ -1594,12 +1775,30 @@ export default function POS({
             )}
 
             <div className="pos-venta-modal-linea">
-              <span>Total</span>
+              <span>{ultimaVentaParaImprimir.venta.cambioPrenda ? 'Lo que se lleva' : 'Total'}</span>
               <strong>S/ {ultimaVentaParaImprimir.venta.total.toFixed(2)}</strong>
             </div>
+            {ultimaVentaParaImprimir.venta.cambioPrenda && (
+              <>
+                <div className="pos-venta-modal-linea">
+                  <span>A favor por lo devuelto</span>
+                  <strong>− S/ {ultimaVentaParaImprimir.venta.cambioPrenda.valor.toFixed(2)}</strong>
+                </div>
+                <div className="pos-venta-modal-linea">
+                  <span>{ultimaVentaParaImprimir.venta.cambioPrenda.aDevolver > 0 ? 'Devuelto al cliente' : 'Diferencia cobrada'}</span>
+                  <strong>
+                    S/{' '}
+                    {(ultimaVentaParaImprimir.venta.cambioPrenda.aDevolver > 0
+                      ? ultimaVentaParaImprimir.venta.cambioPrenda.aDevolver
+                      : ultimaVentaParaImprimir.venta.cambioPrenda.aCobrar
+                    ).toFixed(2)}
+                  </strong>
+                </div>
+              </>
+            )}
             {ultimaVentaParaImprimir.venta.cambio != null && (
               <div className="pos-venta-modal-linea">
-                <span>Cambio</span>
+                <span>{ultimaVentaParaImprimir.venta.cambioPrenda ? 'Vuelto' : 'Cambio'}</span>
                 <strong>S/ {ultimaVentaParaImprimir.venta.cambio.toFixed(2)}</strong>
               </div>
             )}
@@ -1725,6 +1924,7 @@ export default function POS({
           telefono={telefono}
           ruc={ruc}
           cajero={usuario.nombre}
+          diasCambio={cambios ? diasCambio : 0}
         />
       )}
     </div>

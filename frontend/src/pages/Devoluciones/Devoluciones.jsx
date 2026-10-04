@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { api } from '../../api/api';
 import { describirPago, nombreMetodo } from '../../utils/metodoPago';
+import CambioPrenda from './CambioPrenda';
 import './Devoluciones.css';
 
-export default function Devoluciones({ usuario }) {
+// cambios: el negocio tiene el módulo "Cambio de prenda" (ropa y calzado):
+// aparece la pestaña para cambiar una prenda por otra. Apagado, la pantalla
+// es la de siempre.
+export default function Devoluciones({ usuario, cambios = false, onIniciarCambio }) {
+  const [modo, setModo] = useState(cambios ? 'CAMBIO' : 'DEVOLUCION');
   const [busqueda, setBusqueda] = useState('');
   const [buscando, setBuscando] = useState(false);
   const [venta, setVenta] = useState(null);
@@ -109,7 +114,21 @@ export default function Devoluciones({ usuario }) {
 
   return (
     <div className="dev-layout">
-      <h1>Devoluciones</h1>
+      <h1>{cambios ? 'Cambios y devoluciones' : 'Devoluciones'}</h1>
+      {cambios && (
+        <div className="dev-pestanas" role="tablist">
+          <button role="tab" aria-selected={modo === 'CAMBIO'} className={modo === 'CAMBIO' ? 'activo' : ''} onClick={() => setModo('CAMBIO')}>
+            Cambio de prenda
+          </button>
+          <button role="tab" aria-selected={modo === 'DEVOLUCION'} className={modo === 'DEVOLUCION' ? 'activo' : ''} onClick={() => setModo('DEVOLUCION')}>
+            Devolución de dinero
+          </button>
+        </div>
+      )}
+      {cambios && modo === 'CAMBIO' ? (
+        <CambioPrenda onIniciarCambio={onIniciarCambio} />
+      ) : (
+        <>
       <p className="dev-subtitulo">
         Busca por el folio interno de la venta (ej: V-20260822-0001) o por el número de boleta/factura
         (ej: B001-000004) — el que traiga el cliente en su ticket.
@@ -200,6 +219,8 @@ export default function Devoluciones({ usuario }) {
             {procesando ? 'Procesando...' : 'Procesar devolución'}
           </button>
         </div>
+      )}
+        </>
       )}
     </div>
   );

@@ -31,12 +31,14 @@ import AvisosListos from './components/AvisosListos';
 import { esCajero, esMesero, esPreparacion, PANTALLAS_MESERO, PANTALLAS_PREPARACION } from './utils/menu';
 import {
   datosNegocio,
+  MODULO_CAMBIOS,
   MODULO_COTIZACIONES,
   MODULO_CREDITO,
   MODULO_GUIAS,
   MODULO_MEDIDAS,
   MODULO_MESAS,
   MODULO_SERVICIOS,
+  MODULO_VARIANTES,
   rubroDe,
 } from './utils/rubros';
 
@@ -71,6 +73,9 @@ function App() {
   const [pedidoACobrar, setPedidoACobrar] = useState(null);
   // Cotización abierta desde su pantalla para venderla en el punto de venta.
   const [cotizacionACargar, setCotizacionACargar] = useState(null);
+  // Cambio de prenda en curso: lo que el cliente devuelve; lo que se lleva
+  // se elige en el punto de venta.
+  const [cambioEnCurso, setCambioEnCurso] = useState(null);
   const [abrirPedido, setAbrirPedido] = useState(null);
   const [pedidosListos, setPedidosListos] = useState(0);
 
@@ -372,6 +377,10 @@ function App() {
               credito={negocio.modulos.includes(MODULO_CREDITO)}
               cotizacionACargar={cotizacionACargar}
               onCotizacionUsada={() => setCotizacionACargar(null)}
+              variantes={negocio.modulos.includes(MODULO_VARIANTES)}
+              cambios={negocio.modulos.includes(MODULO_CAMBIOS)}
+              cambioEnCurso={negocio.modulos.includes(MODULO_CAMBIOS) ? cambioEnCurso : null}
+              onCambioTerminado={() => setCambioEnCurso(null)}
               pedidoACobrar={pedidoACobrar}
               onCancelarCobroPedido={handleCancelarCobroPedido}
               onPedidoCobrado={() => setPedidoACobrar(null)}
@@ -386,11 +395,23 @@ function App() {
             servicios={negocio.modulos.includes(MODULO_SERVICIOS)}
             etiquetas={etiquetas}
             esAdmin={usuarioActual?.rol_id === 1}
+            variantes={negocio.modulos.includes(MODULO_VARIANTES)}
           />
         )}
         {pantallaVisible === 'STOCK' && <StockLotes />}
         {pantallaVisible === 'PROVEEDORES' && <Proveedores />}
-        {pantallaVisible === 'DEVOLUCIONES' && <Devoluciones usuario={usuarioActual} />}
+        {pantallaVisible === 'DEVOLUCIONES' && (
+          <Devoluciones
+            usuario={usuarioActual}
+            cambios={negocio.modulos.includes(MODULO_CAMBIOS)}
+            onIniciarCambio={(cambio) => {
+              setPedidoACobrar(null);
+              setCotizacionACargar(null);
+              setCambioEnCurso(cambio);
+              setPantalla('POS');
+            }}
+          />
+        )}
         {pantallaVisible === 'CLIENTES' && <Clientes />}
         {pantallaVisible === 'COTIZACIONES' && (
           <Cotizaciones

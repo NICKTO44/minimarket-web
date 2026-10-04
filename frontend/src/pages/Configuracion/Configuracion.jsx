@@ -8,8 +8,9 @@ import ConfiguracionUnidades from './ConfiguracionUnidades';
 import ConfiguracionNegocio from './ConfiguracionNegocio';
 import SelectorTasaIgv from './SelectorTasaIgv';
 import ConfiguracionDetraccion from './ConfiguracionDetraccion';
+import ConfiguracionCambios from './ConfiguracionCambios';
 import { etiquetaTasa, TASA_GENERAL } from '../../utils/igv';
-import { datosNegocio, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
+import { datosNegocio, MODULO_CAMBIOS, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
 
 const ROLES = [
   { id: 1, nombre: 'Administrador' },
@@ -268,6 +269,10 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
 
       {vista === 'NEGOCIO' && formConfig && negocio.modulos.includes(MODULO_DETRACCION) && (
         <ConfiguracionDetraccion onMensaje={setMensaje} />
+      )}
+
+      {vista === 'NEGOCIO' && formConfig && negocio.modulos.includes(MODULO_CAMBIOS) && (
+        <ConfiguracionCambios onMensaje={setMensaje} />
       )}
 
       {vista === 'RESTAURANTE' && restaurante && <ConfiguracionRestaurante />}

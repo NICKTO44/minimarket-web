@@ -6,7 +6,9 @@ import { nombreMetodo } from '../utils/metodoPago';
 import { desgloseDeComprobante, etiquetaTasa } from '../utils/igv';
 import { formatoCantidad, subtotalLinea } from '../utils/medidas';
 
-export default function Recibo({ venta, items, nombreTienda, direccion, telefono, ruc, cajero, comprobante, cliente }) {
+// diasCambio: plazo para cambiar una prenda (módulo "Cambio de prenda");
+// 0 o sin el módulo = no se imprime nada.
+export default function Recibo({ venta, items, nombreTienda, direccion, telefono, ruc, cajero, comprobante, cliente, diasCambio = 0 }) {
   const esComprobanteReal = !!comprobante;
   const encabezado = comprobante
     ? `${comprobante.tipo === 'FACTURA' ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'}`
@@ -25,6 +27,16 @@ export default function Recibo({ venta, items, nombreTienda, direccion, telefono
   const igv = desglose.igv;
 
   const totalUnidades = formatoCantidad(items.reduce((sum, item) => sum + item.cantidad, 0));
+
+  // Cambio de prenda: lo que el cliente devolvió y la diferencia.
+  const cambioPrenda = venta.cambioPrenda || null;
+  // Último día para cambiar lo comprado hoy.
+  const limiteCambio = (() => {
+    if (!(diasCambio > 0)) return null;
+    const fecha = new Date();
+    fecha.setDate(fecha.getDate() + diasCambio);
+    return fecha.toLocaleDateString('es-PE');
+  })();
 
   // Factura sujeta a detracción (SPOT): lo que se envió a SUNAT.
   const detraccion = comprobante?.detraccion_monto > 0 ? comprobante : null;
@@ -208,15 +220,37 @@ export default function Recibo({ venta, items, nombreTienda, direccion, telefono
           </div>
         </div>
       )}
-      {venta.montoRecibido != null && (
+      {cambioPrenda && (
+        <div className="recibo-detraccion">
+          <div className="recibo-detraccion-titulo">CAMBIO DE PRENDA</div>
+          <div className="recibo-fila-meta">
+            <span>Venta original</span>
+            <span>{cambioPrenda.folioOriginal}</span>
+          </div>
+          {cambioPrenda.items.map((i) => (
+            <div key={i.detalle_id} className="recibo-item">
+              <div className="recibo-item-nombre">Devuelve: {i.nombre}</div>
+              <div className="recibo-item-detalle">
+                <span>{formatoCantidad(i.cantidad)} x S/.{i.valor_unitario.toFixed(2)}</span>
+                <span>- S/.{(i.valor_unitario * i.cantidad).toFixed(2)}</span>
+              </div>
+            </div>
+          ))}
+          <div className="recibo-fila-meta">
+            <span>{cambioPrenda.aDevolver > 0 ? 'Devuelto al cliente' : 'Diferencia pagada'}</span>
+            <span>S/.{(cambioPrenda.aDevolver > 0 ? cambioPrenda.aDevolver : cambioPrenda.aCobrar).toFixed(2)}</span>
+          </div>
+        </div>
+      )}
+      {venta.montoRecibido != null && !(cambioPrenda && cambioPrenda.aCobrar === 0) && (
         <div className="recibo-detalle-pago">
           <span>Efectivo</span>
           <span>S/.{venta.montoRecibido.toFixed(2)}</span>
         </div>
       )}
-      {venta.cambio != null && (
+      {venta.cambio != null && !(cambioPrenda && cambioPrenda.aCobrar === 0) && (
         <div className="recibo-detalle-pago">
-          <span>Cambio</span>
+          <span>{cambioPrenda ? 'Vuelto' : 'Cambio'}</span>
           <span>S/.{venta.cambio.toFixed(2)}</span>
         </div>
       )}
@@ -234,6 +268,12 @@ export default function Recibo({ venta, items, nombreTienda, direccion, telefono
           Consulte este comprobante en el portal de SUNAT escaneando el
           código QR, o revise el documento oficial disponible en el
           sistema.
+        </div>
+      )}
+
+      {limiteCambio && (
+        <div className="recibo-centro recibo-disclaimer">
+          Cambios hasta el {limiteCambio} ({diasCambio} días), con la prenda sin uso y este comprobante.
         </div>
       )}
 

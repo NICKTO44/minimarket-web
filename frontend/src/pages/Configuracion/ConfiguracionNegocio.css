@@ -1,12 +1,85 @@
 /* Configuración → Rubro y módulos. */
 
-/* Rubros impares: el último ocupa todo el ancho. */
-.neg-rubros .cfg-tipo:last-child:nth-child(odd) {
-  grid-column: 1 / -1;
+/* Rubros: una fila corta por rubro (icono + nombre), varios por línea. La
+   descripción del rubro elegido va debajo, para no empujar el resto. */
+.cfg-tipos.neg-rubros {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
 }
 
-h3.cfg-subtitulo-seccion.neg-titulo-modulos {
-  margin-top: 24px;
+.neg-rubros .cfg-tipo {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+}
+
+.neg-rubros .cfg-tipo svg {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.neg-rubros .cfg-tipo strong {
+  font-size: 13.5px;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.neg-rubro-descripcion {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+/* Módulos: resumen en una línea; la lista se abre al tocar el botón. */
+.neg-modulos-cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #eef0f3;
+}
+
+.neg-modulos-cabecera > div {
+  min-width: 0;
+}
+
+.neg-modulos-cabecera h3.cfg-subtitulo-seccion {
+  margin: 0;
+}
+
+.neg-modulos-resumen {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+.neg-boton-modulos {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 9px;
+  background: #fff;
+  color: #16181d;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.neg-modulos-cabecera + .cfg-nota-moneda {
+  margin-top: 12px;
+}
+
+@media (max-width: 520px) {
+  .cfg-tipos.neg-rubros {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .neg-modulos {

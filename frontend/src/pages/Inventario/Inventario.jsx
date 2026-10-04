@@ -7,6 +7,8 @@ import { comprimirImagen } from '../../utils/comprimirImagen';
 import { etiquetaUnidad, opcionesUnidad } from '../../utils/unidades';
 import { AFECTACIONES, etiquetaAfectacion } from '../../utils/igv';
 import CategoriasIgv from './CategoriasIgv';
+import FormularioModelo from './FormularioModelo';
+import { agruparPorModelo, etiquetaVariante, rangoPrecio } from '../../utils/variantes';
 
 const FORM_VACIO = {
   codigo: '',
@@ -28,13 +30,74 @@ const FORM_VACIO = {
 // preparado al momento no tiene stock que reponer).
 const tieneStockBajo = (p) => p.controla_stock !== false && p.stock <= p.stock_minimo;
 
+// Un modelo (módulo "Tallas y colores"): una fila con el resumen y, al
+// desplegarla, una fila por cada talla y color con su código, precio y stock.
+function FilasModelo({ grupo, abierto, onAlternar, onEditar }) {
+  return (
+    <>
+      <tr className="inv-fila-modelo">
+        <td>
+          {grupo.imagen_url ? (
+            <img className="inv-miniatura" src={`${API_URL}${grupo.imagen_url}`} alt={grupo.nombre} />
+          ) : (
+            <div className="inv-miniatura inv-miniatura-vacia">👕</div>
+          )}
+        </td>
+        <td>{grupo.variantes.length === 1 ? grupo.variantes[0].codigo : `${grupo.variantes.length} códigos`}</td>
+        <td>
+          <span className="inv-modelo-nombre">{grupo.nombre}</span>
+          <div className="inv-modelo-tallas">
+            {grupo.variantes.map((v) => (
+              <span key={v.id} className={`inv-modelo-talla${v.stock <= 0 ? ' agotada' : ''}`} title={`Stock: ${v.stock}`}>
+                {etiquetaVariante(v)}
+              </span>
+            ))}
+          </div>
+          <button type="button" className="inv-modelo-ver" onClick={onAlternar} aria-expanded={abierto}>
+            {abierto ? 'Ocultar tallas ▴' : 'Ver precio y stock por talla ▾'}
+          </button>
+        </td>
+        <td>{grupo.categoria_nombre || '—'}</td>
+        <td>{rangoPrecio(grupo)}</td>
+        <td className={grupo.conStockBajo > 0 ? 'inv-stock-bajo' : ''}>
+          {grupo.stockTotal} {grupo.conStockBajo > 0 && '⚠'}
+        </td>
+        <td>{etiquetaUnidad(grupo.unidad_medida)}</td>
+        <td>
+          <button className="inv-boton-editar" onClick={onEditar}>
+            Editar
+          </button>
+        </td>
+      </tr>
+      {abierto &&
+        grupo.variantes.map((v) => (
+          <tr key={v.id} className={`inv-fila-variante${tieneStockBajo(v) ? ' inv-fila-alerta' : ''}`}>
+            <td />
+            <td>{v.codigo}</td>
+            <td>{etiquetaVariante(v)}</td>
+            <td />
+            <td>S/ {v.precio.toFixed(2)}</td>
+            <td className={tieneStockBajo(v) ? 'inv-stock-bajo' : ''}>
+              {v.stock} {tieneStockBajo(v) && '⚠'}
+            </td>
+            <td />
+            <td />
+          </tr>
+        ))}
+    </>
+  );
+}
+
 // Las unidades que se ofrecen son las que el negocio activó en
 // Configuración → Unidades (el catálogo completo está en utils/unidades.js).
 
 // servicios: el negocio tiene el módulo "Servicios y venta sin stock".
 // etiquetas: nombres propios del rubro ("Carta" en un restaurante).
 // esAdmin: solo el administrador cambia el IGV de categorías y productos.
-export default function Inventario({ servicios = false, etiquetas = {}, esAdmin = false }) {
+// variantes: el negocio tiene el módulo "Tallas y colores" (ropa y calzado):
+// los productos de un mismo modelo se muestran juntos y se crean de una vez.
+// Apagado, esta pantalla es la de siempre.
+export default function Inventario({ servicios = false, etiquetas = {}, esAdmin = false, variantes = false }) {
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [busqueda, setBusqueda] = useState('');
@@ -75,6 +138,10 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
   // --- Escáner de código de barras (modo una sola lectura) ---
   const [escanerCodigoAbierto, setEscanerCodigoAbierto] = useState(false);
 
+  // --- Tallas y colores: formulario del modelo y modelos desplegados ---
+  const [modeloForm, setModeloForm] = useState(null);
+  const [modelosAbiertos, setModelosAbiertos] = useState(() => new Set());
+
   const cargarTodo = () => {
     setCargando(true);
     Promise.all([api.productos(), api.categorias()])
@@ -108,6 +175,23 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
     }
     return lista;
   }, [productos, desactivados, verDesactivados, busqueda, filtroCategoria, soloStockBajo]);
+
+  // Con tallas y colores, las tallas de un modelo van en una sola fila.
+  const filasTabla = useMemo(
+    () => (variantes && !verDesactivados ? agruparPorModelo(productosFiltrados) : productosFiltrados),
+    [variantes, verDesactivados, productosFiltrados]
+  );
+  // El modelo completo (aunque el buscador solo muestre algunas tallas).
+  const modeloCompleto = (modeloId) => agruparPorModelo(productos).find((g) => g.esModelo && g.modelo_id === modeloId);
+
+  const alternarModelo = (modeloId) => {
+    setModelosAbiertos((prev) => {
+      const siguiente = new Set(prev);
+      if (siguiente.has(modeloId)) siguiente.delete(modeloId);
+      else siguiente.add(modeloId);
+      return siguiente;
+    });
+  };
 
   const reactivarProducto = async (p) => {
     const confirmado = await confirmar({
@@ -368,7 +452,7 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
       textoConfirmar: 'Eliminar',
       icono: 'eliminar',
     });
-    if (!confirmado) return;
+    if (!confirmado) return false;
     try {
       const resultado = await api.productoEliminar(p.id);
       if (!resultado.success) {
@@ -383,13 +467,16 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
           await api.productoDesactivar(p.id);
           setMensaje({ tipo: 'exito', texto: 'Producto desactivado.' });
           cargarTodo();
+          return true;
         }
-        return;
+        return false;
       }
       setMensaje({ tipo: 'exito', texto: 'Producto eliminado.' });
       cargarTodo();
+      return true;
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
+      return false;
     }
   };
 
@@ -403,9 +490,26 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
           <button className="inv-boton-categorias" onClick={() => setVerCategorias(true)}>
             Categorías e IGV
           </button>
-          <button className="inv-boton-nuevo" onClick={abrirNuevo}>
-            {etiquetas.nuevoProducto || '+ Nuevo producto'}
-          </button>
+          {variantes ? (
+            <>
+              <button className="inv-boton-modelo" onClick={abrirNuevo}>
+                + Producto sin tallas
+              </button>
+              <button
+                className="inv-boton-nuevo"
+                onClick={() => {
+                  setMensaje(null);
+                  setModeloForm({ grupo: null });
+                }}
+              >
+                + Nuevo modelo con tallas
+              </button>
+            </>
+          ) : (
+            <button className="inv-boton-nuevo" onClick={abrirNuevo}>
+              {etiquetas.nuevoProducto || '+ Nuevo producto'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -471,59 +575,72 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
               </tr>
             </thead>
             <tbody>
-              {productosFiltrados.map((p) => (
-                <tr
-                  key={p.id}
-                  className={
-                    verDesactivados ? 'inv-fila-desactivada' : tieneStockBajo(p) ? 'inv-fila-alerta' : ''
-                  }
-                >
-                  <td>
-                    {p.imagen_url ? (
-                      <img className="inv-miniatura" src={`${API_URL}${p.imagen_url}`} alt={p.nombre} />
-                    ) : (
-                      <div className="inv-miniatura inv-miniatura-vacia">📦</div>
-                    )}
-                  </td>
-                  <td>{p.codigo}</td>
-                  <td>
-                    {p.nombre}
-                    {p.lleva_vencimiento && <span className="inv-badge-vencimiento">vence</span>}
-                    {p.afectacion_igv && p.afectacion_igv !== 'GRAVADO' && (
-                      <span className="inv-badge-sin-igv">{etiquetaAfectacion(p.afectacion_igv)}</span>
-                    )}
-                  </td>
-                  <td>{p.categoria_nombre || '—'}</td>
-                  <td>S/ {p.precio.toFixed(2)}</td>
-                  <td className={!verDesactivados && tieneStockBajo(p) ? 'inv-stock-bajo' : ''}>
-                    {p.controla_stock === false ? (
-                      <span className="inv-badge-preparado">preparado</span>
-                    ) : (
-                      <>
-                        {p.stock} {!verDesactivados && tieneStockBajo(p) && '⚠'}
-                      </>
-                    )}
-                  </td>
-                  <td>{etiquetaUnidad(p.unidad_medida)}</td>
-                  <td>
-                    {verDesactivados ? (
-                      <button className="inv-boton-reactivar" onClick={() => reactivarProducto(p)}>
-                        Reactivar
-                      </button>
-                    ) : (
-                      <>
-                        <button className="inv-boton-editar" onClick={() => abrirEdicion(p)}>
-                          Editar
+              {filasTabla.map((p) =>
+                p.esModelo ? (
+                  <FilasModelo
+                    key={p.id}
+                    grupo={p}
+                    abierto={modelosAbiertos.has(p.modelo_id)}
+                    onAlternar={() => alternarModelo(p.modelo_id)}
+                    onEditar={() => {
+                      setMensaje(null);
+                      setModeloForm({ grupo: modeloCompleto(p.modelo_id) || p });
+                    }}
+                  />
+                ) : (
+                  <tr
+                    key={p.id}
+                    className={
+                      verDesactivados ? 'inv-fila-desactivada' : tieneStockBajo(p) ? 'inv-fila-alerta' : ''
+                    }
+                  >
+                    <td>
+                      {p.imagen_url ? (
+                        <img className="inv-miniatura" src={`${API_URL}${p.imagen_url}`} alt={p.nombre} />
+                      ) : (
+                        <div className="inv-miniatura inv-miniatura-vacia">📦</div>
+                      )}
+                    </td>
+                    <td>{p.codigo}</td>
+                    <td>
+                      {p.nombre}
+                      {p.lleva_vencimiento && <span className="inv-badge-vencimiento">vence</span>}
+                      {p.afectacion_igv && p.afectacion_igv !== 'GRAVADO' && (
+                        <span className="inv-badge-sin-igv">{etiquetaAfectacion(p.afectacion_igv)}</span>
+                      )}
+                    </td>
+                    <td>{p.categoria_nombre || '—'}</td>
+                    <td>S/ {p.precio.toFixed(2)}</td>
+                    <td className={!verDesactivados && tieneStockBajo(p) ? 'inv-stock-bajo' : ''}>
+                      {p.controla_stock === false ? (
+                        <span className="inv-badge-preparado">preparado</span>
+                      ) : (
+                        <>
+                          {p.stock} {!verDesactivados && tieneStockBajo(p) && '⚠'}
+                        </>
+                      )}
+                    </td>
+                    <td>{etiquetaUnidad(p.unidad_medida)}</td>
+                    <td>
+                      {verDesactivados ? (
+                        <button className="inv-boton-reactivar" onClick={() => reactivarProducto(p)}>
+                          Reactivar
                         </button>
-                        <button className="inv-boton-eliminar" onClick={() => eliminarOProducto(p)}>
-                          Eliminar
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {productosFiltrados.length === 0 && (
+                      ) : (
+                        <>
+                          <button className="inv-boton-editar" onClick={() => abrirEdicion(p)}>
+                            Editar
+                          </button>
+                          <button className="inv-boton-eliminar" onClick={() => eliminarOProducto(p)}>
+                            Eliminar
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                )
+              )}
+              {filasTabla.length === 0 && (
                 <tr>
                   <td colSpan={8} className="inv-sin-resultados">
                     {verDesactivados ? 'No hay productos desactivados.' : 'No hay productos que coincidan.'}
@@ -816,6 +933,22 @@ export default function Inventario({ servicios = false, etiquetas = {}, esAdmin 
             </div>
           </div>
         </div>
+      )}
+
+      {modeloForm && (
+        <FormularioModelo
+          grupo={modeloForm.grupo}
+          categorias={categorias}
+          unidadesActivas={unidadesActivas}
+          onCerrar={() => setModeloForm(null)}
+          onQuitarVariante={eliminarOProducto}
+          onCategorias={setCategorias}
+          onGuardado={(aviso) => {
+            setModeloForm(null);
+            setMensaje(aviso);
+            cargarTodo();
+          }}
+        />
       )}
 
       {escanerCodigoAbierto && (

@@ -17,6 +17,10 @@ function nombresModulos(valores) {
  */
 export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMensaje }) {
   const [guardando, setGuardando] = useState(false);
+  // La lista de módulos es larga: se abre solo cuando se quiere cambiar algo,
+  // para que no empuje hacia abajo los datos del negocio.
+  const [verModulos, setVerModulos] = useState(false);
+  const encendidos = MODULOS.filter((m) => modulos.includes(m.valor));
 
   const guardar = async (nuevoRubro, nuevosModulos, textoExito) => {
     setGuardando(true);
@@ -79,14 +83,26 @@ export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMen
             onClick={() => elegirRubro(r)}
             disabled={guardando}
           >
-            <r.Icono size={22} />
+            <r.Icono size={18} />
             <strong>{r.label}</strong>
-            <span>{r.descripcion}</span>
           </button>
         ))}
       </div>
+      <p className="neg-rubro-descripcion">{rubroDe(rubro).descripcion}</p>
 
-      <h3 className="cfg-subtitulo-seccion neg-titulo-modulos">Módulos</h3>
+      <div className="neg-modulos-cabecera">
+        <div>
+          <h3 className="cfg-subtitulo-seccion">Módulos</h3>
+          <p className="neg-modulos-resumen">
+            {encendidos.length > 0 ? `Encendidos: ${encendidos.map((m) => m.label).join(', ')}.` : 'Ninguno adicional encendido.'}
+          </p>
+        </div>
+        <button type="button" className="neg-boton-modulos" onClick={() => setVerModulos((v) => !v)} aria-expanded={verModulos}>
+          {verModulos ? 'Ocultar ▴' : 'Ver y cambiar ▾'}
+        </button>
+      </div>
+      {verModulos && (
+        <>
       <p className="cfg-nota-moneda">
         Ventas, caja, productos, clientes, proveedores y reportes siempre están. Aquí enciendes solo lo adicional que
         usa tu negocio ({rubroDe(rubro).label}).
@@ -114,6 +130,8 @@ export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMen
           );
         })}
       </div>
+        </>
+      )}
     </div>
   );
 }
