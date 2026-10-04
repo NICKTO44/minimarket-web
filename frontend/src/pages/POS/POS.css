@@ -74,6 +74,70 @@
   flex-shrink: 0;
 }
 
+.pos-orden-grupo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Filtro por categoría: una sola línea que se desliza de lado, para no
+   quitarle alto a los productos. */
+.pos-orden-fila-categorias {
+  gap: 12px;
+}
+
+.pos-categorias {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+
+.pos-categorias::-webkit-scrollbar {
+  display: none;
+}
+
+.pos-categoria {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border: 1.5px solid var(--pos-borde);
+  border-radius: 999px;
+  background: var(--pos-superficie);
+  color: var(--pos-texto-tenue);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.pos-categoria:hover {
+  border-color: var(--pos-primario);
+  color: var(--pos-texto);
+}
+
+.pos-categoria.activo {
+  border-color: var(--pos-primario);
+  background: var(--pos-primario);
+  color: #fff;
+}
+
+@media (max-width: 899px) {
+  /* En celular: categorías arriba a todo el ancho, "Ordenar por" debajo. */
+  .pos-orden-fila-categorias {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .pos-orden-fila-categorias .pos-categorias {
+    flex-basis: 100%;
+  }
+}
+
 .pos-orden-label {
   font-size: 12px;
   font-weight: 600;

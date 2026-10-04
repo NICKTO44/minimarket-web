@@ -162,6 +162,8 @@ export default function POS({
   const [imagenesFallidas, setImagenesFallidas] = useState(() => new Set());
   const [busqueda, setBusqueda] = useState('');
   const [ordenPrecio, setOrdenPrecio] = useState('nombre');
+  // Categoría elegida para ver solo sus productos (null = todas).
+  const [categoriaFiltro, setCategoriaFiltro] = useState(null);
   const buscadorRef = useRef(null);
   const [carrito, setCarrito] = useState(() =>
     pedidoACobrar ? carritoDePedido(pedidoACobrar) : cotizacionACargar ? carritoDeCotizacion(cotizacionACargar) : []
@@ -441,11 +443,26 @@ export default function POS({
     }
   };
 
+  // Categorías que tienen productos, por nombre. Salen de los mismos
+  // productos ya cargados (no se pide nada más al servidor).
+  const categoriasPos = useMemo(() => {
+    const porId = new Map();
+    for (const p of productos) {
+      if (p.categoria_id != null && p.categoria_nombre && !porId.has(p.categoria_id)) {
+        porId.set(p.categoria_id, p.categoria_nombre);
+      }
+    }
+    return [...porId].map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  }, [productos]);
+  // Si la categoría elegida ya no tiene productos, se vuelve a "Todas".
+  const categoriaActiva = categoriasPos.some((c) => c.id === categoriaFiltro) ? categoriaFiltro : null;
+
   const productosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
+    const deCategoria = categoriaActiva == null ? productos : productos.filter((p) => p.categoria_id === categoriaActiva);
     const base = q
-      ? productos.filter((p) => p.nombre.toLowerCase().includes(q) || p.codigo.includes(q))
-      : productos;
+      ? deCategoria.filter((p) => p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q))
+      : deCategoria;
 
     // El orden por nombre ya viene del backend (ORDER BY p.nombre), así
     // que para esa opción no hace falta reordenar en el frontend -- solo
@@ -461,7 +478,7 @@ export default function POS({
       return [...base].sort((a, b) => Number(!!b.carta_dia) - Number(!!a.carta_dia));
     }
     return base;
-  }, [productos, busqueda, ordenPrecio]);
+  }, [productos, busqueda, ordenPrecio, categoriaActiva]);
 
   // Tallas y colores: una tarjeta por modelo (con las tallas que pasaron el
   // buscador). Sin el módulo, una tarjeta por producto, como siempre.
@@ -990,7 +1007,12 @@ export default function POS({
             type="text"
             placeholder="Escanea o busca por nombre / código..."
             value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+            onChange={(e) => {
+              setBusqueda(e.target.value);
+              // Al escribir se busca en todo el negocio, no solo en la
+              // categoría que estaba elegida.
+              if (e.target.value.trim()) setCategoriaFiltro(null);
+            }}
             onKeyDown={manejarEnterBusquedaProducto}
             autoFocus={autoFocoBuscador}
           />
@@ -1007,22 +1029,51 @@ export default function POS({
             📷
           </button>
         </div>
-        <div className="pos-orden-fila">
-          <label htmlFor="pos-orden-select" className="pos-orden-label">
-            Ordenar por
-          </label>
-          <select
-            id="pos-orden-select"
-            className="pos-orden-select"
-            value={ordenPrecio}
-            onChange={(e) => setOrdenPrecio(e.target.value)}
-          >
-            {OPCIONES_ORDEN.map((op) => (
-              <option key={op.valor} value={op.valor}>
-                {op.label}
-              </option>
-            ))}
-          </select>
+        <div className={`pos-orden-fila${categoriasPos.length > 1 ? ' pos-orden-fila-categorias' : ''}`}>
+          {/* Filtro por categoría: solo si el negocio tiene más de una. */}
+          {categoriasPos.length > 1 && (
+            <div className="pos-categorias" role="group" aria-label="Filtrar por categoría">
+              <button
+                type="button"
+                className={`pos-categoria${categoriaActiva == null ? ' activo' : ''}`}
+                aria-pressed={categoriaActiva == null}
+                onClick={() => setCategoriaFiltro(null)}
+              >
+                Todas
+              </button>
+              {categoriasPos.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`pos-categoria${categoriaActiva === c.id ? ' activo' : ''}`}
+                  aria-pressed={categoriaActiva === c.id}
+                  onClick={() => {
+                    setCategoriaFiltro(c.id);
+                    setBusqueda('');
+                  }}
+                >
+                  {c.nombre}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="pos-orden-grupo">
+            <label htmlFor="pos-orden-select" className="pos-orden-label">
+              Ordenar por
+            </label>
+            <select
+              id="pos-orden-select"
+              className="pos-orden-select"
+              value={ordenPrecio}
+              onChange={(e) => setOrdenPrecio(e.target.value)}
+            >
+              {OPCIONES_ORDEN.map((op) => (
+                <option key={op.valor} value={op.valor}>
+                  {op.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="pos-grid">
           {tarjetas.map((p) =>
