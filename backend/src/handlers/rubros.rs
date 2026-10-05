@@ -45,6 +45,11 @@ pub const MODULO_CAMBIOS: &str = "CAMBIOS";
 /// cada venta y precio de compra obligatorio (handlers/ganancias.rs). No
 /// pertenece a ningún rubro: viene apagado y lo enciende quien lo quiera.
 pub const MODULO_GANANCIAS: &str = "GANANCIAS";
+/// Cambiar el precio de un producto en el carrito, solo para esa venta. El
+/// servidor siempre guardó en la venta el precio que manda el punto de
+/// venta (así funcionan las cotizaciones); el módulo solo muestra el campo
+/// para escribirlo. Tampoco pertenece a un rubro: viene apagado.
+pub const MODULO_PRECIO_VENTA: &str = "PRECIO_VENTA";
 
 const MODULOS: &[&str] = &[
     MODULO_MESAS,
@@ -57,6 +62,7 @@ const MODULOS: &[&str] = &[
     MODULO_VARIANTES,
     MODULO_CAMBIOS,
     MODULO_GANANCIAS,
+    MODULO_PRECIO_VENTA,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
