@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../../api/api';
 import { confirmar } from '../../utils/confirmar';
-import { MODULO_GANANCIAS, MODULO_MESAS, MODULOS, RUBROS, rubroDe } from '../../utils/rubros';
+import { MODULO_GANANCIAS, MODULO_MESAS, MODULOS, MODULOS_SIN_RUBRO, RUBROS, rubroDe } from '../../utils/rubros';
 import './ConfiguracionNegocio.css';
 
 function nombresModulos(valores) {
@@ -44,8 +44,8 @@ export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMen
       textoConfirmar: 'Cambiar rubro',
       icono: 'aviso',
     });
-    // El reporte de ganancias no depende del rubro: si estaba encendido, sigue.
-    const conservados = modulos.filter((m) => m === MODULO_GANANCIAS);
+    // Hay módulos que no dependen del rubro: si estaban encendidos, siguen.
+    const conservados = modulos.filter((m) => MODULOS_SIN_RUBRO.includes(m));
     if (ok) guardar(nuevo.valor, [...nuevo.modulos, ...conservados], `Rubro cambiado a ${nuevo.label}.`);
   };
 

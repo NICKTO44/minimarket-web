@@ -18,6 +18,9 @@ export const MODULO_VARIANTES = 'VARIANTES';
 export const MODULO_CAMBIOS = 'CAMBIOS';
 // No pertenece a ningún rubro: viene apagado y lo enciende quien lo quiera.
 export const MODULO_GANANCIAS = 'GANANCIAS';
+export const MODULO_PRECIO_VENTA = 'PRECIO_VENTA';
+// Módulos que no dependen del rubro: al cambiar de rubro se conservan.
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -71,6 +74,12 @@ export const MODULOS = [
     label: 'Reporte de ganancias',
     descripcion:
       'Cuánto ganaste cada mes: lo que vendiste contra lo que te costó, con comparativa entre meses. Al activarlo, el precio de compra es obligatorio en cada producto.',
+  },
+  {
+    valor: MODULO_PRECIO_VENTA,
+    label: 'Cambiar precio al vender',
+    descripcion:
+      'En el punto de venta puedes cambiar el precio de un producto solo para esa venta (una rebaja, un precio por mayor). La boleta o factura sale con ese precio y el producto conserva el suyo.',
   },
 ];
 

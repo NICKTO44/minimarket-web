@@ -38,7 +38,7 @@ import {
   MODULO_MEDIDAS,
   MODULO_MESAS,
   MODULO_SERVICIOS,
-  MODULO_GANANCIAS, MODULO_VARIANTES,
+  MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VARIANTES,
   rubroDe,
 } from './utils/rubros';
 
@@ -380,6 +380,7 @@ function App() {
               cotizacionACargar={cotizacionACargar}
               onCotizacionUsada={() => setCotizacionACargar(null)}
               variantes={negocio.modulos.includes(MODULO_VARIANTES)}
+              precioEditable={negocio.modulos.includes(MODULO_PRECIO_VENTA)}
               cambios={negocio.modulos.includes(MODULO_CAMBIOS)}
               cambioEnCurso={negocio.modulos.includes(MODULO_CAMBIOS) ? cambioEnCurso : null}
               onCambioTerminado={() => setCambioEnCurso(null)}

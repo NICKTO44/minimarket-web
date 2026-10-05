@@ -76,6 +76,35 @@ function CantidadEditable({ valor, onCambiar, etiqueta }) {
   );
 }
 
+// Precio de una línea del carrito que se puede cambiar SOLO para esta venta
+// (módulo "Cambiar precio al vender"). El producto conserva su precio.
+function leerPrecio(texto) {
+  const precio = Math.round(parseFloat(String(texto).trim().replace(',', '.')) * 100) / 100;
+  return Number.isFinite(precio) && precio > 0 && precio < 10000000 ? precio : null;
+}
+
+function PrecioEditable({ valor, onCambiar, etiqueta }) {
+  const [texto, setTexto] = useState(null);
+  const aplicar = () => {
+    if (texto === null) return;
+    const nuevo = leerPrecio(texto);
+    if (nuevo !== null && nuevo !== valor) onCambiar(nuevo);
+    setTexto(null);
+  };
+  return (
+    <input
+      className="pos-cantidad-input pos-precio-input"
+      inputMode="decimal"
+      value={texto ?? valor.toFixed(2)}
+      onChange={(e) => setTexto(e.target.value)}
+      onFocus={(e) => e.target.select()}
+      onBlur={aplicar}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      aria-label={etiqueta}
+    />
+  );
+}
+
 // Líneas de un pedido de mesa convertidas en carrito del POS. Cada línea
 // es independiente (el mismo café puede ir con opciones distintas), por
 // eso lleva su propia clave; "detalle" son las opciones elegidas.
@@ -137,6 +166,9 @@ export default function POS({
   // Módulo "Tallas y colores": las tallas de un modelo van en una sola
   // tarjeta y se elige la talla al tocarla. Apagado, la grilla es la de siempre.
   variantes = false,
+  // Módulo "Cambiar precio al vender": el precio de cada línea del carrito
+  // se puede escribir, solo para esa venta. Apagado, el precio es fijo.
+  precioEditable = false,
   // Módulo "Cambio de prenda": plazo de cambio que se imprime en el ticket.
   cambios = false,
   // Cambio de prenda en curso (viene de Devoluciones): lo que el cliente
@@ -624,6 +656,19 @@ export default function POS({
   // Cantidad escrita a mano (módulo "Venta por medidas").
   const fijarCantidad = (clave, cantidad) => {
     setCarrito((prev) => prev.map((i) => (claveDe(i) === clave ? { ...i, cantidad } : i)));
+  };
+
+  // Precio escrito a mano para esta venta (módulo "Cambiar precio al
+  // vender"). Se recuerda el precio del producto para mostrarlo y poder
+  // volver a él; al producto no se le cambia nada.
+  const fijarPrecio = (clave, precio) => {
+    setCarrito((prev) =>
+      prev.map((i) => {
+        if (claveDe(i) !== clave) return i;
+        const original = i.precioOriginal ?? i.precio;
+        return { ...i, precio, precioOriginal: precio === original ? undefined : original };
+      })
+    );
   };
 
   const quitarDelCarrito = (clave) => setCarrito((prev) => prev.filter((i) => claveDe(i) !== clave));
@@ -1371,10 +1416,33 @@ export default function POS({
               <div className="pos-carrito-item-info">
                 <span className="pos-carrito-item-nombre">{item.nombre}</span>
                 {item.detalle && <span className="pos-carrito-item-detalle">{item.detalle}</span>}
-                <span className="pos-carrito-item-precio">
-                  {cobrandoPedido ? `${item.cantidad} × ` : ''}S/ {item.precio.toFixed(2)} c/u
-                  {medidas && !cobrandoPedido && ` · S/ ${subtotalLinea(item.precio, item.cantidad).toFixed(2)}`}
-                </span>
+                {precioEditable && !cobrandoPedido ? (
+                  <span className="pos-carrito-item-precio pos-precio-editable">
+                    S/{' '}
+                    <PrecioEditable
+                      valor={item.precio}
+                      onCambiar={(precio) => fijarPrecio(claveDe(item), precio)}
+                      etiqueta={`Precio de ${item.nombre} para esta venta`}
+                    />{' '}
+                    c/u
+                    {medidas && ` · S/ ${subtotalLinea(item.precio, item.cantidad).toFixed(2)}`}
+                    {item.precioOriginal != null && (
+                      <button
+                        type="button"
+                        className="pos-precio-original"
+                        onClick={() => fijarPrecio(claveDe(item), item.precioOriginal)}
+                        title="Volver al precio del producto"
+                      >
+                        antes S/ {item.precioOriginal.toFixed(2)} ↺
+                      </button>
+                    )}
+                  </span>
+                ) : (
+                  <span className="pos-carrito-item-precio">
+                    {cobrandoPedido ? `${item.cantidad} × ` : ''}S/ {item.precio.toFixed(2)} c/u
+                    {medidas && !cobrandoPedido && ` · S/ ${subtotalLinea(item.precio, item.cantidad).toFixed(2)}`}
+                  </span>
+                )}
               </div>
               {!cobrandoPedido &&
                 (esLineaMedida(item) ? (
