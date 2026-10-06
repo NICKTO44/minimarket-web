@@ -38,6 +38,9 @@ function etiquetaStock(producto) {
   return `${cantidad} ${abreviaturaUnidad(producto.unidad_medida)}`;
 }
 
+// Producto que controla stock y no tiene nada: no se puede vender.
+const sinStock = (producto) => producto.controla_stock !== false && producto.stock <= 0;
+
 const redondear2 = (n) => Math.round(n * 100) / 100;
 const redondear3 = (n) => Math.round(n * 1000) / 1000;
 
@@ -247,6 +250,10 @@ export default function POS({
   const [conDetraccion, setConDetraccion] = useState(true);
   const [procesando, setProcesando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
+  // Aviso de stock sobre la grilla de productos (se ve también en celular,
+  // donde el carrito está en otra pantalla). Se borra solo.
+  const [avisoStock, setAvisoStock] = useState(null);
+  const ultimaRecarga = useRef(0);
   const [ultimaVentaParaImprimir, setUltimaVentaParaImprimir] = useState(null);
   const [mostrarModalVenta, setMostrarModalVenta] = useState(false);
   const [telefonoWhatsapp, setTelefonoWhatsapp] = useState('');
@@ -552,30 +559,77 @@ export default function POS({
     });
   };
 
+  // Cuánto queda por vender de un producto: su stock menos lo que ya está
+  // en el carrito (sin contar la línea `salvoClave`). Infinity si no
+  // controla stock (servicios, platos) o si no está en la lista.
+  const disponibleDe = (id, salvoClave) => {
+    const producto = productos.find((p) => p.id === id);
+    if (!producto || producto.controla_stock === false) return Infinity;
+    const enCarrito = carrito.reduce((suma, i) => (i.id === id && claveDe(i) !== salvoClave ? suma + i.cantidad : suma), 0);
+    return redondear3(producto.stock - enCarrito);
+  };
+
+  // Texto de "no hay" o "solo quedan N" para un producto con stock.
+  const textoSinStock = (id, nombre, disponible) => {
+    const producto = productos.find((p) => p.id === id);
+    if (!producto || producto.stock <= 0) return `"${nombre}" no tiene stock.`;
+    const unidad = abreviaturaUnidad(producto.unidad_medida);
+    return disponible <= 0
+      ? `Solo hay ${etiquetaStock(producto)} de "${nombre}" y ya están en el carrito.`
+      : `Solo quedan ${formatoCantidad(disponible)} ${unidad} de "${nombre}".`;
+  };
+
+  // Por si el stock se repuso desde otro equipo mientras esta pantalla
+  // estaba abierta: al topar con "sin stock" se vuelve a leer la lista
+  // (como mucho cada 5 s), y el siguiente toque ya usa el dato nuevo.
+  const recargarProductos = () => {
+    const ahora = Date.now();
+    if (ahora - ultimaRecarga.current < 5000) return;
+    ultimaRecarga.current = ahora;
+    api
+      .productos()
+      .then(setProductos)
+      .catch(() => {});
+  };
+
+  // Devuelve true si el producto entró al carrito (o se abrió su calculadora).
   const agregarAlCarrito = (producto) => {
     if (cobrandoPedido) {
       setMensaje({
         tipo: 'error',
         texto: `Estás cobrando ${tituloPedido(pedidoACobrar)}. Para agregar algo, vuelve a la mesa y agrégalo al pedido.`,
       });
-      return;
+      return false;
     }
     if (producto.agotado) {
       setMensaje({ tipo: 'error', texto: `"${producto.nombre}" se agotó.` });
-      return;
+      return false;
     }
+    // Sin stock, o con todo lo que queda ya en el carrito: no entra (antes
+    // entraba y recién al cobrar el servidor decía "stock insuficiente").
+    // Con venta por medidas se puede llevar la fracción que queda (0.5 kg).
+    const disponible = disponibleDe(producto.id);
+    const esMadera = medidas && producto.unidad_medida === UNIDAD_PIE_TABLAR;
+    const cuanto = medidas ? Math.min(1, disponible) : 1;
+    if (disponible <= 0 || (!esMadera && disponible + 1e-6 < cuanto)) {
+      setAvisoStock({ texto: textoSinStock(producto.id, producto.nombre, disponible) });
+      recargarProductos();
+      return false;
+    }
+    setAvisoStock(null);
     // Madera por pie tablar: se abre la calculadora de medidas.
-    if (medidas && producto.unidad_medida === UNIDAD_PIE_TABLAR) {
+    if (esMadera) {
       setProductoAMedir(producto);
-      return;
+      return true;
     }
     setCarrito((prev) => {
       const existe = prev.find((i) => !i.clave && i.id === producto.id);
       if (existe) {
-        return prev.map((i) => (i === existe ? { ...i, cantidad: redondear3(i.cantidad + 1) } : i));
+        return prev.map((i) => (i === existe ? { ...i, cantidad: redondear3(i.cantidad + cuanto) } : i));
       }
-      return [...prev, { ...producto, cantidad: 1, descuentoMonto: 0 }];
+      return [...prev, { ...producto, cantidad: cuanto, descuentoMonto: 0 }];
     });
+    return true;
   };
 
   // La calculadora devolvió pies y medidas: entra como línea propia (la
@@ -629,18 +683,23 @@ export default function POS({
   // código nuevo (ya filtrado de repeticiones por el propio escáner).
   // Reusa la misma búsqueda exacta por código que ya usa el buscador de
   // texto, para mantener un solo criterio de "qué cuenta como match".
-  const manejarCodigoEscaneado = useCallback(
-    (codigo) => {
+  // El escáner se queda con la función que recibió al abrirse; por eso
+  // esta delega en `alEscanear`, que siempre es la del último dibujado
+  // (con el carrito y el stock al día).
+  const alEscanear = useRef(null);
+  useEffect(() => {
+    alEscanear.current = (codigo) => {
       const producto = productos.find((p) => p.codigo.toLowerCase() === codigo.toLowerCase());
-      if (producto) {
-        agregarAlCarrito(producto);
+      if (!producto) {
+        setUltimoEscaneo({ tipo: 'error', texto: `Código "${codigo}" no encontrado` });
+      } else if (agregarAlCarrito(producto)) {
         setUltimoEscaneo({ tipo: 'ok', texto: `${producto.nombre} agregado` });
       } else {
-        setUltimoEscaneo({ tipo: 'error', texto: `Código "${codigo}" no encontrado` });
+        setUltimoEscaneo({ tipo: 'error', texto: `${producto.nombre}: sin stock, no se agregó` });
       }
-    },
-    [productos]
-  );
+    };
+  });
+  const manejarCodigoEscaneado = useCallback((codigo) => alEscanear.current?.(codigo), []);
 
   // El mensaje de "producto agregado / no encontrado" se borra solo tras
   // un par de segundos, para no acumular texto viejo mientras se sigue
@@ -651,9 +710,26 @@ export default function POS({
     return () => clearTimeout(timeout);
   }, [ultimoEscaneo]);
 
+  // El aviso de stock también se borra solo.
+  useEffect(() => {
+    if (!avisoStock) return;
+    const timeout = setTimeout(() => setAvisoStock(null), 4000);
+    return () => clearTimeout(timeout);
+  }, [avisoStock]);
+
   // − y +: de uno en uno. Con cantidades con decimales (0.5 kg) el − no
   // baja de lo que hay si quedaría en cero o menos.
   const cambiarCantidad = (clave, delta) => {
+    // El + no pasa de lo que hay en stock.
+    const linea = delta > 0 ? carrito.find((i) => claveDe(i) === clave) : null;
+    if (linea) {
+      const tope = disponibleDe(linea.id, clave);
+      if (linea.cantidad + delta > tope + 1e-6) {
+        setMensaje({ tipo: 'error', texto: textoSinStock(linea.id, linea.nombre, 0) });
+        recargarProductos();
+        return;
+      }
+    }
     setCarrito((prev) =>
       prev.map((i) => {
         if (claveDe(i) !== clave) return i;
@@ -665,6 +741,16 @@ export default function POS({
 
   // Cantidad escrita a mano (módulo "Venta por medidas").
   const fijarCantidad = (clave, cantidad) => {
+    // Lo escrito tampoco pasa del stock: la cantidad se queda como estaba.
+    const linea = carrito.find((i) => claveDe(i) === clave);
+    if (linea) {
+      const tope = disponibleDe(linea.id, clave);
+      if (cantidad > tope + 1e-6) {
+        setMensaje({ tipo: 'error', texto: textoSinStock(linea.id, linea.nombre, tope) });
+        recargarProductos();
+        return;
+      }
+    }
     setCarrito((prev) => prev.map((i) => (claveDe(i) === clave ? { ...i, cantidad } : i)));
   };
 
@@ -1130,6 +1216,11 @@ export default function POS({
             </select>
           </div>
         </div>
+        {avisoStock && (
+          <p className="pos-aviso-stock" role="status">
+            {avisoStock.texto}
+          </p>
+        )}
         <div className="pos-grid">
           {tarjetas.map((p) =>
             p.esModelo ? (
@@ -1159,8 +1250,8 @@ export default function POS({
             ) : (
               <button
                 key={p.id}
-                className={`pos-producto-card${p.agotado ? ' pos-producto-agotado' : ''}`}
-                aria-disabled={p.agotado || undefined}
+                className={`pos-producto-card${p.agotado || sinStock(p) ? ' pos-producto-agotado' : ''}`}
+                aria-disabled={p.agotado || sinStock(p) || undefined}
                 onClick={() => agregarAlCarrito(p)}
               >
                 {p.imagen_url && !imagenesFallidas.has(p.id) ? (
@@ -1184,7 +1275,7 @@ export default function POS({
                       className={`pos-producto-stock${p.stock <= p.stock_minimo ? ' pos-producto-stock-bajo' : ''}`}
                       title={`Stock: ${p.stock}`}
                     >
-                      {etiquetaStock(p)}
+                      {sinStock(p) ? 'Sin stock' : etiquetaStock(p)}
                     </span>
                   )}
                 </span>

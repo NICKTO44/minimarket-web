@@ -212,6 +212,20 @@
 }
 
 /* Plato de la carta del día agotado: visible pero no se agrega. */
+/* Aviso de "sin stock" encima de la grilla: se ve aunque la grilla esté
+   desplazada, y en celular (donde el carrito está en otra pantalla). */
+.pos-aviso-stock {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: var(--pos-radio-sm);
+  background: var(--pos-error-bg);
+  color: var(--pos-error);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  flex-shrink: 0;
+}
+
 .pos-producto-card.pos-producto-agotado {
   opacity: 0.5;
   cursor: not-allowed;
