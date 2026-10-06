@@ -10,10 +10,21 @@ import {
 } from 'lucide-react';
 import { api } from '../../api/api';
 import { hoyLima } from '../../utils/formato';
+import { ventasDeCajaPorMetodo } from '../../utils/metodoPago';
 import './Resumen.css';
 
 // El día de hoy en Perú (el servidor corta los reportes en esa hora).
 const hoy = () => hoyLima();
+
+// Nombre corto y color de cada medio de pago en las barras del resumen.
+const BARRA_DE_METODO = {
+  EFECTIVO: { label: 'Efectivo', color: '#16a34a' },
+  YAPE: { label: 'Yape', color: '#9333ea' },
+  PLIN: { label: 'Plin', color: '#06b6d4' },
+  TARJETA: { label: 'Tarjeta', color: '#2563eb' },
+  TRANSFERENCIA: { label: 'Transferencia', color: '#d97706' },
+  YAPE_PLIN: { label: 'Yape/Plin', color: '#6b7280' },
+};
 
 export default function Resumen({ onIrA }) {
   const [caja, setCaja] = useState(null);
@@ -48,13 +59,15 @@ export default function Resumen({ onIrA }) {
     );
   }
 
-  const ventasPorMetodo = caja
-    ? [
-        { label: 'Efectivo', valor: caja.ventas_efectivo, color: '#16a34a' },
-        { label: 'Tarjeta', valor: caja.ventas_tarjeta, color: '#4338ca' },
-        { label: 'Transferencia', valor: caja.ventas_transferencia, color: '#0891b2' },
-      ]
-    : [];
+  // Una barra por medio de pago, con Yape y Plin por separado.
+  // La línea que junta transferencia con Yape/Plin (caja o servidor de antes
+  // de separarlos) lleva un nombre corto que lo diga; el completo va de ayuda.
+  const ventasPorMetodo = ventasDeCajaPorMetodo(caja).map((m) => ({
+    ...m,
+    ayuda: m.label,
+    label: m.clave === 'TRANSFERENCIA' && m.label !== 'Transferencia' ? 'Transf./Yape/Plin' : BARRA_DE_METODO[m.clave]?.label || m.label,
+    color: BARRA_DE_METODO[m.clave]?.color || '#6b7280',
+  }));
   const maxMetodo = Math.max(1, ...ventasPorMetodo.map((m) => m.valor));
   const maxProducto = Math.max(1, ...topProductos.map((p) => p.cantidad_vendida));
 
@@ -99,12 +112,14 @@ export default function Resumen({ onIrA }) {
             </div>
             <div className="res-chart-barras">
               {ventasPorMetodo.map((m) => (
-                <div key={m.label} className="res-barra-fila">
-                  <span className="res-barra-label">{m.label}</span>
+                <div key={m.clave} className="res-barra-fila">
+                  <span className="res-barra-label" title={m.ayuda}>
+                    {m.label}
+                  </span>
                   <div className="res-barra-pista">
                     <div
                       className="res-barra-relleno"
-                      style={{ width: `${(m.valor / maxMetodo) * 100}%`, background: m.color }}
+                      style={{ width: `${(Math.max(0, m.valor) / maxMetodo) * 100}%`, background: m.color }}
                     />
                   </div>
                   <span className="res-barra-valor">S/ {m.valor.toFixed(2)}</span>

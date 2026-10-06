@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { HandCoins, Printer } from 'lucide-react';
 import { api } from '../../api/api';
-import { nombreMetodo } from '../../utils/metodoPago';
+import { METODOS_DE_ABONO, nombreMetodo } from '../../utils/metodoPago';
 import { formatoCantidad } from '../../utils/medidas';
 import { fechaCorta } from '../../utils/formato';
 import '../../components/PantallaModulo.css';
@@ -12,7 +12,7 @@ const FILTROS = [
   { valor: 'PAGADO', label: 'Pagados' },
   { valor: 'TODOS', label: 'Todos' },
 ];
-const METODOS = ['EFECTIVO', 'YAPE_PLIN', 'TRANSFERENCIA', 'TARJETA'];
+const METODOS = METODOS_DE_ABONO;
 
 function EstadoCredito({ credito }) {
   if (credito.estado === 'PAGADO') return <span className="pm-chip pm-chip-ok">Pagado</span>;

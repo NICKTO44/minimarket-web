@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/api';
 import './Reportes.css';
-import { describirPago } from '../../utils/metodoPago';
+import { describirPago, nombreMetodo } from '../../utils/metodoPago';
 import { fechaHoraLima, hoyLima } from '../../utils/formato';
 import Ganancias from './Ganancias';
+
+// Nombres de la tabla "Ventas por método de pago" que piden aclaración.
+const NOMBRE_EN_REPORTE = {
+  YAPE_PLIN: 'Yape/Plin (ventas de antes, sin separar)',
+  CREDITO: 'Al crédito (por cobrar)',
+};
 
 // El día de hoy en Perú (el servidor corta los reportes en esa hora).
 const hoy = () => hoyLima();
@@ -137,6 +143,48 @@ export default function Reportes({ ganancias = false, onVerSinPrecio }) {
                 <span className="rep-tarjeta-label">Total neto</span>
                 <strong className="rep-tarjeta-valor">S/ {estadisticas.total_neto.toFixed(2)}</strong>
               </div>
+            </div>
+          )}
+
+          {estadisticas?.por_metodo?.length > 0 && (
+            <div className="rep-seccion">
+              <h2>Ventas por método de pago</h2>
+              <div className="rep-tabla-wrapper">
+                <table className="rep-tabla rep-tabla-metodos">
+                  <thead>
+                    <tr>
+                      <th>Método</th>
+                      <th className="num">Pagos</th>
+                      <th className="num">Monto</th>
+                      <th className="rep-metodo-barra-th">Del total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {estadisticas.por_metodo.map((m) => {
+                      const parte = estadisticas.ventas_total > 0 ? (m.monto / estadisticas.ventas_total) * 100 : 0;
+                      return (
+                        <tr key={m.metodo}>
+                          <td>{NOMBRE_EN_REPORTE[m.metodo] || nombreMetodo(m.metodo)}</td>
+                          <td className="num">{m.cantidad}</td>
+                          <td className="num">S/ {m.monto.toFixed(2)}</td>
+                          <td>
+                            <div className="rep-metodo-barra">
+                              <span className="rep-metodo-pista">
+                                <span className="rep-metodo-relleno" style={{ width: `${Math.min(100, parte)}%` }} />
+                              </span>
+                              <span className="rep-metodo-porcentaje">{parte.toFixed(1)}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="rep-nota">
+                Una venta con pago mixto cuenta su parte en efectivo y su parte en el otro medio. No descuenta las
+                devoluciones.
+              </p>
             </div>
           )}
 

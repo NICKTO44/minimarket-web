@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { api } from '../../api/api';
 import { opcionesUnidad } from '../../utils/unidades';
+import { formatoCantidad } from '../../utils/medidas';
 import './Proveedores.css';
 
 
@@ -36,6 +37,14 @@ export default function Proveedores() {
   const [guardandoCompra, setGuardandoCompra] = useState(false);
 
   const [compraSeleccionada, setCompraSeleccionada] = useState(null);
+  // Compra abierta solo para verla: { compra (la fila), items }.
+  const [compraVista, setCompraVista] = useState(null);
+
+  // Código de cada producto, para mostrarlo junto al nombre en las compras.
+  // El detalle de la compra ya lo trae; esto cubre un servidor que aún no
+  // lo manda (ahí un producto desactivado queda sin código a la vista).
+  const codigoPorProducto = useMemo(() => new Map(productos.map((p) => [p.id, p.codigo])), [productos]);
+  const codigoDe = (item) => item.codigo || codigoPorProducto.get(item.producto_id) || '';
   const [itemsRecepcion, setItemsRecepcion] = useState([]);
   const [recibiendo, setRecibiendo] = useState(false);
 
@@ -111,7 +120,7 @@ export default function Proveedores() {
     const producto = productos.find((p) => p.id === parseInt(compraProductoSel, 10));
     setCompraItems((prev) => [
       ...prev,
-      { producto_id: producto.id, nombre: producto.nombre, cantidad: parseFloat(compraCantidad), precio_compra: parseFloat(compraPrecio) },
+      { producto_id: producto.id, codigo: producto.codigo, nombre: producto.nombre, cantidad: parseFloat(compraCantidad), precio_compra: parseFloat(compraPrecio) },
     ]);
     setCompraProductoSel('');
     setCompraCantidad('');
@@ -153,7 +162,7 @@ export default function Proveedores() {
       });
       setCompraItems((prev) => [
         ...prev,
-        { producto_id: creado.producto_id, nombre: nuevoProdNombre.trim(), cantidad: parseFloat(nuevoProdCantidadCompra), precio_compra: parseFloat(nuevoProdPrecioCompra) },
+        { producto_id: creado.producto_id, codigo: nuevoProdCodigo.trim(), nombre: nuevoProdNombre.trim(), cantidad: parseFloat(nuevoProdCantidadCompra), precio_compra: parseFloat(nuevoProdPrecioCompra) },
       ]);
       setMostrarNuevoProductoEnCompra(false);
       limpiarFormNuevoProducto();
@@ -198,6 +207,17 @@ export default function Proveedores() {
     }
   };
 
+  // Abre una compra solo para ver qué productos (con su código) trajo.
+  const verCompra = async (compra) => {
+    setMensaje(null);
+    try {
+      const detalle = await api.compraDetalle(compra.id);
+      setCompraVista({ compra, items: detalle.items });
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    }
+  };
+
   const abrirRecepcion = async (compra) => {
     setMensaje(null);
     try {
@@ -206,6 +226,7 @@ export default function Proveedores() {
       setItemsRecepcion(
         detalle.items.map((it) => ({
           detalle_id: it.id,
+          codigo: codigoDe(it),
           producto_nombre: it.producto_nombre,
           lleva_vencimiento: it.lleva_vencimiento,
           cantidad_pedida: it.cantidad,
@@ -278,6 +299,7 @@ export default function Proveedores() {
             return {
               detalle_compra_id: it.id,
               producto_id: it.producto_id,
+              codigo: codigoDe(it),
               producto_nombre: it.producto_nombre,
               precio_compra: it.precio_compra,
               total,
@@ -399,6 +421,9 @@ export default function Proveedores() {
                         </td>
                         <td>{c.estado_pago}</td>
                         <td>
+                            <button className="prov-boton-ver" onClick={() => verCompra(c)} aria-label={`Ver la compra ${c.folio}`}>
+                              Ver
+                            </button>
                             {c.estado === 'PENDIENTE' && (
                             <button className="prov-boton-recibir" onClick={() => abrirRecepcion(c)}>Recibir</button>
                             )}
@@ -550,7 +575,11 @@ export default function Proveedores() {
             <div className="prov-agregar-item">
               <select value={compraProductoSel} onChange={(e) => setCompraProductoSel(e.target.value)}>
                 <option value="">Producto existente...</option>
-                {productos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                {productos.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.codigo ? `${p.codigo} — ${p.nombre}` : p.nombre}
+                  </option>
+                ))}
               </select>
               <input type="number" placeholder="Cant." value={compraCantidad} onChange={(e) => setCompraCantidad(e.target.value)} />
               <input type="number" placeholder="Precio" value={compraPrecio} onChange={(e) => setCompraPrecio(e.target.value)} />
@@ -625,7 +654,10 @@ export default function Proveedores() {
             <div className="prov-items-lista">
               {compraItems.map((it, idx) => (
                 <div key={idx} className="prov-item-fila">
-                  <span>{it.nombre}</span>
+                  <span>
+                    {it.codigo && <span className="prov-codigo">{it.codigo}</span>}
+                    {it.nombre}
+                  </span>
                   <span>{it.cantidad} x S/{it.precio_compra.toFixed(2)}</span>
                   <span>S/ {(it.cantidad * it.precio_compra).toFixed(2)}</span>
                   <button onClick={() => quitarItemCompra(idx)}>🗑</button>
@@ -659,6 +691,95 @@ export default function Proveedores() {
         </div>
       )}
 
+      {compraVista && (
+        <div className="prov-modal-overlay" onClick={() => setCompraVista(null)}>
+          <div
+            className="prov-modal prov-modal-detalle"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Compra ${compraVista.compra.folio}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Compra {compraVista.compra.folio}</h2>
+            <div className="prov-detalle-datos">
+              <div>
+                <span>Proveedor</span>
+                <strong>{compraVista.compra.proveedor_nombre}</strong>
+              </div>
+              <div>
+                <span>Fecha</span>
+                <strong>{compraVista.compra.fecha_compra}</strong>
+              </div>
+              <div>
+                <span>Estado</span>
+                <strong>
+                  <span className={`prov-badge prov-badge-${compraVista.compra.estado.toLowerCase()}`}>{compraVista.compra.estado}</span>
+                </strong>
+              </div>
+              <div>
+                <span>Pago</span>
+                <strong>{compraVista.compra.estado_pago}</strong>
+              </div>
+            </div>
+            <div className="prov-detalle-tabla-wrapper">
+              <table className="prov-detalle-tabla">
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Producto</th>
+                    <th className="num">Pedido</th>
+                    <th className="num">Recibido</th>
+                    <th className="num">P. compra</th>
+                    <th className="num">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {compraVista.items.map((it) => {
+                    const pendiente = compraVista.compra.estado === 'PENDIENTE';
+                    const danado = it.cantidad_recibida - it.cantidad_conforme;
+                    return (
+                      <tr key={it.id}>
+                        <td className="prov-detalle-codigo">{codigoDe(it) || '—'}</td>
+                        <td>{it.producto_nombre}</td>
+                        <td className="num" data-etiqueta="Pedido">{formatoCantidad(it.cantidad)}</td>
+                        <td className="num" data-etiqueta="Recibido">
+                          <span>
+                            {pendiente ? '—' : formatoCantidad(it.cantidad_recibida)}
+                            {!pendiente && danado > 0.001 && (
+                              <small className="prov-detalle-danado">{formatoCantidad(danado)} dañado(s)</small>
+                            )}
+                          </span>
+                        </td>
+                        <td className="num" data-etiqueta="Precio de compra">S/ {it.precio_compra.toFixed(2)}</td>
+                        <td className="num" data-etiqueta="Subtotal">S/ {(it.cantidad * it.precio_compra).toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                  {compraVista.items.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="prov-sin-resultados">
+                        Esta compra no tiene productos.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="prov-detalle-total">
+              <span>
+                {compraVista.items.length} producto{compraVista.items.length === 1 ? '' : 's'}
+              </span>
+              <strong>Total S/ {compraVista.compra.total.toFixed(2)}</strong>
+            </div>
+            <div className="prov-modal-acciones">
+              <button className="prov-boton-cancelar" onClick={() => setCompraVista(null)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {compraSeleccionada && (
         <div className="prov-modal-overlay" onClick={() => setCompraSeleccionada(null)}>
           <div className="prov-modal prov-modal-grande" onClick={(e) => e.stopPropagation()}>
@@ -667,6 +788,7 @@ export default function Proveedores() {
             {itemsRecepcion.map((it, idx) => (
               <div key={it.detalle_id} className="prov-recepcion-item">
                 <div className="prov-recepcion-nombre">
+                  {it.codigo && <span className="prov-codigo">{it.codigo}</span>}
                   {it.producto_nombre}
                   {it.lleva_vencimiento && <span className="prov-badge-vencimiento">perecible</span>}
                 </div>
@@ -722,7 +844,10 @@ export default function Proveedores() {
 
             {itemsDevolucion.map((it) => (
               <div key={it.detalle_compra_id} className="prov-recepcion-item">
-                <div className="prov-recepcion-nombre">{it.producto_nombre}</div>
+                <div className="prov-recepcion-nombre">
+                  {it.codigo && <span className="prov-codigo">{it.codigo}</span>}
+                  {it.producto_nombre}
+                </div>
                 <div className="prov-danado-fijo">
                   {it.descripcion} — total a reclamar: {it.total} unidad(es)
                 </div>

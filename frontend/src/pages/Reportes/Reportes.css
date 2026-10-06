@@ -249,3 +249,53 @@
     font-size: 20px;
   }
 }
+/* ===== Ventas por método de pago ===== */
+.rep-tabla-metodos {
+  min-width: 420px;
+}
+
+.rep-tabla-metodos .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.rep-metodo-barra-th {
+  width: 38%;
+}
+
+.rep-metodo-barra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rep-metodo-pista {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: #f1f2f4;
+  overflow: hidden;
+}
+
+.rep-metodo-relleno {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-primario, #16181d);
+}
+
+.rep-metodo-porcentaje {
+  min-width: 46px;
+  text-align: right;
+  font-size: 12.5px;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+
+.rep-nota {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+}

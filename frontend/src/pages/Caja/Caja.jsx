@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/api';
+import { ventasDeCajaPorMetodo } from '../../utils/metodoPago';
 import './Caja.css';
 
 export default function Caja({ usuario }) {
@@ -79,9 +80,8 @@ export default function Caja({ usuario }) {
         efectivoEsperado,
         montoContado: monto,
         diferencia: monto - efectivoEsperado,
-        ventasEfectivo: caja.ventas_efectivo,
-        ventasTarjeta: caja.ventas_tarjeta,
-        ventasTransferencia: caja.ventas_transferencia,
+        // Efectivo, tarjeta, Yape, Plin y transferencia, cada uno en su línea.
+        porMetodo: ventasDeCajaPorMetodo(caja),
         totalVentas: caja.total_ventas,
         numeroTransacciones: caja.numero_transacciones,
         devolucionesMonto: caja.devoluciones_monto,
@@ -118,18 +118,12 @@ export default function Caja({ usuario }) {
           <h2>Caja cerrada — Reporte del turno</h2>
 
           <div className="caja-seccion-titulo">Ventas por método de pago</div>
-          <div className="caja-resumen-fila">
-            <span>Efectivo</span>
-            <strong>S/ {resumenCierre.ventasEfectivo.toFixed(2)}</strong>
-          </div>
-          <div className="caja-resumen-fila">
-            <span>Tarjeta</span>
-            <strong>S/ {resumenCierre.ventasTarjeta.toFixed(2)}</strong>
-          </div>
-          <div className="caja-resumen-fila">
-            <span>Transferencia / Yape / Plin</span>
-            <strong>S/ {resumenCierre.ventasTransferencia.toFixed(2)}</strong>
-          </div>
+          {resumenCierre.porMetodo.map((m) => (
+            <div key={m.clave} className="caja-resumen-fila">
+              <span>{m.label}</span>
+              <strong>S/ {m.valor.toFixed(2)}</strong>
+            </div>
+          ))}
                    <div className="caja-resumen-fila caja-resumen-total">
             <span>Total vendido bruto ({resumenCierre.numeroTransacciones} ventas)</span>
             <strong>S/ {resumenCierre.totalVentas.toFixed(2)}</strong>
@@ -214,18 +208,12 @@ export default function Caja({ usuario }) {
         <p className="caja-subtitulo">Desde {new Date(caja.fecha_apertura).toLocaleString('es-PE')}</p>
 
         <div className="caja-seccion-titulo">Ventas por método de pago</div>
-        <div className="caja-resumen-fila">
-          <span>Efectivo</span>
-          <strong>S/ {caja.ventas_efectivo.toFixed(2)}</strong>
-        </div>
-        <div className="caja-resumen-fila">
-          <span>Tarjeta</span>
-          <strong>S/ {caja.ventas_tarjeta.toFixed(2)}</strong>
-        </div>
-        <div className="caja-resumen-fila">
-          <span>Transferencia / Yape / Plin</span>
-          <strong>S/ {caja.ventas_transferencia.toFixed(2)}</strong>
-        </div>
+        {ventasDeCajaPorMetodo(caja).map((m) => (
+          <div key={m.clave} className="caja-resumen-fila">
+            <span>{m.label}</span>
+            <strong>S/ {m.valor.toFixed(2)}</strong>
+          </div>
+        ))}
                <div className="caja-resumen-fila caja-resumen-total">
           <span>Total vendido bruto ({caja.numero_transacciones} ventas)</span>
           <strong>S/ {caja.total_ventas.toFixed(2)}</strong>

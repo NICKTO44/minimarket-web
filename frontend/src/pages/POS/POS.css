@@ -853,8 +853,19 @@
 
 .pos-metodo-pago {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  /* Cinco medios en dos filas: Efectivo · Yape · Plin y Tarjeta ·
+     Transferencia. Los botones de Mixto y Crédito ocupan toda la fila. */
+  grid-template-columns: repeat(6, 1fr);
   gap: 6px;
+}
+
+.pos-metodo-pago button:nth-child(-n + 3) {
+  grid-column: span 2;
+}
+
+.pos-metodo-pago button:nth-child(4),
+.pos-metodo-pago button:nth-child(5) {
+  grid-column: span 3;
 }
 
 .pos-metodo-pago button {
@@ -969,6 +980,7 @@
 
 .pos-mixto-chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

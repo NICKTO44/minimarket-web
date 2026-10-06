@@ -175,6 +175,185 @@
   white-space: nowrap;
 }
 
+/* "Ver": abre la compra con sus productos y códigos. */
+.prov-boton-ver {
+  padding: 6px 12px;
+  margin-right: 6px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 6px;
+  background: white;
+  color: #16181d;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.prov-boton-ver:hover {
+  background: #f4f5f7;
+}
+
+/* Código del producto junto a su nombre (compra nueva, recepción, reclamo). */
+.prov-codigo {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #eef0f3;
+  color: #374151;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
+.prov-modal.prov-modal-detalle {
+  max-width: 760px;
+}
+
+.prov-detalle-datos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin-bottom: 14px;
+}
+
+.prov-detalle-datos > div > span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.prov-detalle-datos strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  color: #16181d;
+  overflow-wrap: anywhere;
+}
+
+.prov-detalle-tabla-wrapper {
+  border: 1px solid #e4e6eb;
+  border-radius: 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.prov-detalle-tabla {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.prov-detalle-tabla th {
+  padding: 9px 12px;
+  border-bottom: 1.5px solid #e4e6eb;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-align: left;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.prov-detalle-tabla td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #f1f2f4;
+  font-size: 13.5px;
+  color: #16181d;
+  vertical-align: top;
+}
+
+.prov-detalle-tabla tr:last-child td {
+  border-bottom: none;
+}
+
+.prov-detalle-tabla .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.prov-detalle-codigo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.prov-detalle-danado {
+  display: block;
+  font-size: 11px;
+  color: #b45309;
+}
+
+.prov-detalle-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.prov-detalle-total strong {
+  font-size: 16px;
+  color: #16181d;
+}
+
+@media (max-width: 640px) {
+  .prov-detalle-datos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* En celular cada producto es una tarjeta: el código arriba, bien visible. */
+  .prov-detalle-tabla thead {
+    display: none;
+  }
+
+  .prov-detalle-tabla,
+  .prov-detalle-tabla tbody,
+  .prov-detalle-tabla tr,
+  .prov-detalle-tabla td {
+    display: block;
+  }
+
+  .prov-detalle-tabla tr {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f2f4;
+  }
+
+  .prov-detalle-tabla tr:last-child {
+    border-bottom: none;
+  }
+
+  .prov-detalle-tabla td {
+    padding: 1px 0;
+    border: none;
+  }
+
+  .prov-detalle-tabla td.num {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    text-align: left;
+    font-size: 13px;
+  }
+
+  .prov-detalle-tabla td.num::before {
+    content: attr(data-etiqueta);
+    color: #6b7280;
+  }
+
+  .prov-detalle-danado {
+    display: inline;
+    margin-left: 6px;
+  }
+}
+
 .prov-modal-overlay {
   position: fixed;
   inset: 0;

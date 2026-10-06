@@ -7,7 +7,7 @@ import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
 import { ChevronRight, ShoppingCart } from 'lucide-react';
-import { METODOS_OTRO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
+import { METODOS_DE_ABONO, METODOS_DE_COBRO, METODOS_OTRO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
 import { tituloPedido } from '../../utils/mesas';
 import { abreviaturaUnidad } from '../../utils/unidades';
 import { UNIDAD_PIE_TABLAR, formatoCantidad, leerCantidad, subtotalLinea } from '../../utils/medidas';
@@ -140,7 +140,7 @@ function carritoDeCotizacion(cotizacion) {
 
 // Plazos que se ofrecen al vender al crédito (días).
 const PLAZOS_CREDITO = [7, 15, 30, 45, 60];
-const METODOS_ADELANTO = ['EFECTIVO', 'YAPE_PLIN', 'TRANSFERENCIA', 'TARJETA'];
+const METODOS_ADELANTO = METODOS_DE_ABONO;
 
 // Opciones del selector "Ordenar por" encima de la grilla del POS.
 const OPCIONES_ORDEN = [
@@ -221,7 +221,7 @@ export default function POS({
   const [montoRecibido, setMontoRecibido] = useState('');
   // Pago MIXTO = efectivo + un medio digital. El cajero escribe cuánto se
   // pagó por el medio digital; la parte en efectivo se calcula sola.
-  const [mixtoOtroMetodo, setMixtoOtroMetodo] = useState('YAPE_PLIN');
+  const [mixtoOtroMetodo, setMixtoOtroMetodo] = useState('YAPE');
   const [mixtoMontoOtro, setMixtoMontoOtro] = useState('');
   const [cliente, setCliente] = useState(() =>
     !pedidoACobrar && cotizacionACargar?.cliente_id
@@ -1628,7 +1628,7 @@ export default function POS({
           )}
 
           <div className="pos-metodo-pago">
-            {['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'YAPE_PLIN'].map((m) => (
+            {METODOS_DE_COBRO.map((m) => (
               <button
                 key={m}
                 className={metodoPago === m ? 'activo' : ''}
