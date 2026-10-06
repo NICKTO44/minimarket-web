@@ -331,7 +331,7 @@ pub async fn detalle_compra(
     };
 
     let mut r2 = conn.query(
-        "SELECT dc.id, dc.producto_id, COALESCE(dc.nombre_producto, p.nombre), p.lleva_vencimiento, dc.cantidad, dc.cantidad_recibida, dc.cantidad_conforme, dc.precio_compra
+        "SELECT dc.id, dc.producto_id, COALESCE(dc.nombre_producto, p.nombre), p.lleva_vencimiento, dc.cantidad, dc.cantidad_recibida, dc.cantidad_conforme, dc.precio_compra, p.codigo
          FROM detalles_compra dc JOIN productos p ON p.id = dc.producto_id
          WHERE dc.compra_id = ?1 ORDER BY dc.id",
         libsql::params![id],
@@ -342,6 +342,7 @@ pub async fn detalle_compra(
         items.push(DetalleCompraItem {
             id: row.get(0).unwrap_or_default(),
             producto_id: row.get(1).unwrap_or_default(),
+            codigo: row.get::<String>(8).ok().filter(|c| !c.trim().is_empty()),
             producto_nombre: row.get(2).unwrap_or_default(),
             lleva_vencimiento: row.get::<i64>(3).unwrap_or(0) == 1,
             cantidad: row.get(4).unwrap_or_default(),

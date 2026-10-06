@@ -40,7 +40,16 @@ pub struct CajaEstado {
     pub monto_inicial: f64,
     pub ventas_efectivo: f64,
     pub ventas_tarjeta: f64,
+    /// Transferencia + Yape + Plin (así lo llevan los triggers de caja).
     pub ventas_transferencia: f64,
+    /// Lo que de `ventas_transferencia` fue por Yape, por Plin y por
+    /// "Yape/Plin" sin separar (migración 0019).
+    pub ventas_yape: f64,
+    pub ventas_plin: f64,
+    pub ventas_yape_plin: f64,
+    /// true si la caja se abrió con Yape y Plin ya separados: ahí
+    /// transferencia sola = ventas_transferencia - yape - plin - yape_plin.
+    pub detalle_billeteras: bool,
     pub total_ventas: f64,
     pub numero_transacciones: i64,
     pub devoluciones_monto: f64,
@@ -63,6 +72,10 @@ pub struct CajaHistorial {
     pub ventas_efectivo: f64,
     pub ventas_tarjeta: f64,
     pub ventas_transferencia: f64,
+    pub ventas_yape: f64,
+    pub ventas_plin: f64,
+    pub ventas_yape_plin: f64,
+    pub detalle_billeteras: bool,
     pub numero_transacciones: i64,
     pub devoluciones_monto: f64,
 }

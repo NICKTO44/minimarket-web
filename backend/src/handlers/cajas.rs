@@ -50,6 +50,10 @@ pub async fn abrir_caja(
 
     let caja_id = conn.last_insert_rowid();
 
+    // Esta caja nace con Yape y Plin ya separados (migración 0019). Si la
+    // base aún no tiene la columna, no pasa nada.
+    let _ = conn.execute("UPDATE cajas SET detalle_billeteras = 1 WHERE id = ?1", libsql::params![caja_id]).await;
+
     Ok(Json(CajaResponse {
         success: true,
         message: "Caja abierta exitosamente".into(),
@@ -175,6 +179,9 @@ pub async fn registrar_movimiento(
     }))
 }
 
+/// Columnas de la migración 0019, al final de cada consulta de cajas.
+const BILLETERAS: &str = "CAST(c.ventas_yape AS REAL), CAST(c.ventas_plin AS REAL), CAST(c.ventas_yape_plin AS REAL), c.detalle_billeteras";
+
 pub async fn obtener_caja_abierta(
     Extension(tenant): Extension<Arc<TenantDb>>,
 ) -> Json<Option<CajaEstado>> {
@@ -183,19 +190,19 @@ pub async fn obtener_caja_abierta(
         Err(_) => return Json(None),
     };
 
-    let mut rows = match conn
-        .query(
-            "SELECT c.id, u.nombre_completo, c.monto_inicial, c.ventas_efectivo,
+    // Con Yape y Plin por separado (migración 0019); si la base aún no tiene
+    // esas columnas, la consulta de siempre (y van en cero).
+    const COLUMNAS: &str = "c.id, u.nombre_completo, c.monto_inicial, c.ventas_efectivo,
                     c.ventas_tarjeta, c.ventas_transferencia, c.total_ventas, c.numero_transacciones,
-                    c.devoluciones_monto, c.retiros_total, c.ingresos_total, c.gastos_total, c.fecha_apertura
-             FROM cajas c JOIN usuarios u ON u.id = c.usuario_id
-             WHERE c.estado = 'ABIERTA'",
-            (),
-        )
-        .await
-    {
+                    c.devoluciones_monto, c.retiros_total, c.ingresos_total, c.gastos_total, c.fecha_apertura";
+    const DESDE: &str = "FROM cajas c JOIN usuarios u ON u.id = c.usuario_id WHERE c.estado = 'ABIERTA'";
+    let con_billeteras = format!("SELECT {}, {} {}", COLUMNAS, BILLETERAS, DESDE);
+    let mut rows = match conn.query(&con_billeteras, ()).await {
         Ok(r) => r,
-        Err(_) => return Json(None),
+        Err(_) => match conn.query(&format!("SELECT {} {}", COLUMNAS, DESDE), ()).await {
+            Ok(r) => r,
+            Err(_) => return Json(None),
+        },
     };
 
     match rows.next().await {
@@ -206,6 +213,10 @@ pub async fn obtener_caja_abierta(
             ventas_efectivo: row.get(3).unwrap_or_default(),
             ventas_tarjeta: row.get(4).unwrap_or_default(),
             ventas_transferencia: row.get(5).unwrap_or_default(),
+            ventas_yape: row.get(13).unwrap_or_default(),
+            ventas_plin: row.get(14).unwrap_or_default(),
+            ventas_yape_plin: row.get(15).unwrap_or_default(),
+            detalle_billeteras: row.get::<i64>(16).unwrap_or(0) == 1,
             total_ventas: row.get(6).unwrap_or_default(),
             numero_transacciones: row.get(7).unwrap_or_default(),
             devoluciones_monto: row.get(8).unwrap_or_default(),
@@ -230,19 +241,28 @@ pub async fn listar_cajas(
 ) -> Result<Json<Vec<crate::models::caja::CajaHistorial>>, StatusCode> {
     let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let mut rows = conn
-        .query(
-            "SELECT c.id, u.nombre_completo, c.fecha_apertura, c.fecha_cierre, c.estado,
+    const COLUMNAS: &str = "c.id, u.nombre_completo, c.fecha_apertura, c.fecha_cierre, c.estado,
                     c.monto_inicial, c.monto_final_contado, c.diferencia, c.total_ventas,
                     c.ventas_efectivo, c.ventas_tarjeta, c.ventas_transferencia,
-                    c.numero_transacciones, c.devoluciones_monto
-             FROM cajas c JOIN usuarios u ON u.id = c.usuario_id
+                    c.numero_transacciones, c.devoluciones_monto";
+    const DESDE: &str = "FROM cajas c JOIN usuarios u ON u.id = c.usuario_id
              WHERE date(c.fecha_apertura) BETWEEN ?1 AND ?2
-             ORDER BY c.fecha_apertura DESC",
-            libsql::params![params.fecha_inicio, params.fecha_fin],
+             ORDER BY c.fecha_apertura DESC";
+    // Con Yape y Plin por separado; si la base aún no tiene esas columnas,
+    // la consulta de siempre.
+    let mut rows = match conn
+        .query(
+            &format!("SELECT {}, {} {}", COLUMNAS, BILLETERAS, DESDE),
+            libsql::params![params.fecha_inicio.clone(), params.fecha_fin.clone()],
         )
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    {
+        Ok(r) => r,
+        Err(_) => conn
+            .query(&format!("SELECT {} {}", COLUMNAS, DESDE), libsql::params![params.fecha_inicio, params.fecha_fin])
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    };
 
     let mut cajas = Vec::new();
     while let Some(row) = rows.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
@@ -259,6 +279,10 @@ pub async fn listar_cajas(
             ventas_efectivo: row.get(9).unwrap_or_default(),
             ventas_tarjeta: row.get(10).unwrap_or_default(),
             ventas_transferencia: row.get(11).unwrap_or_default(),
+            ventas_yape: row.get(14).unwrap_or_default(),
+            ventas_plin: row.get(15).unwrap_or_default(),
+            ventas_yape_plin: row.get(16).unwrap_or_default(),
+            detalle_billeteras: row.get::<i64>(17).unwrap_or(0) == 1,
             numero_transacciones: row.get(12).unwrap_or_default(),
             devoluciones_monto: row.get(13).unwrap_or_default(),
         });

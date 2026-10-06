@@ -20,7 +20,9 @@ type Resultado<T> = Result<Json<T>, (StatusCode, String)>;
 /// Valor de ventas.pago_otro_metodo que identifica una venta al crédito.
 pub const METODO_CREDITO: &str = "CREDITO";
 pub const DIAS_POR_DEFECTO: i64 = 30;
-const METODOS_ABONO: &[&str] = &["EFECTIVO", "TARJETA", "TRANSFERENCIA", "YAPE_PLIN"];
+// Yape y Plin van por separado; "YAPE_PLIN" queda por las pantallas que
+// todavía no los distinguen.
+const METODOS_ABONO: &[&str] = &["EFECTIVO", "TARJETA", "TRANSFERENCIA", "YAPE", "PLIN", "YAPE_PLIN"];
 
 fn e500<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())

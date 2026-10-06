@@ -88,6 +88,8 @@ pub struct CompraResumen {
 pub struct DetalleCompraItem {
     pub id: i64,
     pub producto_id: i64,
+    /// Código del producto, para ver qué se compró (y encontrarlo al recibir).
+    pub codigo: Option<String>,
     pub producto_nombre: String,
     pub lleva_vencimiento: bool,
     pub cantidad: f64,

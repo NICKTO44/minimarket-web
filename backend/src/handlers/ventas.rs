@@ -182,11 +182,37 @@ async fn datos_productos_para_venta(
 pub async fn procesar_venta(
     Extension(tenant): Extension<std::sync::Arc<TenantDb>>,
     Extension(claims): Extension<Claims>,
-    Json(payload): Json<NuevaVenta>,
+    Json(mut payload): Json<NuevaVenta>,
 ) -> Result<Json<VentaResult>, (StatusCode, String)> {
     // El autor de la venta es el usuario de la sesión (JWT), no el
     // usuario_id que manda el navegador.
     let usuario_id = claims.sub;
+
+    // Yape y Plin llegan por separado ("YAPE" / "PLIN"), solos o como la
+    // parte digital de un pago mixto. Se guardan como siempre ('YAPE_PLIN')
+    // y la billetera queda aparte (migración 0019); todo lo que sigue ve
+    // el método de siempre.
+    let billetera: Option<&'static str> = {
+        let (metodo, directa) = crate::handlers::billeteras::separar(&payload.metodo_pago);
+        if directa.is_some() {
+            payload.metodo_pago = metodo.to_string();
+            directa
+        } else if payload.metodo_pago == "MIXTO" {
+            let (otro, del_mixto) = match payload.pago_otro_metodo.as_deref() {
+                Some(m) => {
+                    let (o, b) = crate::handlers::billeteras::separar(m);
+                    (Some(o.to_string()), b)
+                }
+                None => (None, None),
+            };
+            if del_mixto.is_some() {
+                payload.pago_otro_metodo = otro;
+            }
+            del_mixto
+        } else {
+            None
+        }
+    };
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Cada consulta es un viaje a la base (0.1–0.2 s desde Perú), así que
@@ -515,6 +541,20 @@ pub async fn procesar_venta(
                 crate::handlers::ganancias::congelar_costo(&conn, venta_id).await;
             }
 
+            // 6b-3. Yape y Plin por separado: queda anotada la billetera y lo
+            //     cobrado por ella en la caja. Solo en ventas con Yape/Plin, y
+            //     no puede hacer fallar la venta.
+            let por_billetera = if metodo_pago == crate::handlers::billeteras::YAPE_PLIN {
+                payload.total
+            } else if metodo_pago == "MIXTO" && pago_otro_metodo.as_deref() == Some(crate::handlers::billeteras::YAPE_PLIN) {
+                pago_otro.unwrap_or(0.0)
+            } else {
+                0.0
+            };
+            if por_billetera > 0.0 {
+                crate::handlers::billeteras::anotar_venta(&conn, venta_id, usuario_id, billetera, por_billetera).await;
+            }
+
             // 6c. Venta al crédito: se abre la cuenta por cobrar y, si el cliente
             //     dejó un adelanto, entra como su primer abono.
             if let (Some((adelanto, adelanto_metodo, vence)), Some(cliente_id)) = (&credito, payload.cliente_id) {
@@ -566,6 +606,13 @@ pub async fn procesar_venta(
                 ),
                 None => None,
             };
+            // Lo devuelto en el cambio sale por el mismo medio: si fue Yape o
+            // Plin, también de su línea en la caja.
+            if let Some(hecho) = &cambio_hecho {
+                if metodo_pago == crate::handlers::billeteras::YAPE_PLIN {
+                    crate::handlers::billeteras::descontar(&conn, usuario_id, billetera, hecho.valor_devuelto).await;
+                }
+            }
 
             Ok((venta_id, folio, cambio_hecho))
         }

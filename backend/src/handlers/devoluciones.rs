@@ -67,6 +67,15 @@ pub async fn buscar_venta_para_devolucion(
     let pago_efectivo: Option<f64> = row.get(5).ok().flatten();
     let pago_otro: Option<f64> = row.get(6).ok().flatten();
     let pago_otro_metodo: Option<String> = row.get(7).ok().flatten();
+    // Yape y Plin por separado: si la venta guardó su billetera, se muestra
+    // esa ("YAPE" o "PLIN") en vez de "YAPE_PLIN".
+    let (metodo_pago, pago_otro_metodo) = match crate::handlers::billeteras::de_venta(&conn, venta_id).await {
+        Some(billetera) => {
+            let detallar = |m: String| if m == crate::handlers::billeteras::YAPE_PLIN { billetera.clone() } else { m };
+            (detallar(metodo_pago), pago_otro_metodo.map(detallar))
+        }
+        None => (metodo_pago, pago_otro_metodo),
+    };
 
     let mut rows_det = conn
         .query(
@@ -180,7 +189,9 @@ pub async fn procesar_devolucion(
     // efectivo o por el mismo medio digital con el que se pagó la otra
     // parte. En el resto, se devuelve por el mismo método de la venta.
     let metodo_para_caja = if metodo_original == "MIXTO" {
+        // "YAPE" o "PLIN" es el mismo medio que se guardó como 'YAPE_PLIN'.
         let elegido = payload.metodo_reembolso.clone().unwrap_or_else(|| "EFECTIVO".to_string());
+        let elegido = crate::handlers::billeteras::separar(&elegido).0.to_string();
         let otro = otro_metodo_original.clone().unwrap_or_default();
         if elegido == "EFECTIVO" {
             "EFECTIVO".to_string()
@@ -210,6 +221,13 @@ pub async fn procesar_devolucion(
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar devolución: {}", e)))?;
 
     let devolucion_id = conn.last_insert_rowid();
+
+    // Devuelto por Yape o Plin: sale también de su línea en la caja (el
+    // trigger ya lo restó del total de transferencias). No puede fallar.
+    if metodo_para_caja == crate::handlers::billeteras::YAPE_PLIN {
+        let billetera = crate::handlers::billeteras::de_venta(&conn, payload.venta_id).await;
+        crate::handlers::billeteras::descontar(&conn, claims.sub, billetera.as_deref(), monto_total).await;
+    }
 
     for p in &payload.productos {
         let mut r = conn.query(
