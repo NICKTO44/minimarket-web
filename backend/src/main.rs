@@ -175,6 +175,11 @@ async fn main() {
         .route("/productos", get(handlers::productos::listar_productos))
         .route("/productos", post(handlers::productos::agregar_producto))
         .route("/productos/stock-bajo", get(handlers::productos::productos_stock_bajo))
+        // Importar desde Excel/CSV: hasta 5,000 filas en una sola petición.
+        .route(
+            "/productos/importar",
+            post(handlers::importacion::importar_productos).layer(DefaultBodyLimit::max(6 * 1024 * 1024)),
+        )
         .route("/productos/desactivados", get(handlers::productos::listar_productos_desactivados))
         .route("/productos/:id", axum::routing::put(handlers::productos::actualizar_producto))
         .route("/productos/:id", axum::routing::delete(handlers::productos::eliminar_producto))

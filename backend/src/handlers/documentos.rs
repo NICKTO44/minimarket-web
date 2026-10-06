@@ -17,6 +17,10 @@ pub struct ConsultaDocumentoResponse {
     /// nunca como un error que bloquee el formulario.
     pub existe: Option<bool>,
     pub nombre: Option<String>,
+    /// Dirección que figura en SUNAT/RENIEC, si la hay (los DNI y algunos
+    /// RUC de persona natural no la traen). El formulario la propone y
+    /// el cajero la puede cambiar.
+    pub direccion: Option<String>,
 }
 
 /// Siempre responde 200 -- nunca falla "hacia arriba" ni con un
@@ -32,7 +36,9 @@ pub async fn consultar_documento(Query(params): Query<ConsultaDocumento>) -> Jso
     };
 
     match resultado {
-        Some(v) => Json(ConsultaDocumentoResponse { existe: Some(v.existe), nombre: v.nombre_completo }),
-        None => Json(ConsultaDocumentoResponse { existe: None, nombre: None }),
+        Some(v) => {
+            Json(ConsultaDocumentoResponse { existe: Some(v.existe), nombre: v.nombre_completo, direccion: v.direccion })
+        }
+        None => Json(ConsultaDocumentoResponse { existe: None, nombre: None, direccion: None }),
     }
 }

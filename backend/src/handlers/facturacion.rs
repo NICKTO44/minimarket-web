@@ -35,17 +35,40 @@ pub async fn emitir_comprobante(
 
     // Dirección del cliente de la venta (una sola consulta).
     let mut cliente_direccion: Option<String> = None;
+    let mut cliente_id: Option<i64> = None;
     let mut r_cliente = conn
         .query(
-            "SELECT c.direccion FROM ventas v JOIN clientes c ON c.id = v.cliente_id WHERE v.id = ?1",
+            "SELECT c.direccion, c.id FROM ventas v JOIN clientes c ON c.id = v.cliente_id WHERE v.id = ?1",
             libsql::params![payload.venta_id],
         )
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     if let Some(row) = r_cliente.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
         cliente_direccion = row.get(0).ok();
+        cliente_id = row.get(1).ok();
     }
     drop(r_cliente);
+
+    // Factura a un cliente guardado sin dirección (registrado a mano o
+    // antes de que el sistema la trajera sola): se busca su dirección
+    // fiscal en SUNAT, sale en la factura y queda guardada en el cliente.
+    // Es una ayuda: si la consulta falla, se emite igual que siempre.
+    let sin_direccion = cliente_direccion.as_deref().map(str::trim).unwrap_or_default().is_empty();
+    if payload.tipo == "FACTURA" && sin_direccion {
+        let ruc = payload.cliente_documento.as_deref().unwrap_or_default().trim();
+        if let Some(direccion) = crate::logica::validacion_documento::direccion_fiscal(ruc).await {
+            if let Some(id) = cliente_id {
+                let _ = conn
+                    .execute(
+                        "UPDATE clientes SET direccion = ?1
+                         WHERE id = ?2 AND numero_documento = ?3 AND (direccion IS NULL OR TRIM(direccion) = '')",
+                        libsql::params![direccion.clone(), id, ruc],
+                    )
+                    .await;
+            }
+            cliente_direccion = Some(direccion);
+        }
+    }
 
     // Valor de respaldo si el tenant no tiene nada guardado en
     // codigo_producto_sunat_generico (columna vacía/NULL) — antes este

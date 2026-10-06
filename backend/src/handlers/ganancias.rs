@@ -69,6 +69,8 @@ pub enum Donde {
     Modelo(i64),
     /// Los productos de una compra a proveedor.
     Compra(i64),
+    /// Una lista de productos (importación desde Excel).
+    Lista(Vec<i64>),
 }
 
 impl Donde {
@@ -77,6 +79,8 @@ impl Donde {
             Donde::Producto(id) => format!("id = {}", id),
             Donde::Modelo(id) => format!("modelo_id = {}", id),
             Donde::Compra(id) => format!("id IN (SELECT producto_id FROM detalles_compra WHERE compra_id = {})", id),
+            Donde::Lista(ids) if ids.is_empty() => "0 = 1".to_string(),
+            Donde::Lista(ids) => format!("id IN ({})", ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")),
         }
     }
 }
@@ -160,6 +164,21 @@ pub async fn conciliar(
     referencia: Option<i64>,
     corregir: bool,
 ) {
+    conciliar_con(conn, antes, donde, origen, referencia, corregir, true).await;
+}
+
+/// Igual que `conciliar`, pero pudiendo NO anotar lo que entró como compra
+/// del mes. Lo usa la importación desde Excel: el stock que se carga ya
+/// estaba en la tienda (viene de otro sistema), no es mercadería comprada hoy.
+pub async fn conciliar_con(
+    conn: &libsql::Connection,
+    antes: &Foto,
+    donde: &Donde,
+    origen: &str,
+    referencia: Option<i64>,
+    corregir: bool,
+    anotar_entradas: bool,
+) {
     let despues = foto(conn, donde).await;
     let entro = |id: &i64, d: &Fila| match antes.get(id) {
         Some(a) => d.stock - a.stock,
@@ -168,7 +187,7 @@ pub async fn conciliar(
     let hubo_entrada = despues.iter().any(|(id, d)| d.controla_stock && entro(id, d) > 1e-9);
     let es_modelo = matches!(donde, Donde::Modelo(_));
 
-    let mut sentencias = String::new();
+    let mut sentencias: Vec<String> = Vec::new();
     let mut ids: Vec<&i64> = despues.keys().collect();
     ids.sort_unstable();
     for id in ids {
@@ -207,10 +226,10 @@ pub async fn conciliar(
         }
 
         if let Some(costo) = nuevo_costo.filter(|c| c.is_finite() && *c > 0.0) {
-            sentencias.push_str(&format!("UPDATE productos SET costo_promedio = {} WHERE id = {};\n", redondear_4(costo), id));
+            sentencias.push(format!("UPDATE productos SET costo_promedio = {} WHERE id = {};\n", redondear_4(costo), id));
         }
-        if let Some((cantidad, costo)) = entrada.filter(|(c, p)| c.is_finite() && p.is_finite()) {
-            sentencias.push_str(&format!(
+        if let Some((cantidad, costo)) = entrada.filter(|(c, p)| anotar_entradas && c.is_finite() && p.is_finite()) {
+            sentencias.push(format!(
                 "INSERT INTO entradas_stock (producto_id, cantidad, costo_unitario, origen, referencia_id) VALUES ({}, {}, {}, '{}', {});\n",
                 id,
                 cantidad,
@@ -220,9 +239,11 @@ pub async fn conciliar(
             ));
         }
     }
-    if !sentencias.is_empty() {
-        if let Err(e) = conn.execute_batch(&sentencias).await {
+    // Por tandas: una importación puede traer miles de productos.
+    for tanda in sentencias.chunks(200) {
+        if let Err(e) = conn.execute_batch(&tanda.concat()).await {
             eprintln!("⚠️  Ganancias: no se pudo actualizar el costo promedio ({}): {}", origen, e);
+            break;
         }
     }
 }

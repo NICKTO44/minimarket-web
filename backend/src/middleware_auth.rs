@@ -116,8 +116,9 @@ pub async fn requiere_auth(
         Err(e) => eprintln!("⚠️  No se pudo verificar si el usuario {} está activo: {}", claims.username, e),
     }
 
-    // Roles de cafetería/restaurante con acceso limitado: el Mesero solo
-    // maneja mesas y pedidos; Preparación (barra/cocina) solo su pantalla.
+    // Roles con acceso limitado: el Mesero solo maneja mesas y pedidos;
+    // Preparación (barra/cocina) solo su pantalla; Almacén solo productos,
+    // stock, proveedores y reportes.
     // Se bloquea en el servidor, no solo se esconde en el menú.
     if let Some(rol) = nombre_rol_cacheado(claims.tienda_id, claims.rol_id, &db_tienda).await {
         if !ruta_permitida(&rol, req.method(), req.uri().path()) {
@@ -159,6 +160,12 @@ fn es_carta(ruta: &str) -> bool {
     ruta == "/carta-dia" || ruta.starts_with("/carta-dia/")
 }
 
+/// true si la ruta es esa sección o algo dentro de ella ("/productos",
+/// "/productos/5/lotes"), pero no otra que solo empieza igual.
+fn es_de(ruta: &str, seccion: &str) -> bool {
+    ruta.strip_prefix(seccion).is_some_and(|resto| resto.is_empty() || resto.starts_with('/'))
+}
+
 fn ruta_permitida(rol: &str, metodo: &Method, ruta: &str) -> bool {
     let lectura = metodo == Method::GET || metodo == Method::HEAD;
     // Lo mínimo para que la app cargue (nombre del negocio, aviso de pago).
@@ -181,6 +188,24 @@ fn ruta_permitida(rol: &str, metodo: &Method, ruta: &str) -> bool {
                 || ruta == "/preparacion/listo"
                 || ruta == "/preparacion/entregado"
                 || es_carta(ruta)
+        }
+        // Almacén (rol INVENTARIO): lleva los productos, el stock y los
+        // proveedores, y mira los reportes de ventas. No vende, no toca la
+        // caja ni ve clientes o comprobantes. Lo que dentro de estas rutas
+        // es solo del administrador (importar, cambiar el IGV, el reporte
+        // de ganancias) lo sigue cortando cada handler.
+        "INVENTARIO" => {
+            basico
+                || es_de(ruta, "/productos")
+                || es_de(ruta, "/categorias")
+                || es_de(ruta, "/modelos")
+                || es_de(ruta, "/lotes")
+                || es_de(ruta, "/proveedores")
+                || es_de(ruta, "/compras")
+                || es_de(ruta, "/devoluciones-proveedor")
+                // "/ganancias/costos": el costo promedio que muestra el
+                // formulario del producto (con el módulo de ganancias).
+                || (lectura && (matches!(ruta, "/unidades" | "/ganancias/costos") || es_de(ruta, "/reportes")))
         }
         _ => true,
     }
@@ -216,7 +241,102 @@ mod pruebas {
         assert!(ruta_permitida("PREPARACION", &p, "/carta-dia/7/quitar"));
         assert!(!ruta_permitida("PREPARACION", &p, "/carta-diaria"));
         assert!(ruta_permitida("CAJERO", &p, "/ventas"));
-        assert!(ruta_permitida("INVENTARIO", &p, "/productos"));
+        assert!(ruta_permitida("CAJERO", &p, "/cajas/abrir"));
+        assert!(ruta_permitida("CAJERO", &g, "/clientes/todos"));
+    }
+
+    /// Almacén: todo lo que usan Productos, Stock y Lotes, Proveedores y
+    /// Reportes; nada de vender, caja, clientes, comprobantes ni ajustes.
+    #[test]
+    fn permisos_de_almacen() {
+        let g = Method::GET;
+        let p = Method::POST;
+        let u = Method::PUT;
+        let d = Method::DELETE;
+        let puede = [
+            // La app carga
+            (&g, "/configuracion"),
+            (&g, "/suscripcion/estado"),
+            // Productos
+            (&g, "/productos"),
+            (&p, "/productos"),
+            (&u, "/productos/8"),
+            (&d, "/productos/8"),
+            (&p, "/productos/8/desactivar"),
+            (&p, "/productos/8/reactivar"),
+            (&g, "/productos/desactivados"),
+            (&g, "/productos/stock-bajo"),
+            (&p, "/productos/8/imagen"),
+            (&g, "/productos/8/lotes"),
+            (&g, "/categorias"),
+            (&p, "/categorias"),
+            (&p, "/modelos"),
+            (&u, "/modelos/3"),
+            (&p, "/modelos/3/imagen/8"),
+            (&g, "/unidades"),
+            (&g, "/ganancias/costos"),
+            // Stock y lotes
+            (&p, "/lotes"),
+            (&g, "/lotes/por-vencer"),
+            (&p, "/lotes/4/descartar"),
+            // Proveedores
+            (&g, "/proveedores"),
+            (&p, "/proveedores"),
+            (&g, "/compras"),
+            (&p, "/compras"),
+            (&g, "/compras/6"),
+            (&p, "/compras/recibir"),
+            (&g, "/devoluciones-proveedor"),
+            (&p, "/devoluciones-proveedor"),
+            (&p, "/devoluciones-proveedor/2/resolver"),
+            // Reportes
+            (&g, "/reportes/ventas"),
+            (&g, "/reportes/productos-vendidos"),
+            (&g, "/reportes/estadisticas"),
+        ];
+        for (metodo, ruta) in puede {
+            assert!(ruta_permitida("INVENTARIO", metodo, ruta), "debería poder: {} {}", metodo, ruta);
+        }
+        let no_puede = [
+            (&p, "/ventas"),
+            (&g, "/ventas/V-1"),
+            (&p, "/devoluciones"),
+            (&g, "/cajas/abierta"),
+            (&p, "/cajas/abrir"),
+            (&p, "/cajas/movimiento"),
+            (&g, "/clientes"),
+            (&g, "/clientes/todos"),
+            (&g, "/comprobantes"),
+            (&g, "/comprobantes/4/pdf"),
+            (&g, "/cotizaciones"),
+            (&g, "/creditos"),
+            (&g, "/guias"),
+            (&g, "/mesas"),
+            (&p, "/pedidos"),
+            (&g, "/preparacion"),
+            (&g, "/carta-dia"),
+            (&g, "/usuarios"),
+            (&p, "/usuarios"),
+            (&g, "/roles"),
+            (&g, "/negocio"),
+            (&u, "/configuracion"),
+            (&u, "/configuracion/negocio"),
+            (&u, "/configuracion/unidades"),
+            (&p, "/configuracion/logo"),
+            (&p, "/suscripcion/canjear-codigo"),
+            (&p, "/impresora/imprimir"),
+            (&p, "/ganancias/costos"),
+            (&g, "/ganancias"),
+            (&g, "/igv/venta/3"),
+            (&g, "/documentos/consultar"),
+            // Empiezan parecido a una ruta permitida, pero son otra cosa.
+            (&g, "/productos-secretos"),
+            (&p, "/reportes/ventas"),
+            (&u, "/unidades"),
+        ];
+        for (metodo, ruta) in no_puede {
+            assert!(!ruta_permitida("INVENTARIO", metodo, ruta), "no debería poder: {} {}", metodo, ruta);
+        }
     }
 }
 
