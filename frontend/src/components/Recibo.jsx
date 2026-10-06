@@ -8,8 +8,26 @@ import { formatoCantidad, subtotalLinea } from '../utils/medidas';
 
 // diasCambio: plazo para cambiar una prenda (módulo "Cambio de prenda");
 // 0 o sin el módulo = no se imprime nada.
-export default function Recibo({ venta, items, nombreTienda, direccion, telefono, ruc, cajero, comprobante, cliente, diasCambio = 0 }) {
+// fecha: fecha y hora de emisión ya escritas (al reimprimir); sin ella, la
+// de este momento (la venta se acaba de hacer).
+export default function Recibo({
+  venta,
+  items,
+  nombreTienda,
+  direccion,
+  telefono,
+  ruc,
+  cajero,
+  comprobante,
+  cliente,
+  diasCambio = 0,
+  fecha = null,
+}) {
   const esComprobanteReal = !!comprobante;
+  // La factura también sale en ticket de 80 mm: lleva el RUC del cliente,
+  // la forma de pago y la leyenda de representación impresa.
+  const esFactura = comprobante?.tipo === 'FACTURA';
+  const formaPago = venta.credito || venta.metodoPago === 'CREDITO' ? 'CRÉDITO' : 'CONTADO';
   const encabezado = comprobante
     ? `${comprobante.tipo === 'FACTURA' ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'}`
     : 'NOTA DE VENTA (sin comprobante tributario)';
@@ -94,7 +112,7 @@ export default function Recibo({ venta, items, nombreTienda, direccion, telefono
           <div className="recibo-seccion-titulo">ADQUIRIENTE</div>
           {cliente.numero_documento && (
             <div className="recibo-fila-meta">
-              <span>Doc.</span>
+              <span>{esFactura ? 'RUC' : 'Doc.'}</span>
               <span>{cliente.numero_documento}</span>
             </div>
           )}
@@ -109,13 +127,19 @@ export default function Recibo({ venta, items, nombreTienda, direccion, telefono
         <span>{venta.folio}</span>
       </div>
       <div className="recibo-fila-meta">
-        <span>Fecha</span>
-        <span>{new Date().toLocaleString('es-PE')}</span>
+        <span>{esFactura ? 'Emisión' : 'Fecha'}</span>
+        <span>{fecha || new Date().toLocaleString('es-PE')}</span>
       </div>
       <div className="recibo-fila-meta">
         <span>Moneda</span>
         <span>SOLES</span>
       </div>
+      {esFactura && (
+        <div className="recibo-fila-meta">
+          <span>Forma de pago</span>
+          <span>{formaPago}</span>
+        </div>
+      )}
       <div className="recibo-fila-meta">
         <span>Cajero</span>
         <span>{cajero}</span>
@@ -261,6 +285,10 @@ export default function Recibo({ venta, items, nombreTienda, direccion, telefono
         <div className="recibo-qr-wrapper">
           <img src={qrDataUrl} alt="Código QR SUNAT" className="recibo-qr" />
         </div>
+      )}
+
+      {esFactura && (
+        <div className="recibo-centro recibo-disclaimer">Representación impresa de la FACTURA ELECTRÓNICA.</div>
       )}
 
       {esComprobanteReal && (

@@ -91,7 +91,7 @@ export default function BoletaPublica({ identificador, comprobanteId }) {
             <div className="bp-seccion-titulo">ADQUIRIENTE</div>
             {datos.cliente_documento && (
               <div className="bp-fila">
-                <span>Doc.</span>
+                <span>{datos.tipo === 'FACTURA' ? 'RUC' : 'Doc.'}</span>
                 <span>{datos.cliente_documento}</span>
               </div>
             )}
@@ -174,8 +174,10 @@ export default function BoletaPublica({ identificador, comprobanteId }) {
         )}
 
         <div className="bp-centro bp-disclaimer">
-          Representación del comprobante electrónico. Escanea el código QR
-          para verificarlo directamente en SUNAT.
+          {datos.tipo === 'FACTURA'
+            ? 'Representación impresa de la FACTURA ELECTRÓNICA.'
+            : 'Representación del comprobante electrónico.'}{' '}
+          Escanea el código QR para verificarlo directamente en SUNAT.
         </div>
 
         <div className="bp-centro bp-gracias">¡Gracias por su compra!</div>

@@ -194,7 +194,14 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     const comp = enviandoWhatsapp;
 
     let texto;
-    if (comp.tipo === 'FACTURA' && comp.enlace_pdf) {
+    if (comp.tipo === 'FACTURA' && comp.id && identificadorNegocio) {
+      // Factura: la página pública en formato ticket (80 mm), como la
+      // boleta, y debajo el A4 oficial de FacturaLibre si existe.
+      const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
+      const urlPublica = `${window.location.origin}/boleta/${identificadorNegocio}/${comp.id}`;
+      const lineaA4 = comp.enlace_pdf ? `\n\nVersión A4 (PDF): ${comp.enlace_pdf}` : '';
+      texto = `Hola! Aquí tienes tu factura ${numeroDoc} por S/ ${comp.monto.toFixed(2)}.\n\nPuedes verla aquí: ${urlPublica}${lineaA4}\n\n¡Gracias por tu compra!`;
+    } else if (comp.tipo === 'FACTURA' && comp.enlace_pdf) {
       const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
       texto = `Hola! Aquí tienes tu factura ${numeroDoc} por S/ ${comp.monto.toFixed(2)}.\n\nPuedes verla aquí: ${comp.enlace_pdf}\n\n¡Gracias por tu compra!`;
     } else if (comp.tipo === 'BOLETA' && comp.id && identificadorNegocio) {
@@ -227,8 +234,26 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
             : '1'
           : '0';
 
+    // El cliente sale de la fila (la venta no lo detalla). En una factura
+    // se busca además su dirección fiscal entre los clientes guardados; si
+    // no aparece, el ticket sale sin dirección.
+    let cliente = detalle.cliente || null;
+    if (!cliente && comp.cliente_nombre) {
+      cliente = { nombre_razon_social: comp.cliente_nombre, numero_documento: comp.cliente_documento || null };
+      if (comp.tipo === 'FACTURA' && comp.cliente_documento) {
+        const guardados = await api.clientesBuscar(comp.cliente_documento).catch(() => []);
+        const guardado = Array.isArray(guardados)
+          ? guardados.find((c) => c.numero_documento === comp.cliente_documento)
+          : null;
+        if (guardado?.direccion) cliente.direccion = guardado.direccion;
+      }
+    }
+
     return {
-      venta: { folio: detalle.folio, total: detalle.total, montoRecibido: null, cambio: null },
+      // Fecha y hora de emisión (no la del momento en que se reimprime).
+      fecha: fechaHoraLima(comp.fecha_emision),
+      // metodoPago: para la "Forma de pago" de la factura (contado o crédito).
+      venta: { folio: detalle.folio, total: detalle.total, montoRecibido: null, cambio: null, metodoPago: detalle.metodo_pago },
       items: detalle.productos.map((p) => ({ nombre: p.nombre, cantidad: p.cantidad, precio: p.precio_unitario })),
       comprobante: comp.id
         ? {
@@ -252,23 +277,15 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
             cliente_numero_documento: comp.cliente_documento || '-',
           }
         : null,
-      cliente: detalle.cliente || null,
+      cliente,
     };
   };
 
-  const reimprimir = async (comp) => {
-    setMensaje(null);
+  // Factura que FacturaLibre emitió de verdad: tiene su PDF oficial en A4.
+  const facturaConA4 = (comp) => comp.tipo === 'FACTURA' && !!comp.enlace_pdf && !!comp.id;
 
-    // Si FacturaLibre emitió de verdad el comprobante (aceptado, con su
-    // propio PDF oficial con logo/QR), y es FACTURA, lo mostramos
-    // incrustado en el modal, renderizado con pdf.js.
-    if (comp.tipo === 'FACTURA' && comp.enlace_pdf && comp.id) {
-      setPdfVisible(api.comprobantePdfUrl(comp.id));
-      return;
-    }
-
-    // Boleta, o comprobante sin PDF real (nota simple, o rechazado) —
-    // usamos nuestro ticket propio.
+  // Nuestro ticket de 80 mm (boleta, nota simple, y también la factura).
+  const imprimirTicket = async (comp) => {
     try {
       setVentaParaImprimir(await datosDelTicket(comp));
       setTimeout(() => window.print(), 200);
@@ -277,15 +294,34 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     }
   };
 
+  // El PDF oficial en A4, incrustado en el modal (renderizado con pdf.js).
+  const verA4 = (comp) => setPdfVisible(api.comprobantePdfUrl(comp.id));
+
+  const reimprimir = (evento, comp) => {
+    setMensaje(null);
+    // La factura se puede imprimir en ticket de 80 mm o en A4: se pregunta.
+    if (facturaConA4(comp)) {
+      abrirMenu(evento, comp, [
+        { cual: 'ticket', titulo: 'Ticket 80 mm', detalle: 'Para la impresora térmica, igual que la boleta' },
+        { cual: 'a4', titulo: 'Hoja A4', detalle: 'El PDF de FacturaLibre, como hasta ahora' },
+      ]);
+      return;
+    }
+    // Boleta, o comprobante sin PDF real (nota simple, o rechazado) —
+    // usamos nuestro ticket propio.
+    imprimirTicket(comp);
+  };
+
   // Descarga el comprobante como archivo PDF: el mismo documento que sale
   // con "Imprimir". La factura aceptada baja su PDF oficial de FacturaLibre;
   // la boleta y la nota simple, nuestro ticket.
-  const exportarPdf = async (comp) => {
+  // enTicket: la factura en nuestro ticket de 80 mm en vez de su A4.
+  const exportarPdf = async (comp, enTicket = false) => {
     if (exportando) return;
     setMensaje(null);
     setExportando(claveFila(comp));
     try {
-      if (comp.tipo === 'FACTURA' && comp.enlace_pdf && comp.id) {
+      if (facturaConA4(comp) && !enTicket) {
         const respuesta = await fetch(api.comprobantePdfUrl(comp.id));
         if (!respuesta.ok) throw new Error('No se pudo descargar el PDF de la factura. Intenta de nuevo en un momento.');
         entregarPdf(await respuesta.blob(), `Factura-${comp.serie}-${String(comp.numero).padStart(6, '0')}.pdf`);
@@ -303,7 +339,6 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         telefono,
         ruc,
         cajero: usuario?.nombre || '',
-        fecha: fechaHoraLima(comp.fecha_emision),
       });
       entregarPdf(bytes, nombre);
     } catch (e) {
@@ -347,13 +382,18 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   // Lo que se puede descargar de una fila. El PDF siempre; el XML y la
   // constancia solo de boletas y facturas aceptadas por SUNAT.
   const opcionesDescarga = (comp) => {
-    const opciones = [
-      {
-        cual: 'pdf',
-        titulo: 'PDF',
-        detalle: comp.tipo === 'NINGUNO' ? 'La nota de venta' : 'Para imprimir o enviar al cliente',
-      },
-    ];
+    const opciones = facturaConA4(comp)
+      ? [
+          { cual: 'pdf', titulo: 'PDF A4', detalle: 'El de FacturaLibre, para imprimir o enviar' },
+          { cual: 'pdf80', titulo: 'PDF ticket 80 mm', detalle: 'La misma factura en formato ticket' },
+        ]
+      : [
+          {
+            cual: 'pdf',
+            titulo: 'PDF',
+            detalle: comp.tipo === 'NINGUNO' ? 'La nota de venta' : 'Para imprimir o enviar al cliente',
+          },
+        ];
     // tiene_xml llega con el servidor que ya ofrece estas descargas.
     if (comp.id && comp.estado === 'ACEPTADO' && comp.tiene_xml !== undefined) {
       opciones.push({
@@ -380,6 +420,12 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
       exportarPdf(comp);
       return;
     }
+    abrirMenu(evento, comp, opciones);
+  };
+
+  // Menú de opciones pegado al botón que se tocó (lo usan Descargar e
+  // Imprimir de una factura).
+  const abrirMenu = (evento, comp, opciones) => {
     const boton = evento.currentTarget.getBoundingClientRect();
     const alto = 58 * opciones.length + 20;
     const haciaArriba = boton.bottom + alto + 8 > window.innerHeight && boton.top > alto + 8;
@@ -397,6 +443,9 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     const comp = menuDescarga.comp;
     setMenuDescarga(null);
     if (cual === 'pdf') exportarPdf(comp);
+    else if (cual === 'pdf80') exportarPdf(comp, true);
+    else if (cual === 'ticket') imprimirTicket(comp);
+    else if (cual === 'a4') verA4(comp);
     else descargarOficial(comp, cual);
   };
 
@@ -466,8 +515,12 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                   </td>
                   <td>{fechaHoraLima(c.fecha_emision)}</td>
                   <td>
-                    <button className="comp-boton-imprimir" onClick={() => reimprimir(c)}>
-                      🖨 Imprimir
+                    <button
+                      className="comp-boton-imprimir"
+                      onClick={(e) => reimprimir(e, c)}
+                      aria-haspopup={facturaConA4(c) ? 'menu' : undefined}
+                    >
+                      🖨 Imprimir{facturaConA4(c) ? ' ▾' : ''}
                     </button>
                     <button
                       className="comp-boton-imprimir comp-boton-pdf"
@@ -624,6 +677,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
           telefono={telefono}
           ruc={ruc}
           cajero={usuario?.nombre || ''}
+          fecha={ventaParaImprimir.fecha}
         />
       )}
 

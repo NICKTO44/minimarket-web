@@ -215,6 +215,9 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
   const total = comprobante?.total_venta ?? venta.total;
   const desglose = desgloseDeComprobante(comprobante, total);
   const detraccion = comprobante?.detraccion_monto > 0 ? comprobante : null;
+  // Factura en ticket: RUC del cliente, forma de pago y leyenda (igual que
+  // el ticket impreso, ver Recibo.jsx).
+  const esFactura = comprobante?.tipo === 'FACTURA';
   // Un comprobante que SUNAT no aceptó (rechazado o pendiente) se exporta
   // diciéndolo claro y sin QR: no debe pasar por uno válido.
   const noAceptado = esComprobante && comprobante.estado && comprobante.estado !== 'ACEPTADO' ? comprobante.estado : null;
@@ -236,15 +239,16 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
 
   if (cliente?.nombre_razon_social) {
     l.texto('ADQUIRIENTE', { negrita: true });
-    if (cliente.numero_documento) l.fila('Doc.', cliente.numero_documento);
+    if (cliente.numero_documento) l.fila(esFactura ? 'RUC' : 'Doc.', cliente.numero_documento);
     l.parrafo(cliente.nombre_razon_social);
     if (cliente.direccion) l.parrafo(cliente.direccion);
     l.linea();
   }
 
   l.fila('Venta', venta.folio);
-  if (fecha) l.fila('Fecha', fecha);
+  if (fecha) l.fila(esFactura ? 'Emisión' : 'Fecha', fecha);
   l.fila('Moneda', 'SOLES');
+  if (esFactura) l.fila('Forma de pago', venta.credito || venta.metodoPago === 'CREDITO' ? 'CRÉDITO' : 'CONTADO');
   if (cajero) l.fila('Cajero', cajero);
   l.linea();
 
@@ -297,6 +301,12 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
       hash: comprobante.hash,
     });
     l.qr(QRCode.create(cadena, { errorCorrectionLevel: 'M' }).modules, 96);
+  }
+  if (esFactura && !noAceptado) {
+    l.espacio(2);
+    for (const linea of partir('Representación impresa de la FACTURA ELECTRÓNICA.', 7)) {
+      l.texto(linea, { tam: 7, ...centro });
+    }
   }
   if (esComprobante && !noAceptado) {
     l.espacio(2);

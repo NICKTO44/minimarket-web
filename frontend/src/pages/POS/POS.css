@@ -1269,6 +1269,61 @@
   cursor: pointer;
 }
 
+/* Factura: dos botones para elegir el papel (ticket de 80 mm o A4). */
+.pos-venta-modal-formatos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pos-venta-modal-formatos-titulo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b7280;
+  text-align: left;
+}
+
+.pos-imprimir-dos {
+  display: flex;
+  gap: 7px;
+}
+
+.pos-imprimir-dos > button {
+  flex: 1;
+  min-width: 0;
+}
+
+.pos-venta-modal-imprimir small {
+  display: block;
+  margin-top: 1px;
+  font-size: 10.5px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.pos-venta-modal-imprimir-claro {
+  background: white;
+  color: #16181d;
+  border: 1.5px solid #16181d;
+  padding: 9.5px;
+}
+
+/* Lo mismo en el panel del carrito, para la última factura. */
+.pos-imprimir-factura {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pos-imprimir-factura > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pos-texto-tenue);
+  text-align: center;
+}
+
 .pos-venta-modal-cerrar {
   padding: 11px;
   border: 1.5px solid #e4e6eb;

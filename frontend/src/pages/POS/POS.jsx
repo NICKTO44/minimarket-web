@@ -1034,12 +1034,18 @@ export default function POS({
 
   // Las boletas se imprimen SIEMPRE con nuestro propio ticket (Recibo,
   // formato angosto pensado para impresora térmica) — FacturaLibre solo
-  // entrega un formato genérico A4, no apto para ticket. Las facturas sí
-  // usan el PDF real de FacturaLibre (documento oficial en A4).
-  const imprimirComprobante = () => {
+  // entrega un formato genérico A4, no apto para ticket. La factura se
+  // puede imprimir de las dos formas: en ticket de 80 mm (el mismo Recibo)
+  // o en A4 (el PDF real de FacturaLibre); se elige con dos botones.
+  const facturaConA4 = (() => {
     const comp = ultimaVentaParaImprimir?.comprobante;
-    if (comp?.tipo === 'FACTURA' && comp?.enlace_pdf && comp?.comprobante_id) {
-      setPdfVisible(api.comprobantePdfUrl(comp.comprobante_id));
+    return comp?.tipo === 'FACTURA' && !!comp?.enlace_pdf && !!comp?.comprobante_id;
+  })();
+
+  // formato: 'A4' abre el PDF de la factura; cualquier otro, el ticket.
+  const imprimirComprobante = (formato) => {
+    if (formato === 'A4' && facturaConA4) {
+      setPdfVisible(api.comprobantePdfUrl(ultimaVentaParaImprimir.comprobante.comprobante_id));
     } else {
       window.print();
     }
@@ -1118,8 +1124,15 @@ export default function POS({
     const total = ultimaVentaParaImprimir.venta.total.toFixed(2);
 
     let texto;
-    if (comp?.tipo === 'FACTURA' && comp?.enlace_pdf) {
-      // Factura: el A4 oficial real de FacturaLibre.
+    if (comp?.tipo === 'FACTURA' && comp?.comprobante_id && identificadorNegocio) {
+      // Factura: nuestra página pública en formato ticket (80 mm), como la
+      // boleta, y debajo el A4 oficial de FacturaLibre si existe.
+      const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
+      const urlPublica = `${window.location.origin}/boleta/${identificadorNegocio}/${comp.comprobante_id}`;
+      const lineaA4 = comp.enlace_pdf ? `\n\nVersión A4 (PDF): ${comp.enlace_pdf}` : '';
+      texto = `Hola! Aquí tienes tu factura ${numeroDoc} por S/ ${total}.\n\nPuedes verla aquí: ${urlPublica}${lineaA4}\n\n¡Gracias por tu compra!`;
+    } else if (comp?.tipo === 'FACTURA' && comp?.enlace_pdf) {
+      // Sin página pública disponible: el A4 oficial real de FacturaLibre.
       const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
       texto = `Hola! Aquí tienes tu factura ${numeroDoc} por S/ ${total}.\n\nPuedes verla aquí: ${comp.enlace_pdf}\n\n¡Gracias por tu compra!`;
     } else if (comp?.tipo === 'BOLETA' && comp?.comprobante_id && identificadorNegocio) {
@@ -1827,12 +1840,30 @@ export default function POS({
 
           {mensaje && <p className={`pos-mensaje pos-mensaje-${mensaje.tipo}`}>{mensaje.texto}</p>}
 
-          {ultimaVentaParaImprimir && !mostrarModalVenta && (
-            <button className="pos-imprimir" onClick={imprimirComprobante} disabled={ultimaVentaParaImprimir.comprobantePendiente}>
+          {ultimaVentaParaImprimir && !mostrarModalVenta && !facturaConA4 && (
+            <button
+              className="pos-imprimir"
+              onClick={() => imprimirComprobante()}
+              disabled={ultimaVentaParaImprimir.comprobantePendiente}
+            >
               {ultimaVentaParaImprimir.comprobantePendiente
                 ? `Emitiendo comprobante · ${ultimaVentaParaImprimir.venta.folio}`
                 : `Imprimir última boleta · ${ultimaVentaParaImprimir.venta.folio}`}
             </button>
+          )}
+          {/* Última venta con factura: ticket de 80 mm o A4. */}
+          {ultimaVentaParaImprimir && !mostrarModalVenta && facturaConA4 && (
+            <div className="pos-imprimir-factura">
+              <span>Imprimir última factura · {ultimaVentaParaImprimir.venta.folio}</span>
+              <div className="pos-imprimir-dos">
+                <button className="pos-imprimir" onClick={() => imprimirComprobante('TICKET')}>
+                  🖨 Ticket 80 mm
+                </button>
+                <button className="pos-imprimir" onClick={() => imprimirComprobante('A4')}>
+                  📄 Hoja A4
+                </button>
+              </div>
+            </div>
           )}
 
           {cotizaciones && carrito.length > 0 && !cobrandoPedido && !cotizacionEnVenta && !enCambio && (
@@ -2062,13 +2093,33 @@ export default function POS({
             </div>
 
             <div className="pos-venta-modal-acciones">
-              <button
-                className="pos-venta-modal-imprimir"
-                onClick={imprimirComprobante}
-                disabled={ultimaVentaParaImprimir.comprobantePendiente}
-              >
-                {ultimaVentaParaImprimir.comprobantePendiente ? 'Emitiendo comprobante…' : '🖨 Imprimir'}
-              </button>
+              {facturaConA4 ? (
+                // Factura: se elige el papel con un toque.
+                <div className="pos-venta-modal-formatos">
+                  <span className="pos-venta-modal-formatos-titulo">Imprimir factura en</span>
+                  <div className="pos-imprimir-dos">
+                    <button className="pos-venta-modal-imprimir" onClick={() => imprimirComprobante('TICKET')}>
+                      🖨 Ticket
+                      <small>80 mm</small>
+                    </button>
+                    <button
+                      className="pos-venta-modal-imprimir pos-venta-modal-imprimir-claro"
+                      onClick={() => imprimirComprobante('A4')}
+                    >
+                      📄 Hoja A4
+                      <small>PDF</small>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="pos-venta-modal-imprimir"
+                  onClick={() => imprimirComprobante()}
+                  disabled={ultimaVentaParaImprimir.comprobantePendiente}
+                >
+                  {ultimaVentaParaImprimir.comprobantePendiente ? 'Emitiendo comprobante…' : '🖨 Imprimir'}
+                </button>
+              )}
               <button
                 className="pos-venta-modal-cerrar"
                 onClick={() => {
