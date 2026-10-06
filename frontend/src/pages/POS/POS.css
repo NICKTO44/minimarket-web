@@ -505,6 +505,12 @@
   font-size: 16px;
 }
 
+.pos-cliente-nuevo-autocompletado {
+  font-size: 12px;
+  color: var(--pos-exito);
+  margin: 0;
+}
+
 .pos-cliente-nuevo-error {
   font-size: 12px;
   color: var(--pos-error);

@@ -28,7 +28,15 @@ import Cotizaciones from './pages/Cotizaciones/Cotizaciones';
 import Creditos from './pages/Creditos/Creditos';
 import Guias from './pages/Guias/Guias';
 import AvisosListos from './components/AvisosListos';
-import { esCajero, esMesero, esPreparacion, PANTALLAS_MESERO, PANTALLAS_PREPARACION } from './utils/menu';
+import {
+  esAlmacen,
+  esCajero,
+  esMesero,
+  esPreparacion,
+  PANTALLAS_ALMACEN,
+  PANTALLAS_MESERO,
+  PANTALLAS_PREPARACION,
+} from './utils/menu';
 import {
   datosNegocio,
   MODULO_CAMBIOS,
@@ -94,7 +102,9 @@ function App() {
           setUsuarioActual(sesion.usuario);
           try {
             const tienda = JSON.parse(localStorage.getItem(TIENDA_STORAGE_KEY) || 'null');
-            if (tienda?.modo_negocio === 'RESTAURANTE') {
+            if (esAlmacen(sesion.usuario)) {
+              setPantalla('PRODUCTOS');
+            } else if (tienda?.modo_negocio === 'RESTAURANTE') {
               setPantalla(esPreparacion(sesion.usuario) ? 'PREPARACION' : 'MESAS');
             }
           } catch {
@@ -133,12 +143,15 @@ function App() {
       rol_nombre: data.usuario.rol_nombre || null,
     };
     // En una cafetería/restaurante se entra directo al mapa de mesas.
+    // Almacén entra a Productos, que es lo suyo.
     setPantalla(
-      data.tienda?.modo_negocio !== 'RESTAURANTE'
-        ? 'RESUMEN'
-        : sesionUsuario.rol_nombre === 'PREPARACION'
-          ? 'PREPARACION'
-          : 'MESAS'
+      esAlmacen(sesionUsuario)
+        ? 'PRODUCTOS'
+        : data.tienda?.modo_negocio !== 'RESTAURANTE'
+          ? 'RESUMEN'
+          : sesionUsuario.rol_nombre === 'PREPARACION'
+            ? 'PREPARACION'
+            : 'MESAS'
     );
     setUsuarioActual(sesionUsuario);
     setLogueado(true);
@@ -289,7 +302,13 @@ function App() {
   // Preparación; ambos pueden además armar la Carta de hoy.
   const soloMesas = restaurante && esMesero(usuarioActual);
   const soloPreparacion = restaurante && esPreparacion(usuarioActual);
-  const pantallaVisible = soloPreparacion
+  // Almacén (en cualquier rubro): productos, stock, proveedores y reportes.
+  const soloAlmacen = esAlmacen(usuarioActual);
+  const pantallaVisible = soloAlmacen
+    ? PANTALLAS_ALMACEN.includes(pantalla)
+      ? pantalla
+      : 'PRODUCTOS'
+    : soloPreparacion
     ? PANTALLAS_PREPARACION.includes(pantalla)
       ? pantalla
       : 'PREPARACION'
@@ -478,7 +497,7 @@ function App() {
       </div>
       {/* Solo se ve en celular (<= 899px): barra superior + barra inferior */}
       {/* Avisos "pedido listo" para mozo y cajero, en cualquier pantalla */}
-      {restaurante && !soloPreparacion && (
+      {restaurante && !soloPreparacion && !soloAlmacen && (
         <AvisosListos usuario={usuarioActual} onAbrirPedido={irAPedido} onConteo={setPedidosListos} />
       )}
       <NavegacionMovil

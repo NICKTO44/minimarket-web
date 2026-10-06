@@ -305,6 +305,11 @@ export default function POS({
   const [errorCliente, setErrorCliente] = useState('');
   const [consultandoDocumento, setConsultandoDocumento] = useState(false);
   const [nombreAutocompletado, setNombreAutocompletado] = useState(false);
+  // Dirección del cliente nuevo: la que trae la consulta del documento
+  // (sugerida) o la que escribe el cajero, que manda si la hay.
+  const [direccionSugerida, setDireccionSugerida] = useState('');
+  const [direccionEscrita, setDireccionEscrita] = useState(null);
+  const nuevaDireccion = direccionEscrita ?? direccionSugerida;
   // --- Escáner de código de barras por cámara ---
   const [escanerAbierto, setEscanerAbierto] = useState(false);
   const [ultimoEscaneo, setUltimoEscaneo] = useState(null);
@@ -381,6 +386,7 @@ export default function POS({
     setNuevoTipoDocumento('DNI');
     setNuevoDocumento('');
     setNuevoNombre('');
+    setDireccionEscrita(null);
     setErrorCliente('');
   };
 
@@ -391,6 +397,7 @@ export default function POS({
     setSinResultadosCliente(false);
     setNuevoDocumento('');
     setNuevoNombre('');
+    setDireccionEscrita(null);
   };
 
   const quitarCliente = () => setCliente(null);
@@ -398,13 +405,14 @@ export default function POS({
   const tipoDocumentoParaNuevo = tipoComprobante === 'FACTURA' ? 'RUC' : nuevoTipoDocumento;
   const reglaDocumento = REGLAS_DOCUMENTO[tipoDocumentoParaNuevo];
 
-  // Autocompleta el nombre real (RENIEC/SUNAT) apenas el documento
-  // alcanza su largo completo. Nunca bloquea ni marca error si falla
+  // Autocompleta el nombre real y la dirección (RENIEC/SUNAT) apenas el
+  // documento alcanza su largo completo. Nunca bloquea ni marca error si falla
   // -- api.documentoConsultar ya devuelve existe:null en cualquier
   // problema (sin token, timeout, tipo no soportado como CE/PASAPORTE),
   // y aquí simplemente no se autocompleta nada en ese caso.
   useEffect(() => {
     setNombreAutocompletado(false);
+    setDireccionSugerida('');
 
     const documentoCompleto =
       (tipoDocumentoParaNuevo === 'DNI' || tipoDocumentoParaNuevo === 'RUC') &&
@@ -423,6 +431,7 @@ export default function POS({
           setNuevoNombre(resultado.nombre);
           setNombreAutocompletado(true);
         }
+        if (resultado.existe === true && resultado.direccion) setDireccionSugerida(resultado.direccion);
       })
       .catch(() => {
         // Silencioso a propósito -- ver nota arriba.
@@ -466,6 +475,7 @@ export default function POS({
         tipo_documento: tipoDocumentoParaNuevo,
         numero_documento: nuevoDocumento.trim(),
         nombre_razon_social: nuevoNombre.trim(),
+        direccion: nuevaDireccion.trim() || null,
       });
       seleccionarCliente(nuevo);
     } catch (e) {
@@ -1370,8 +1380,24 @@ export default function POS({
                       }}
                       autoFocus
                     />
+                    <input
+                      type="text"
+                      placeholder={
+                        consultandoDocumento
+                          ? 'Buscando dirección...'
+                          : tipoComprobante === 'FACTURA'
+                            ? 'Dirección fiscal (opcional)'
+                            : 'Dirección (opcional)'
+                      }
+                      value={nuevaDireccion}
+                      onChange={(e) => setDireccionEscrita(e.target.value)}
+                    />
                     {nombreAutocompletado && (
-                      <p className="pos-cliente-nuevo-autocompletado">✓ Nombre obtenido de RENIEC/SUNAT</p>
+                      <p className="pos-cliente-nuevo-autocompletado">
+                        {direccionSugerida && direccionEscrita === null
+                          ? '✓ Nombre y dirección obtenidos de RENIEC/SUNAT'
+                          : '✓ Nombre obtenido de RENIEC/SUNAT'}
+                      </p>
                     )}
                     {errorCliente && <p className="pos-cliente-nuevo-error">{errorCliente}</p>}
                     <button

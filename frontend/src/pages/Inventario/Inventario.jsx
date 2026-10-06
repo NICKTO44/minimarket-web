@@ -8,6 +8,10 @@ import { etiquetaUnidad, opcionesUnidad } from '../../utils/unidades';
 import { AFECTACIONES, etiquetaAfectacion } from '../../utils/igv';
 import CategoriasIgv from './CategoriasIgv';
 import FormularioModelo from './FormularioModelo';
+import ImportarProductos from './ImportarProductos';
+import { TIPO_XLSX, escribirXlsx } from '../../utils/hojas';
+import { descargarArchivo } from '../../utils/pdfTicket';
+import { hoyLima } from '../../utils/formato';
 import { agruparPorModelo, etiquetaVariante, rangoPrecio } from '../../utils/variantes';
 
 const FORM_VACIO = {
@@ -157,6 +161,8 @@ export default function Inventario({
 
   // --- Tallas y colores: formulario del modelo y modelos desplegados ---
   const [modeloForm, setModeloForm] = useState(null);
+  // Importar productos desde Excel o CSV (solo el administrador).
+  const [importando, setImportando] = useState(false);
   const [modelosAbiertos, setModelosAbiertos] = useState(() => new Set());
 
   const cargarTodo = () => {
@@ -518,6 +524,32 @@ export default function Inventario({
     }
   };
 
+  // Excel con todos los productos activos. Sirve también de plantilla: se
+  // edita y se vuelve a importar (los códigos que ya existen se actualizan).
+  const exportarProductos = () => {
+    const conTallas = productos.some((p) => p.modelo_id != null);
+    const titulos = ['Código', 'Nombre', 'Descripción', 'Categoría', 'Unidad', 'Precio de venta', 'Precio de compra', 'Stock', 'Stock mínimo'];
+    if (conTallas) titulos.push('Modelo', 'Talla', 'Color');
+    const filas = productos.map((p) => {
+      const fila = [
+        String(p.codigo),
+        p.nombre,
+        p.descripcion || '',
+        p.categoria_nombre || '',
+        etiquetaUnidad(p.unidad_medida),
+        p.precio,
+        p.precio_compra > 0 ? p.precio_compra : '',
+        p.controla_stock === false ? '' : p.stock,
+        p.stock_minimo,
+      ];
+      if (conTallas) fila.push(p.modelo_nombre || '', p.talla || '', p.color || '');
+      return fila;
+    });
+    descargarArchivo(escribirXlsx([titulos, ...filas], { anchos: [16, 38, 30, 18, 12, 15, 16, 10, 13, 24, 10, 14] }), `Productos-${hoyLima()}.xlsx`, {
+      tipo: TIPO_XLSX,
+    });
+  };
+
   const stockBajoCantidad = productos.filter(tieneStockBajo).length;
   const sinPrecioCantidad = ganancias ? productos.filter(sinPrecioCompra).length : 0;
 
@@ -559,6 +591,22 @@ export default function Inventario({
       <div className="inv-header">
         <h1>{etiquetas.tituloProductos || 'Inventario'}</h1>
         <div className="inv-header-acciones">
+          {esAdmin && (
+            <>
+              <button
+                className="inv-boton-categorias"
+                onClick={() => {
+                  setMensaje(null);
+                  setImportando(true);
+                }}
+              >
+                ⬆ Importar
+              </button>
+              <button className="inv-boton-categorias" onClick={exportarProductos} disabled={productos.length === 0}>
+                ⬇ Exportar
+              </button>
+            </>
+          )}
           <button className="inv-boton-categorias" onClick={() => setVerCategorias(true)}>
             Categorías e IGV
           </button>
@@ -730,6 +778,24 @@ export default function Inventario({
             </tbody>
           </table>
         </div>
+      )}
+
+      {importando && (
+        <ImportarProductos
+          categorias={categorias}
+          unidadesActivas={unidadesActivas}
+          onCerrar={() => setImportando(false)}
+          onTerminado={(resultado) => {
+            setImportando(false);
+            setMensaje({
+              tipo: 'exito',
+              texto: `Importación terminada: ${resultado.creados} producto${resultado.creados === 1 ? '' : 's'} nuevo${resultado.creados === 1 ? '' : 's'}${
+                resultado.actualizados > 0 ? ` y ${resultado.actualizados} actualizado${resultado.actualizados === 1 ? '' : 's'}` : ''
+              }.`,
+            });
+            cargarTodo();
+          }}
+        />
       )}
 
       {verCategorias && (

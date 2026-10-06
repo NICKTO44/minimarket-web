@@ -76,15 +76,26 @@ export function esCajero(usuario) {
   return usuario?.rol_nombre === 'CAJERO';
 }
 
+/**
+ * true si es de Almacén (rol INVENTARIO): lleva productos, stock y
+ * proveedores y mira los reportes. No vende ni toca la caja.
+ */
+export function esAlmacen(usuario) {
+  return usuario?.rol_nombre === 'INVENTARIO';
+}
+
 /** Pantallas que puede abrir cada rol limitado (modo restaurante). */
 export const PANTALLAS_MESERO = ['MESAS', 'CARTA'];
 export const PANTALLAS_PREPARACION = ['PREPARACION', 'CARTA'];
+/** Pantallas de Almacén, en cualquier rubro (el backend bloquea el resto). */
+export const PANTALLAS_ALMACEN = ['PRODUCTOS', 'STOCK', 'PROVEEDORES', 'REPORTES'];
 
 /** Nombre del rol para mostrar en el menú. */
 export function etiquetaRol(usuario) {
   if (usuario?.rol_id === 1) return 'Administrador';
   if (esMesero(usuario)) return 'Mesero';
   if (esPreparacion(usuario)) return 'Barra / Cocina';
+  if (esAlmacen(usuario)) return 'Almacén';
   return 'Cajero';
 }
 
@@ -95,17 +106,20 @@ export function etiquetaRol(usuario) {
  * modulos: módulos encendidos del negocio (muestra Cotizaciones, Créditos, Guías).
  * El mesero solo ve Mesas y la Carta de hoy: toma pedidos, no cobra.
  * Barra/Cocina solo ve Preparación y la Carta de hoy (marca agotados).
+ * Almacén solo ve Productos, Stock y Lotes, Proveedores y Reportes.
  */
 export function gruposParaUsuario(usuario, { restaurante = false, etiquetas = {}, modulos = [] } = {}) {
   const esAdmin = usuario?.rol_id === 1;
   const mesero = restaurante && esMesero(usuario);
   const preparacion = restaurante && esPreparacion(usuario);
+  const almacen = esAlmacen(usuario);
   return GRUPOS_MENU.map((g) => ({
     ...g,
     // El rubro puede renombrar pantallas ("Carta" en vez de "Productos").
     items: g.items.map((i) => (etiquetas[i.id] ? { ...i, label: etiquetas[i.id] } : i)).filter((i) => {
       if (i.soloRestaurante && !restaurante) return false;
       if (i.modulo && !modulos.includes(i.modulo)) return false;
+      if (almacen) return PANTALLAS_ALMACEN.includes(i.id);
       if (mesero) return PANTALLAS_MESERO.includes(i.id);
       if (preparacion) return PANTALLAS_PREPARACION.includes(i.id);
       // El cajero solo cobra: la carta del día la arman los demás.

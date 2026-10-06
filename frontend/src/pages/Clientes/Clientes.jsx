@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../../api/api';
 import './Clientes.css';
 import { confirmar } from '../../utils/confirmar';
@@ -32,6 +32,10 @@ export default function Clientes() {
   const [editandoId, setEditandoId] = useState(null);
   const [form, setForm] = useState(FORM_VACIO);
   const [guardando, setGuardando] = useState(false);
+  // Consulta del documento en RENIEC/SUNAT: null | 'buscando' | 'listo'.
+  const [consulta, setConsulta] = useState(null);
+  const turnoConsulta = useRef(0);
+  const sugerido = useRef({ nombre: '', direccion: '' });
 
   const cargarClientes = () => {
     setCargando(true);
@@ -77,7 +81,50 @@ export default function Clientes() {
     }
   };
 
+  // Trae el nombre y la dirección del DNI o RUC para no escribirlos a
+  // mano. Solo llena lo que está vacío (o lo que ella misma puso antes, si
+  // se corrige el número); nunca pisa lo que escribió la persona. Es una
+  // ayuda: si la consulta falla o no trae nada, el formulario sigue igual.
+  const completarDesdeDocumento = (tipo, numero) => {
+    const turno = ++turnoConsulta.current;
+    const completo = (tipo === 'DNI' || tipo === 'RUC') && numero.length === REGLAS_DOCUMENTO[tipo].maxLength;
+    if (!completo) {
+      setConsulta(null);
+      return;
+    }
+    setConsulta('buscando');
+    api
+      .documentoConsultar(tipo, numero)
+      .then((r) => {
+        if (turno !== turnoConsulta.current) return;
+        if (r.existe !== true || (!r.nombre && !r.direccion)) {
+          setConsulta(null);
+          return;
+        }
+        const previo = sugerido.current;
+        const nuevo = { nombre: r.nombre || '', direccion: r.direccion || '' };
+        sugerido.current = nuevo;
+        const elegir = (actual, antes, ahora) => (!actual.trim() || actual === antes ? ahora || actual : actual);
+        setForm((f) => ({
+          ...f,
+          nombre_razon_social: elegir(f.nombre_razon_social, previo.nombre, nuevo.nombre),
+          direccion: elegir(f.direccion, previo.direccion, nuevo.direccion),
+        }));
+        setConsulta('listo');
+      })
+      .catch(() => {
+        if (turno === turnoConsulta.current) setConsulta(null);
+      });
+  };
+
+  const soltarConsulta = () => {
+    turnoConsulta.current += 1;
+    sugerido.current = { nombre: '', direccion: '' };
+    setConsulta(null);
+  };
+
   const abrirNuevo = () => {
+    soltarConsulta();
     setEditandoId(null);
     setForm(FORM_VACIO);
     setMensaje(null);
@@ -96,9 +143,13 @@ export default function Clientes() {
     });
     setMensaje(null);
     setMostrarForm(true);
+    // Cliente guardado sin dirección: se propone la de SUNAT/RENIEC.
+    soltarConsulta();
+    if (!(c.direccion || '').trim()) completarDesdeDocumento(c.tipo_documento, c.numero_documento || '');
   };
 
   const cerrarForm = () => {
+    soltarConsulta();
     setMostrarForm(false);
     setEditandoId(null);
     setForm(FORM_VACIO);
@@ -110,6 +161,7 @@ export default function Clientes() {
     if (regla.soloNumeros) limpio = limpio.replace(/\D/g, '');
     limpio = limpio.slice(0, regla.maxLength || limpio.length);
     setForm((f) => ({ ...f, tipo_documento: tipo, numero_documento: tipo === 'SIN_DOCUMENTO' ? '' : limpio }));
+    completarDesdeDocumento(tipo, tipo === 'SIN_DOCUMENTO' ? '' : limpio);
   };
 
   const cambiarDocumento = (valor) => {
@@ -118,6 +170,7 @@ export default function Clientes() {
     if (regla.soloNumeros) limpio = limpio.replace(/\D/g, '');
     limpio = limpio.slice(0, regla.maxLength);
     setForm((f) => ({ ...f, numero_documento: limpio }));
+    completarDesdeDocumento(form.tipo_documento, limpio);
   };
 
   const guardar = async () => {
@@ -299,6 +352,10 @@ export default function Clientes() {
                   onChange={(e) => cambiarDocumento(e.target.value)}
                   inputMode={regla.soloNumeros ? 'numeric' : 'text'}
                 />
+                {consulta === 'buscando' && <p className="cli-ayuda">Buscando en RENIEC/SUNAT…</p>}
+                {consulta === 'listo' && (
+                  <p className="cli-ayuda cli-ayuda-listo">✓ Datos obtenidos de RENIEC/SUNAT. Puedes corregirlos.</p>
+                )}
               </div>
             )}
 

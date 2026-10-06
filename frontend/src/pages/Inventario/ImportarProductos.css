@@ -1,0 +1,378 @@
+/* Importar productos desde Excel o CSV. Se apoya en Inventario.css. */
+.inv-modal.imp-modal {
+  max-width: 880px;
+}
+
+.inv-modal.imp-modal h2 {
+  margin-bottom: 6px;
+}
+
+.imp-nota {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #6b7280;
+}
+
+.imp-nota-pie {
+  margin: 14px 0 0;
+}
+
+.imp-enlace {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--color-primario-texto);
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Paso 1: elegir el archivo */
+.imp-zona {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 34px 20px;
+  border: 2px dashed #cfd4dc;
+  border-radius: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.imp-zona:hover,
+.imp-zona.encima,
+.imp-zona:focus-within {
+  border-color: var(--color-primario);
+  background: var(--color-primario-suave);
+}
+
+.imp-zona input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.imp-zona strong {
+  font-size: 15px;
+  color: #16181d;
+}
+
+.imp-zona span {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.imp-zona + .inv-mensaje {
+  margin: 12px 0 0;
+}
+
+/* Tablas de columnas y de revisión */
+.imp-tabla-caja {
+  border: 1px solid #e4e6eb;
+  border-radius: 10px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.imp-tabla-revision {
+  max-height: 46vh;
+}
+
+.imp-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.imp-tabla th {
+  position: sticky;
+  top: 0;
+  background: #f7f8fa;
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+  padding: 9px 10px;
+  border-bottom: 1.5px solid #e4e6eb;
+  white-space: nowrap;
+}
+
+.imp-tabla td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f2f4;
+  color: #16181d;
+  vertical-align: middle;
+}
+
+.imp-tabla tr:last-child td {
+  border-bottom: none;
+}
+
+.imp-tabla select,
+.imp-defectos select,
+.imp-existentes select {
+  padding: 7px 10px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  background: white;
+  font-size: 13.5px;
+  max-width: 100%;
+}
+
+.imp-tabla select {
+  min-width: 190px;
+}
+
+.imp-ejemplo {
+  color: #6b7280 !important;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imp-ok {
+  color: #166534;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.imp-apagada {
+  color: #9ca3af;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.imp-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.imp-estado {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #166534;
+}
+
+.imp-fila-error td {
+  background: #fef2f2;
+}
+
+.imp-fila-error .imp-estado {
+  color: #b91c1c;
+}
+
+.imp-fila-existe .imp-estado {
+  color: #b45309;
+}
+
+.imp-nueva {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e8f7ee;
+  color: #17803d;
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.imp-vacio {
+  text-align: center;
+  color: #9ca3af !important;
+  padding: 20px !important;
+}
+
+.imp-casilla {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.imp-defectos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.imp-defectos label,
+.imp-existentes {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.imp-mensaje-aviso {
+  margin: 14px 0 0;
+  background: #fff7e8;
+  color: #92400e;
+}
+
+.imp-defectos + .inv-mensaje,
+.imp-mensaje-aviso + .inv-mensaje,
+.imp-existentes + .inv-mensaje,
+.imp-bajo-tabla + .inv-mensaje {
+  margin: 14px 0 0;
+}
+
+/* Paso 3: resumen */
+.imp-resumen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+
+.imp-dato {
+  flex: 1 1 150px;
+  padding: 10px 14px;
+  border: 1px solid #e4e6eb;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: #4b5563;
+}
+
+.imp-dato strong {
+  display: block;
+  font-size: 22px;
+  color: #16181d;
+}
+
+.imp-dato-listo strong {
+  color: #166534;
+}
+
+.imp-dato-existe strong {
+  color: #b45309;
+}
+
+.imp-dato-error strong {
+  color: #b91c1c;
+}
+
+.imp-avisos {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #4b5563;
+}
+
+.imp-bajo-tabla {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+.imp-existentes {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+/* Paso final */
+.imp-final {
+  margin: 8px 0 4px;
+  padding-left: 0;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #16181d;
+}
+
+.imp-final .imp-ok {
+  font-size: 14px;
+  white-space: normal;
+}
+
+.imp-final .imp-pendiente {
+  color: #92400e;
+}
+
+@media (max-width: 640px) {
+  .imp-zona {
+    padding: 26px 14px;
+  }
+
+  /* Cada columna del archivo pasa a ser una tarjeta: título y estado
+     arriba, ejemplo debajo y la lista para elegir a todo el ancho. */
+  .imp-tabla-columnas thead {
+    display: none;
+  }
+
+  .imp-tabla-columnas tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'titulo estado'
+      'ejemplo ejemplo'
+      'eleccion eleccion';
+    gap: 4px 10px;
+    padding: 12px;
+    border-bottom: 1px solid #f1f2f4;
+  }
+
+  .imp-tabla-columnas tr:last-child {
+    border-bottom: none;
+  }
+
+  .imp-tabla-columnas td {
+    padding: 0;
+    border: none;
+  }
+
+  .imp-tabla-columnas td:nth-child(1) {
+    grid-area: titulo;
+  }
+
+  .imp-tabla-columnas td:nth-child(2) {
+    grid-area: ejemplo;
+    max-width: none;
+  }
+
+  .imp-tabla-columnas td:nth-child(3) {
+    grid-area: eleccion;
+    margin-top: 4px;
+  }
+
+  .imp-tabla-columnas td:nth-child(4) {
+    grid-area: estado;
+  }
+
+  .imp-tabla-columnas select {
+    width: 100%;
+  }
+
+  .imp-tabla select {
+    min-width: 150px;
+    font-size: 16px;
+  }
+
+  .imp-defectos select,
+  .imp-existentes select {
+    font-size: 16px;
+  }
+
+  .imp-dato strong {
+    font-size: 19px;
+  }
+}

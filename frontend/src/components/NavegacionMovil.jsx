@@ -1,7 +1,29 @@
 import { useEffect, useState } from 'react';
-import { ChefHat, ClipboardList, House, LayoutGrid, LogOut, Package, ScanBarcode, Store, UtensilsCrossed, Wallet } from 'lucide-react';
+import {
+  BarChart3,
+  Boxes,
+  ChefHat,
+  ClipboardList,
+  House,
+  LayoutGrid,
+  LogOut,
+  Package,
+  ScanBarcode,
+  Store,
+  Truck,
+  UtensilsCrossed,
+  Wallet,
+} from 'lucide-react';
 import { API_URL } from '../api/api';
-import { esMesero, esPreparacion, etiquetaRol, gruposParaUsuario, nivelAvisoSuscripcion } from '../utils/menu';
+import {
+  esAlmacen,
+  esMesero,
+  esPreparacion,
+  etiquetaRol,
+  gruposParaUsuario,
+  nivelAvisoSuscripcion,
+  PANTALLAS_ALMACEN,
+} from '../utils/menu';
 import './NavegacionMovil.css';
 
 // ============================================================
@@ -14,7 +36,7 @@ import './NavegacionMovil.css';
 
 // Las 4 secciones fijas de la barra (el resto va en "Más"). En una
 // cafetería/restaurante, "Mesas" reemplaza a "Inicio"; el mesero solo
-// tiene Mesas.
+// tiene Mesas. Almacén tiene sus cuatro pantallas y nada más.
 const TABS_TIENDA = ['RESUMEN', 'CAJA', 'POS', 'PRODUCTOS'];
 const TABS_RESTAURANTE = ['MESAS', 'CAJA', 'POS', 'PRODUCTOS'];
 const TABS_MESERO = ['MESAS', 'CARTA'];
@@ -77,7 +99,10 @@ export default function NavegacionMovil({
   const rolLabel = etiquetaRol(usuario);
   const mesero = restaurante && esMesero(usuario);
   const preparacion = restaurante && esPreparacion(usuario);
-  const tabsFijas = preparacion
+  const almacen = esAlmacen(usuario);
+  const tabsFijas = almacen
+    ? PANTALLAS_ALMACEN
+    : preparacion
     ? TABS_PREPARACION
     : mesero
       ? TABS_MESERO
@@ -127,7 +152,14 @@ export default function NavegacionMovil({
       </header>
 
       <nav className={`navm-inferior${tecladoAbierto ? ' navm-oculta' : ''}`} aria-label="Navegación principal">
-        {preparacion ? (
+        {almacen ? (
+          <>
+            <Tab id="PRODUCTOS" label={etiquetas.PRODUCTOS || 'Productos'} Icono={Package} pantalla={pantalla} onIr={ir} />
+            <Tab id="STOCK" label="Stock" Icono={Boxes} pantalla={pantalla} onIr={ir} />
+            <Tab id="PROVEEDORES" label="Proveedores" Icono={Truck} pantalla={pantalla} onIr={ir} />
+            <Tab id="REPORTES" label="Reportes" Icono={BarChart3} pantalla={pantalla} onIr={ir} />
+          </>
+        ) : preparacion ? (
           <Tab id="PREPARACION" label="Preparación" Icono={ChefHat} pantalla={pantalla} onIr={ir} />
         ) : restaurante ? (
           <Tab id="MESAS" label="Mesas" Icono={UtensilsCrossed} pantalla={pantalla} onIr={ir} insignia={insignias.MESAS} />
@@ -137,7 +169,7 @@ export default function NavegacionMovil({
         {(mesero || preparacion) && (
           <Tab id="CARTA" label="Carta de hoy" Icono={ClipboardList} pantalla={pantalla} onIr={ir} />
         )}
-        {!mesero && !preparacion && (
+        {!mesero && !preparacion && !almacen && (
           <>
             <Tab id="CAJA" label="Caja" Icono={Wallet} pantalla={pantalla} onIr={ir} />
             <button

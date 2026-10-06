@@ -15,7 +15,7 @@ import { datosNegocio, MODULO_CAMBIOS, MODULO_DETRACCION, MODULO_MESAS } from '.
 const ROLES = [
   { id: 1, nombre: 'Administrador' },
   { id: 2, nombre: 'Cajero' },
-  { id: 3, nombre: 'Inventario' },
+  { id: 3, nombre: 'Almacén (productos, proveedores y reportes)' },
 ];
 
 // Nombre para mostrar de cada rol que manda el servidor (/roles). El id
@@ -23,7 +23,7 @@ const ROLES = [
 const NOMBRE_ROL = {
   ADMIN: 'Administrador',
   CAJERO: 'Cajero',
-  INVENTARIO: 'Inventario',
+  INVENTARIO: 'Almacén (productos, proveedores y reportes)',
   MESERO: 'Mesero (toma pedidos, no cobra)',
   PREPARACION: 'Barra / Cocina (marca los pedidos listos)',
 };
@@ -469,7 +469,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
                     <tr key={u.id}>
                       <td>{u.username}</td>
                       <td>{u.nombre_completo}</td>
-                      <td>{u.rol_nombre}</td>
+                      <td>{u.rol_nombre === 'INVENTARIO' ? 'ALMACÉN' : u.rol_nombre}</td>
                       <td>
                         <span className={`cfg-badge ${u.activo ? 'cfg-badge-activo' : 'cfg-badge-inactivo'}`}>
                           {u.activo ? 'Activo' : 'Inactivo'}
