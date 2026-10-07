@@ -89,7 +89,9 @@ export default function Recibo({
       hash: comprobante.hash,
     });
 
-    QRCode.toDataURL(cadena, { margin: 0, width: 160 })
+    // Con `scale` cada cuadro del QR mide un número entero de píxeles (con
+    // `width` salían bordes grises, que la ticketera imprime borrosos).
+    QRCode.toDataURL(cadena, { margin: 0, scale: 6 })
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps

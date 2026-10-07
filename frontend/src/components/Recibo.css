@@ -3,7 +3,15 @@
   display: none;
 }
 
-/* Estilos SOLO al imprimir: aquí es donde se formatea como ticket térmico angosto */
+/* Estilos SOLO al imprimir: aquí es donde se formatea como ticket térmico angosto.
+
+   Pensado para una ticketera térmica de 80 mm, que tiene dos límites:
+   - De los 80 mm del papel solo imprime los 72 mm del centro. El ticket mide
+     71 mm en total (con su margen adentro); más ancho, se corta a la derecha.
+   - Imprime solo negro o blanco, en puntos gruesos. Un gris sale como puntos
+     sueltos y no se lee, igual que una letra muy fina o muy chica. Por eso
+     todo va en negro puro (#000), en letra de trazo firme y no menor de 11px;
+     lo que antes se distinguía con gris ahora se distingue con el grosor. */
 @media print {
   body * {
     visibility: hidden;
@@ -17,10 +25,19 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: 80mm; /* cambiar a 58mm si tu ticketera usa papel angosto */
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
-    padding: 4mm;
+    width: 71mm;
+    box-sizing: border-box;
+    padding: 2mm 1.5mm 4mm;
+    font-family: Arial, Helvetica, 'Liberation Sans', sans-serif;
+    font-size: 12.5px;
+    line-height: 1.3;
+    color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .recibo-imprimible * {
+    color: #000;
   }
 
   .recibo-centro {
@@ -36,8 +53,7 @@
   }
 
   .recibo-dato-tienda {
-    font-size: 11px;
-    color: #333;
+    font-size: 11.5px;
   }
 
   .recibo-ruc {
@@ -56,50 +72,49 @@
 
   .recibo-comprobante-tipo {
     font-weight: 700;
-    font-size: 11.5px;
+    font-size: 12.5px;
     letter-spacing: 0.02em;
     margin: 2px 0;
   }
 
   .recibo-comprobante-numero {
     font-weight: 800;
-    font-size: 13px;
+    font-size: 14px;
     margin-bottom: 2px;
   }
 
   .recibo-seccion-titulo {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.05em;
-    color: #555;
     margin-top: 2px;
   }
 
   .recibo-cliente-nombre {
-    font-size: 11.5px;
-    font-weight: 600;
+    font-size: 12.5px;
+    font-weight: 700;
   }
 
   .recibo-cliente-direccion {
-    font-size: 10.5px;
-    color: #444;
+    font-size: 11.5px;
   }
 
   .recibo-fila-meta {
     display: flex;
     justify-content: space-between;
     gap: 8px;
-    font-size: 11px;
+    font-size: 12px;
     padding: 1px 0;
   }
 
-  .recibo-fila-meta span:first-child {
-    color: #555;
+  /* El dato (derecha) en negrita; su nombre (izquierda), normal. */
+  .recibo-fila-meta span:last-child {
+    font-weight: 700;
+    text-align: right;
   }
 
   .recibo-fila-meta-sutil {
-    font-size: 10.5px;
-    color: #555;
+    font-size: 11.5px;
   }
 
   .recibo-item {
@@ -107,7 +122,12 @@
   }
 
   .recibo-item-nombre {
-    font-weight: 600;
+    font-weight: 700;
+  }
+
+  .recibo-item-detalle span:last-child,
+  .recibo-detalle-pago span:last-child {
+    font-weight: 700;
   }
 
   .recibo-item-detalle,
@@ -126,13 +146,13 @@
   }
 
   .recibo-importe-letras {
-    font-size: 10px;
-    line-height: 1.4;
+    font-size: 11px;
+    line-height: 1.35;
     margin: 3px 0;
   }
 
   .recibo-detalle-pago {
-    font-size: 11.5px;
+    font-size: 12.5px;
     padding: 1px 0;
   }
 
@@ -145,23 +165,22 @@
   }
 
   .recibo-detraccion-titulo {
-    font-size: 10.5px;
+    font-size: 11.5px;
     font-weight: 800;
     text-align: center;
     margin-bottom: 2px;
   }
 
   .recibo-disclaimer {
-    font-size: 9px;
-    color: #666;
-    line-height: 1.4;
+    font-size: 11px;
+    line-height: 1.3;
     margin: 4px 0;
   }
 
   .recibo-gracias {
-    font-style: italic;
-    font-size: 11.5px;
-    margin-top: 2px;
+    font-weight: 700;
+    font-size: 12.5px;
+    margin-top: 4px;
   }
 
 .recibo-qr-wrapper {
@@ -173,6 +192,8 @@
 .recibo-qr {
   width: 32mm;
   height: 32mm;
+  /* Cuadros nítidos: suavizado, la ticketera lo imprime borroso. */
+  image-rendering: pixelated;
 }
   @page {
     margin: 0;
