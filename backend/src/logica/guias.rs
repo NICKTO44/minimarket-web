@@ -6,7 +6,7 @@
 //! (https://documenter.getpostman.com/view/6435177/TVRrUPuD).
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::logica::facturacion::{codigo_tipo_documento_identidad, unidad_sunat};
 use crate::logica::tiempo::fecha_valida;
@@ -356,9 +356,78 @@ pub fn estado_de_ticket(state_type_id: Option<&str>) -> &'static str {
     }
 }
 
+/// El código QR de la guía, si viene en la respuesta de FacturaLibre.
+///
+/// En la guía electrónica el QR lo genera SUNAT al aceptarla (no se puede
+/// armar aquí como el de una boleta). No está documentado en qué campo lo
+/// entrega FacturaLibre, así que se busca en toda la respuesta:
+/// - el enlace que va dentro del QR (campo "qr_url", o cualquier enlace de
+///   SUNAT a su QR, "...sunat.gob.pe/...qr..."): se devuelve tal cual, y con
+///   él se dibuja el código;
+/// - o la imagen del QR ya hecha (campo cuyo nombre contiene "qr", en
+///   base64): se devuelve como "data:image/png;base64,...".
+/// None si no viene ninguno: el ticket se imprime sin QR.
+pub fn qr_de_respuesta(r: &Value) -> Option<String> {
+    fn enlace(nombre: &str, v: &Value) -> Option<String> {
+        match v {
+            Value::String(t) => {
+                let m = t.trim().to_lowercase();
+                let es_qr = nombre == "qr_url" || (m.contains("sunat.gob.pe") && m.contains("qr"));
+                (m.starts_with("http") && es_qr && t.len() < 600).then(|| t.trim().to_string())
+            }
+            Value::Array(lista) => lista.iter().find_map(|v| enlace(nombre, v)),
+            Value::Object(campos) => campos.iter().find_map(|(nombre, v)| enlace(nombre, v)),
+            _ => None,
+        }
+    }
+    fn imagen(v: &Value) -> Option<String> {
+        match v {
+            Value::Array(lista) => lista.iter().find_map(imagen),
+            Value::Object(campos) => campos.iter().find_map(|(nombre, valor)| match valor {
+                Value::String(t) if nombre.to_lowercase().contains("qr") => {
+                    let t = t.trim();
+                    if t.len() > 20_000 {
+                        None
+                    } else if t.starts_with("data:image/") {
+                        Some(t.to_string())
+                    } else if t.len() > 200 && t.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '/' | '=')) {
+                        Some(format!("data:image/png;base64,{}", t))
+                    } else {
+                        None
+                    }
+                }
+                otro => imagen(otro),
+            }),
+            _ => None,
+        }
+    }
+    enlace("", r).or_else(|| imagen(r))
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
+
+    #[test]
+    fn qr_de_la_respuesta() {
+        // Enlace de SUNAT, en cualquier campo y a cualquier profundidad.
+        let sunat = "https://e-factura.sunat.gob.pe/v1/contribuyente/gre/comprobantes/descargaqr?hashqr=abc123";
+        let r = serde_json::json!({"success": true, "data": {"state_type_id": "05", "otro": {"qr_url": sunat}}, "links": {"pdf": "https://x/pdf"}});
+        assert_eq!(qr_de_respuesta(&r).as_deref(), Some(sunat));
+        let r = serde_json::json!({"success": true, "data": {"qr_url": "https://otro.pe/consulta/abc", "state_type_id": "05"}});
+        assert_eq!(qr_de_respuesta(&r).as_deref(), Some("https://otro.pe/consulta/abc"));
+        // La imagen ya hecha, en base64.
+        let b64 = "iVBORw0KGgo".repeat(30);
+        let r = serde_json::json!({"success": true, "data": {"qr": b64}});
+        assert_eq!(qr_de_respuesta(&r), Some(format!("data:image/png;base64,{}", b64)));
+        let r = serde_json::json!({"data": {"qr": format!("data:image/png;base64,{}", b64)}});
+        assert_eq!(qr_de_respuesta(&r), Some(format!("data:image/png;base64,{}", b64)));
+        // Nada que sirva: enlaces que no son de SUNAT, textos cortos, otros campos.
+        let r = serde_json::json!({"success": true, "data": {"state_type_id": "05", "qr": "", "qr_url": null, "hash": b64},
+                                   "links": {"pdf": "https://x.facturalibre.org/downloads/qr/1", "cdr": "https://x/cdr"}, "message": "ACEPTADA"});
+        assert_eq!(qr_de_respuesta(&r), None);
+        assert_eq!(qr_de_respuesta(&Value::Null), None);
+    }
 
     fn base() -> DatosGuia {
         DatosGuia {

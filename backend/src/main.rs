@@ -282,6 +282,7 @@ async fn main() {
         .route("/guias", get(handlers::guias::listar).post(handlers::guias::crear))
         .route("/guias/config", get(handlers::guias::obtener_config))
         .route("/guias/venta/:folio", get(handlers::guias::venta_para_guia))
+        .route("/guias/:id", get(handlers::guias::detalle))
         .route("/guias/:id/consultar", post(handlers::guias::consultar))
         .route("/configuracion/guias", axum::routing::put(handlers::guias::guardar_config))
         .route("/configuracion/detraccion", axum::routing::put(handlers::detraccion::guardar_detraccion))

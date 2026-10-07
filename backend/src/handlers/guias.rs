@@ -254,7 +254,22 @@ pub struct Guia {
     pub fecha_traslado: String,
     pub usuario: String,
     pub fecha: String,
+    /// El formulario con que se emitió (transporte, direcciones, peso,
+    /// ítems), para imprimirla en ticket. Solo viene al pedir una guía, no
+    /// en la lista.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datos: Option<Value>,
+    /// Comprobante de la venta ("F001-128"), si tiene uno aceptado.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comprobante: Option<String>,
+    /// QR de SUNAT, si FacturaLibre lo entregó al aceptarse: un enlace (con
+    /// el que se dibuja el código) o la imagen ("data:image/...").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub qr: Option<String>,
 }
+
+/// Campo de `datos_json` donde se guarda el QR de SUNAT (no es del formulario).
+const CAMPO_QR: &str = "qr_sunat";
 
 async fn listar_donde(conn: &libsql::Connection, donde: &str, venta_id: Option<i64>) -> Result<Vec<Guia>, (StatusCode, String)> {
     let sql = format!(
@@ -291,17 +306,53 @@ async fn listar_donde(conn: &libsql::Connection, donde: &str, venta_id: Option<i
             fecha_traslado: f.get(13).unwrap_or_default(),
             usuario: f.get(14).unwrap_or_default(),
             fecha: f.get(15).unwrap_or_default(),
+            datos: None,
+            comprobante: None,
+            qr: None,
         });
     }
     Ok(guias)
 }
 
+/// El formulario guardado de una guía (None si no se puede leer).
+async fn datos_guardados(conn: &libsql::Connection, id: i64) -> Option<Value> {
+    let mut filas = conn.query("SELECT datos_json FROM guias_remision WHERE id = ?1", libsql::params![id]).await.ok()?;
+    let texto = filas.next().await.ok()??.get::<String>(0).ok()?;
+    serde_json::from_str::<Value>(&texto).ok().filter(Value::is_object)
+}
+
+/// Una guía con todo su detalle. Lo que es solo para imprimirla (datos,
+/// comprobante, QR) nunca hace fallar la consulta: si no se puede leer, no viene.
 async fn una(conn: &libsql::Connection, id: i64) -> Result<Guia, (StatusCode, String)> {
-    listar_donde(conn, "WHERE g.id = ?1", Some(id))
+    let mut guia = listar_donde(conn, "WHERE g.id = ?1", Some(id))
         .await?
         .into_iter()
         .next()
-        .ok_or((StatusCode::NOT_FOUND, "Esa guía no existe.".to_string()))
+        .ok_or((StatusCode::NOT_FOUND, "Esa guía no existe.".to_string()))?;
+    if let Some(mut datos) = datos_guardados(conn, id).await {
+        if let Some(campos) = datos.as_object_mut() {
+            guia.qr = campos.remove(CAMPO_QR).and_then(|v| v.as_str().map(|t| t.to_string())).filter(|t| !t.is_empty());
+        }
+        guia.datos = Some(datos);
+    }
+    if let Some(venta_id) = guia.venta_id {
+        guia.comprobante = documento_de_venta(conn, venta_id).await.map(|(s, n, _)| format!("{}-{}", s, n));
+    }
+    Ok(guia)
+}
+
+/// GET /guias/:id — una guía con su detalle completo (para imprimirla).
+pub async fn detalle(Extension(tenant): Extension<Arc<TenantDb>>, Path(id): Path<i64>) -> Resultado<Guia> {
+    let conn = tenant.0.connect().map_err(e500)?;
+    Ok(Json(una(&conn, id).await?))
+}
+
+/// Guarda el QR de SUNAT junto al formulario de la guía. Sin fallar: el QR
+/// solo sirve para el ticket impreso.
+async fn guardar_qr(conn: &libsql::Connection, id: i64, qr: &str) {
+    let Some(mut datos) = datos_guardados(conn, id).await else { return };
+    datos[CAMPO_QR] = Value::String(qr.to_string());
+    let _ = conn.execute("UPDATE guias_remision SET datos_json = ?1 WHERE id = ?2", libsql::params![datos.to_string(), id]).await;
 }
 
 /// GET /guias — las últimas 200.
@@ -390,6 +441,9 @@ async fn enviar_y_consultar(conn: &libsql::Connection, id: i64, base: &str, toke
             )
             .await
             .map_err(e500)?;
+            if let Some(qr) = qr_de_respuesta(&r) {
+                guardar_qr(conn, id, &qr).await;
+            }
         }
         Ok(r) => {
             conn.execute("UPDATE guias_remision SET mensaje = ?1 WHERE id = ?2", libsql::params![mensaje_de(&r), id]).await.map_err(e500)?;
