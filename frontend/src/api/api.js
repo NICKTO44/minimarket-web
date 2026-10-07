@@ -210,6 +210,7 @@ export const api = {
   guias: () => request('/guias'),
   guiasConfig: () => request('/guias/config'),
   guiasConfigGuardar: (datos) => request('/configuracion/guias', { method: 'PUT', body: JSON.stringify(datos) }),
+  guia: (id) => request(`/guias/${id}`),
   guiaVenta: (folio) => request(`/guias/venta/${encodeURIComponent(folio)}`),
   guiaCrear: (datos) => request('/guias', { method: 'POST', body: JSON.stringify(datos) }),
   guiaConsultar: (id) => request(`/guias/${id}/consultar`, { method: 'POST' }),

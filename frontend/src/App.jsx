@@ -460,7 +460,15 @@ function App() {
             ruc={configuracionTienda?.ruc}
           />
         )}
-        {pantallaVisible === 'GUIAS' && <Guias esAdmin={usuarioActual?.rol_id === 1} />}
+        {pantallaVisible === 'GUIAS' && (
+          <Guias
+            esAdmin={usuarioActual?.rol_id === 1}
+            nombreTienda={nombreTienda}
+            direccion={configuracionTienda?.direccion}
+            telefono={configuracionTienda?.telefono}
+            ruc={configuracionTienda?.ruc}
+          />
+        )}
         {pantallaVisible === 'COMPROBANTES' && (
           <Comprobantes
             usuario={usuarioActual}

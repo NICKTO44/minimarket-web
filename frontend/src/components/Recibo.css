@@ -136,6 +136,19 @@
     justify-content: space-between;
   }
 
+  /* La cantidad o el monto (derecha) nunca se parte en dos líneas; si falta
+     espacio, lo que baja de línea es el texto de la izquierda (un código largo). */
+  .recibo-item-detalle {
+    gap: 8px;
+  }
+  .recibo-item-detalle span:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .recibo-item-detalle span:last-child {
+    white-space: nowrap;
+  }
+
   .recibo-total {
     display: flex;
     justify-content: space-between;

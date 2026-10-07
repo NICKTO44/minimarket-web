@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FileDown, RefreshCw, Route, Settings } from 'lucide-react';
+import { FileDown, Printer, RefreshCw, Route, Settings } from 'lucide-react';
 import { api } from '../../api/api';
+import GuiaImprimible from '../../components/GuiaImprimible';
 import SelectorUbigeo from '../../components/SelectorUbigeo';
 import { fechaCorta } from '../../utils/formato';
 import { formatoCantidad } from '../../utils/medidas';
@@ -47,8 +48,11 @@ const FORMULARIO_VACIO = {
  * vendido. Se elige la venta, se completan destino y transporte, y el
  * sistema la emite por FacturaLibre. Si SUNAT tarda en responder queda
  * "Esperando a SUNAT" y se consulta de nuevo desde su detalle.
+ *
+ * Una guía aceptada se imprime en ticket de 80 mm (hecho aquí, con los datos
+ * con que se emitió) o en hoja A4 (el PDF de FacturaLibre).
  */
-export default function Guias({ esAdmin }) {
+export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc }) {
   const [config, setConfig] = useState(null);
   const [guias, setGuias] = useState(null);
   const [mensaje, setMensaje] = useState(null);
@@ -85,6 +89,17 @@ export default function Guias({ esAdmin }) {
       .catch((e) => setMensaje({ tipo: 'error', texto: e.message }));
     cargar();
   }, [cargar]);
+
+  // Abre el detalle de una guía. La lista no trae lo necesario para el ticket
+  // (transporte, ítems, QR): se pide aparte. Si el servidor aún no lo entrega,
+  // la guía se abre igual, solo sin el botón del ticket.
+  const abrir = (g) => {
+    setAbierta(g);
+    api
+      .guia(g.id)
+      .then((detalle) => setAbierta((actual) => (actual && actual.id === detalle.id ? { ...actual, ...detalle } : actual)))
+      .catch(() => {});
+  };
 
   const campo = (nombre) => ({ value: form[nombre], onChange: (e) => setForm((f) => ({ ...f, [nombre]: e.target.value })) });
 
@@ -170,6 +185,8 @@ export default function Guias({ esAdmin }) {
         items: [],
       });
       setNueva(false);
+      // Queda abierta para imprimirla (o para consultar a SUNAT si aún no responde).
+      setAbierta(guia);
       setMensaje(
         guia.estado === 'ACEPTADA'
           ? { tipo: 'exito', texto: `Guía ${guia.numero} aceptada por SUNAT.` }
@@ -266,7 +283,7 @@ export default function Guias({ esAdmin }) {
           <p className="pm-vacio">Todavía no has emitido guías.</p>
         ) : (
           guias.map((g) => (
-            <button key={g.id} className="pm-fila" onClick={() => setAbierta(g)}>
+            <button key={g.id} className="pm-fila" onClick={() => abrir(g)}>
               <span className="pm-fila-principal">
                 <span className="pm-fila-titulo">
                   {g.numero} · {g.destinatario_nombre} <EstadoGuia estado={g.estado} />
@@ -327,9 +344,14 @@ export default function Guias({ esAdmin }) {
                   <RefreshCw size={15} /> {consultando ? 'Consultando...' : 'Consultar SUNAT'}
                 </button>
               )}
+              {abierta.estado === 'ACEPTADA' && abierta.datos && (
+                <button className="pm-boton" onClick={() => window.print()}>
+                  <Printer size={15} /> Ticket 80 mm
+                </button>
+              )}
               {abierta.enlace_pdf && (
                 <a className="pm-boton-secundario" href={abierta.enlace_pdf} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-                  <FileDown size={15} /> PDF
+                  <FileDown size={15} /> Hoja A4
                 </a>
               )}
               <button className="pm-boton-secundario" onClick={() => setAbierta(null)}>
@@ -573,6 +595,15 @@ export default function Guias({ esAdmin }) {
           </div>
         </div>
       )}
+
+      <GuiaImprimible
+        guia={abierta?.estado === 'ACEPTADA' ? abierta : null}
+        motivos={config?.motivos}
+        nombreTienda={nombreTienda}
+        direccion={direccion}
+        telefono={telefono}
+        ruc={ruc}
+      />
     </div>
   );
 }
