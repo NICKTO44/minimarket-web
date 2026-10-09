@@ -88,7 +88,7 @@ pub async fn emitir_comprobante(
         .query(
             &format!(
                 "SELECT {}, modulos, CAST(detraccion_porcentaje AS REAL), detraccion_codigo,
-                        CAST(detraccion_minimo AS REAL), detraccion_cuenta
+                        CAST(detraccion_minimo AS REAL), detraccion_cuenta, facturacion_proveedor
                  FROM configuracion_tienda LIMIT 1",
                 COLUMNAS_EMISION
             ),
@@ -106,6 +106,9 @@ pub async fn emitir_comprobante(
     };
 
     let mut cfg_detraccion_leida = None;
+    // 'SUNAT_DIRECTO' = emisión directa a SUNAT (handlers/facturacion_directa.rs).
+    // Cualquier otro valor, o una base sin esa columna, sigue con FacturaLibre.
+    let mut proveedor: Option<String> = None;
     let (token, ruta, ruc_emisor, serie_boleta, serie_factura, codigo_sunat_cfg): (
         Option<String>,
         Option<String>,
@@ -123,6 +126,7 @@ pub async fn emitir_comprobante(
                     row.get::<f64>(9).ok(),
                     row.get::<String>(10).ok(),
                 ));
+                proveedor = row.get::<String>(11).ok();
             }
             (row.get(0).ok(), row.get(1).ok(), row.get(2).ok(), row.get(3).ok(), row.get(4).ok(), row.get(5).ok())
         }
@@ -136,8 +140,11 @@ pub async fn emitir_comprobante(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| CODIGO_PRODUCTO_SUNAT_RESPALDO.to_string());
 
+    let directo = proveedor.as_deref().map(str::trim) == Some("SUNAT_DIRECTO");
     let (token, ruta) = match (token, ruta) {
         (Some(t), Some(r)) if !t.trim().is_empty() && !r.trim().is_empty() => (t, r),
+        // La emisión directa no usa el token ni la URL de FacturaLibre.
+        _ if directo => (String::new(), String::new()),
         _ => {
             return Err((
                 StatusCode::BAD_REQUEST,
@@ -184,6 +191,17 @@ pub async fn emitir_comprobante(
             None
         },
     };
+
+    if directo {
+        let pedido = crate::handlers::facturacion_directa::Pedido {
+            venta_id: payload.venta_id,
+            serie: if payload.tipo == "FACTURA" { serie_factura } else { serie_boleta },
+            codigo_producto_sunat: codigo_sunat,
+            desglose: &desglose,
+            detraccion,
+        };
+        return crate::handlers::facturacion_directa::emitir(&conn, pedido, datos).await;
+    }
 
     let resultado = emitir_facturalibre(&datos, &token, &ruta, &codigo_sunat, &serie_boleta, &serie_factura).await;
 

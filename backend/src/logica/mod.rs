@@ -4,3 +4,8 @@ pub mod igv;
 pub mod detraccion;
 pub mod tiempo;
 pub mod guias;
+pub mod sunat_directo;
+pub mod certificado;
+pub mod alta_sunat;
+pub mod notas_credito;
+pub mod anulaciones;

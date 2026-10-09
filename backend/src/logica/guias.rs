@@ -338,6 +338,114 @@ pub fn armar_payload(
     doc
 }
 
+/// Arma la guía para la emisión directa (formato de Greenter, guía 2022 de
+/// la API de SUNAT). `datos` debe venir de `validar`; `emisor` son los datos
+/// del negocio como en las boletas y facturas directas.
+#[allow(clippy::too_many_arguments)]
+pub fn armar_guia_sunat(
+    datos: &DatosGuia,
+    emisor: &crate::logica::sunat_directo::Emisor,
+    serie: &str,
+    numero: i64,
+    hoy: &str,
+    hora: &str,
+    documento: Option<&DocumentoAfectado>,
+) -> Value {
+    let privado = datos.modo == "PRIVADO";
+    let motivo_texto = datos
+        .motivo_descripcion
+        .clone()
+        .unwrap_or_else(|| MOTIVOS.iter().find(|(c, _)| *c == datos.motivo).map(|(_, n)| n.to_string()).unwrap_or_default());
+    let detalles: Vec<Value> = datos
+        .items
+        .iter()
+        .enumerate()
+        .map(|(i, it)| {
+            json!({
+                "codigo": if it.codigo.trim().is_empty() { format!("P{:03}", i + 1) } else { it.codigo.trim().to_string() },
+                "descripcion": it.descripcion,
+                "unidad": unidad_sunat(&it.unidad),
+                "cantidad": it.cantidad,
+            })
+        })
+        .collect();
+
+    let mut envio = json!({
+        "codTraslado": datos.motivo,
+        "desTraslado": motivo_texto,
+        "modTraslado": if privado { "02" } else { "01" },
+        "fecTraslado": format!("{}T00:00:00-05:00", datos.fecha_traslado),
+        "pesoTotal": datos.peso_total,
+        "undPesoTotal": "KGM",
+        "numBultos": datos.bultos,
+        "llegada": { "ubigueo": datos.llegada.ubigeo, "direccion": datos.llegada.direccion },
+        "partida": { "ubigueo": datos.partida.ubigeo, "direccion": datos.partida.direccion },
+    });
+    if privado {
+        if let Some(c) = &datos.chofer {
+            envio["choferes"] = json!([{
+                "tipo": "Principal",
+                "tipoDoc": "1",
+                "nroDoc": c.documento,
+                "licencia": c.licencia,
+                "nombres": c.nombres,
+                "apellidos": c.apellidos,
+            }]);
+        }
+        envio["vehiculo"] = json!({ "placa": datos.placa.clone().unwrap_or_default() });
+    } else if let Some(t) = &datos.transportista {
+        let mut transportista = json!({ "tipoDoc": "6", "numDoc": t.ruc, "rznSocial": t.nombre });
+        if let Some(mtc) = &t.mtc {
+            transportista["nroMtc"] = json!(mtc);
+        }
+        envio["transportista"] = transportista;
+    }
+
+    let nombre_comercial = if emisor.nombre_comercial.trim().is_empty() { emisor.razon_social.trim() } else { emisor.nombre_comercial.trim() };
+    let mut doc = json!({
+        "version": "2022",
+        "tipoDoc": "09",
+        "serie": serie,
+        "correlativo": numero.to_string(),
+        "fechaEmision": format!("{}T{}-05:00", hoy, hora),
+        "company": {
+            "ruc": emisor.ruc.trim(),
+            "razonSocial": emisor.razon_social.trim(),
+            "nombreComercial": nombre_comercial,
+            "address": {
+                "ubigueo": emisor.ubigeo.trim(),
+                "codigoPais": "PE",
+                "departamento": emisor.departamento.trim(),
+                "provincia": emisor.provincia.trim(),
+                "distrito": emisor.distrito.trim(),
+                "urbanizacion": "-",
+                "direccion": emisor.direccion.trim(),
+                "codLocal": "0000",
+            },
+        },
+        "destinatario": {
+            "tipoDoc": codigo_tipo_documento_identidad(&datos.destinatario_tipo),
+            "numDoc": datos.destinatario_documento,
+            "rznSocial": datos.destinatario_nombre,
+        },
+        "envio": envio,
+        "details": detalles,
+    });
+    if let Some(o) = datos.observaciones.as_deref().filter(|o| !o.is_empty()) {
+        doc["observacion"] = json!(o);
+    }
+    if let Some((serie_doc, numero_doc, tipo)) = documento {
+        let factura = tipo == "FACTURA";
+        doc["addDocs"] = json!([{
+            "tipoDesc": if factura { "Factura" } else { "Boleta de Venta" },
+            "tipo": if factura { "01" } else { "03" },
+            "nro": format!("{}-{}", serie_doc, numero_doc),
+            "emisor": emisor.ruc.trim(),
+        }]);
+    }
+    doc
+}
+
 /// La URL base de la cuenta ("https://x.pro.facturalibre.org") a partir de
 /// la URL de comprobantes que el negocio ya tiene configurada
 /// (".../api/documents").
@@ -526,5 +634,42 @@ mod pruebas {
         assert_eq!(url_base("https://demo1.pro.facturalibre.org/api/documents/"), "https://demo1.pro.facturalibre.org");
         assert_eq!(url_base("https://x.proapi.facturalibre.org"), "https://x.proapi.facturalibre.org");
         assert_eq!((estado_de_ticket(Some("05")), estado_de_ticket(Some("09")), estado_de_ticket(Some("01")), estado_de_ticket(None)), ("ACEPTADA", "RECHAZADA", "ENVIADA", "ENVIADA"));
+    }
+
+    #[test]
+    fn guia_directa_greenter() {
+        let d = validar(&base(), "2026-10-04").unwrap();
+        let emisor = crate::logica::sunat_directo::Emisor {
+            ruc: "20161515648".into(),
+            razon_social: "EMPRESA SAC".into(),
+            direccion: "AV 1".into(),
+            ubigeo: "080101".into(),
+            ..Default::default()
+        };
+        let documento = ("FM01".to_string(), 12, "FACTURA".to_string());
+        let g = armar_guia_sunat(&d, &emisor, "T001", 5, "2026-10-04", "09:30:00", Some(&documento));
+        assert_eq!(g["version"], "2022");
+        assert_eq!(g["tipoDoc"], "09");
+        assert_eq!(g["correlativo"], "5");
+        assert_eq!(g["destinatario"]["tipoDoc"], "6");
+        assert_eq!(g["envio"]["modTraslado"], "02");
+        assert_eq!(g["envio"]["vehiculo"]["placa"], "A1Y298");
+        assert_eq!(g["envio"]["choferes"][0]["licencia"], "Q41784439");
+        assert_eq!(g["envio"]["partida"]["ubigueo"], "080105");
+        assert_eq!(g["envio"]["fecTraslado"], "2026-10-04T00:00:00-05:00");
+        assert_eq!(g["addDocs"][0]["nro"], "FM01-12");
+        assert_eq!(g["addDocs"][0]["tipo"], "01");
+        assert_eq!(g["details"][0]["codigo"], "M1");
+        assert!(g["envio"].get("transportista").is_none());
+
+        let mut publico = base();
+        publico.modo = "PUBLICO".into();
+        publico.transportista = Some(Transportista { ruc: "20600000001".into(), nombre: "TRANSPORTES SAC".into(), mtc: Some("abc123".into()) });
+        let d = validar(&publico, "2026-10-04").unwrap();
+        let g = armar_guia_sunat(&d, &emisor, "T001", 6, "2026-10-04", "09:30:00", None);
+        assert_eq!(g["envio"]["modTraslado"], "01");
+        assert_eq!(g["envio"]["transportista"]["nroMtc"], "ABC123");
+        assert!(g["envio"].get("choferes").is_none());
+        assert!(g.get("addDocs").is_none());
     }
 }

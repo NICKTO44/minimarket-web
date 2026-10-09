@@ -38,6 +38,17 @@ pub fn calcular_nueva_fecha(actual: Option<&str>, cantidad: i64, unidad: &str) -
     Ok(nueva.format("%Y-%m-%d").to_string())
 }
 
+/// Unidad de duración como se guarda en `codigos_activacion.duracion_unidad`
+/// ('DIA', 'MES' o 'ANIO'). Acepta lo que se escribe a mano ("meses", "año").
+pub fn normalizar_unidad(unidad: &str) -> Option<&'static str> {
+    match unidad.trim().to_lowercase().as_str() {
+        "dia" | "dias" | "día" | "días" => Some("DIA"),
+        "mes" | "meses" => Some("MES"),
+        "anio" | "anios" | "año" | "años" => Some("ANIO"),
+        _ => None,
+    }
+}
+
 /// Genera un código de activación aleatorio, formato "MNSP-XXXX-XXXX-XXXX"
 /// (12 caracteres al azar de un alfabeto de 32 símbolos = ~60 bits de
 /// entropía — no adivinable por fuerza bruta). No hay ningún algoritmo

@@ -27,4 +27,12 @@ pub struct ComprobanteResumen {
     /// La pantalla de Comprobantes solo ofrece lo que existe.
     pub tiene_xml: bool,
     pub tiene_cdr: bool,
+    /// 'SUNAT_DIRECTO' o 'FACTURALIBRE' (None = nota simple o base antigua).
+    pub proveedor: Option<String>,
+    /// Notas de crédito que corrigen este comprobante (emisión directa).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notas: Vec<crate::handlers::notas_credito::NotaResumen>,
+    /// Anulación ante SUNAT: EN_PROCESO, ANULADO o RECHAZADA (None = vigente).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anulacion: Option<String>,
 }

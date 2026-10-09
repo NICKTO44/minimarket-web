@@ -1,4 +1,6 @@
-//! Guía de remisión remitente electrónica por FacturaLibre (módulo GUIAS).
+//! Guía de remisión remitente electrónica (módulo GUIAS). Los negocios en
+//! emisión directa (SUNAT_DIRECTO) la emiten por Lycet: ver
+//! guias_directas.rs. El resto, por FacturaLibre, como se describe aquí.
 //!
 //! FacturaLibre la emite en tres pasos: se crea (/api/dispatches), se envía
 //! a SUNAT (/api/dispatches/send) y se consulta su ticket
@@ -47,6 +49,8 @@ struct Config {
     correo: Option<String>,
     telefono: Option<String>,
     ultimo: Option<Value>,
+    /// El negocio emite directo a SUNAT (las guías van por Lycet).
+    directo: bool,
 }
 
 async fn leer_config(conn: &libsql::Connection) -> Result<Config, (StatusCode, String)> {
@@ -69,6 +73,7 @@ async fn leer_config(conn: &libsql::Connection) -> Result<Config, (StatusCode, S
         correo: texto(5),
         telefono: texto(6),
         ultimo: texto(7).and_then(|t| serde_json::from_str(&t).ok()),
+        directo: crate::handlers::envios_sunat::es_modo_directo(conn).await,
     })
 }
 
@@ -78,8 +83,11 @@ pub struct ConfigGuias {
     /// Ubigeo y dirección del local: el punto de partida por defecto.
     pub ubigeo: String,
     pub direccion: String,
-    /// FacturaLibre (token y URL) ya está configurado.
+    /// Se pueden emitir guías: FacturaLibre (token y URL) configurado, o el
+    /// negocio emite directo a SUNAT.
     pub facturacion_lista: bool,
+    /// Las guías van directo a SUNAT (no por FacturaLibre).
+    pub directo: bool,
     /// Datos de transporte de la última guía, para no volver a escribirlos.
     pub ultimo: Option<Value>,
     pub motivos: Vec<Motivo>,
@@ -96,7 +104,8 @@ fn config_publica(c: Config) -> ConfigGuias {
         serie: c.serie,
         ubigeo: c.ubigeo,
         direccion: c.direccion,
-        facturacion_lista: !c.token.is_empty() && !c.ruta.is_empty(),
+        facturacion_lista: c.directo || (!c.token.is_empty() && !c.ruta.is_empty()),
+        directo: c.directo,
         ultimo: c.ultimo,
         motivos: MOTIVOS.iter().map(|(c, n)| Motivo { codigo: c.to_string(), nombre: n.to_string() }).collect(),
     }
@@ -266,6 +275,14 @@ pub struct Guia {
     /// el que se dibuja el código) o la imagen ("data:image/...").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub qr: Option<String>,
+    /// Emitida directo a SUNAT: el XML y la constancia se bajan de
+    /// /guias/:id/xml y /guias/:id/cdr (no hay enlaces de FacturaLibre).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub directa: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub tiene_xml: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub tiene_cdr: bool,
 }
 
 /// Campo de `datos_json` donde se guarda el QR de SUNAT (no es del formulario).
@@ -309,7 +326,20 @@ async fn listar_donde(conn: &libsql::Connection, donde: &str, venta_id: Option<i
             datos: None,
             comprobante: None,
             qr: None,
+            directa: false,
+            tiene_xml: false,
+            tiene_cdr: false,
         });
+    }
+    drop(filas);
+    let ids: Vec<i64> = guias.iter().map(|g| g.id).collect();
+    let directas = super::guias_directas::archivos_de(conn, &ids).await;
+    for g in guias.iter_mut() {
+        if let Some((xml, cdr)) = directas.get(&g.id) {
+            g.directa = true;
+            g.tiene_xml = *xml;
+            g.tiene_cdr = *cdr;
+        }
     }
     Ok(guias)
 }
@@ -465,7 +495,7 @@ pub async fn crear(
     exigir_modulo(&conn, MODULO_GUIAS, "Guías de remisión").await?;
     let cfg = leer_config(&conn).await?;
     conn.query("SELECT 1 FROM guias_remision LIMIT 1", ()).await.map_err(actualizando)?;
-    if cfg.token.is_empty() || cfg.ruta.is_empty() {
+    if !cfg.directo && (cfg.token.is_empty() || cfg.ruta.is_empty()) {
         return Err(malo("Falta configurar el Token y la URL de FacturaLibre en Configuración antes de emitir guías."));
     }
     if cfg.ubigeo.is_empty() || cfg.direccion.is_empty() {
@@ -484,6 +514,14 @@ pub async fn crear(
         Some(venta_id) => documento_de_venta(&conn, venta_id).await,
         None => None,
     };
+    // Emisión directa: la guía va a SUNAT por Lycet (guias_directas.rs).
+    if cfg.directo {
+        conn.query("SELECT ticket FROM guias_remision LIMIT 1", ()).await.map_err(actualizando)?;
+        let id = super::guias_directas::crear(&conn, &datos, &cfg.serie, documento.as_ref(), claims.sub).await?;
+        recordar_transporte(&conn, &datos).await;
+        return Ok(Json(una(&conn, id).await?));
+    }
+
     let emisor = Emisor { ubigeo: cfg.ubigeo.clone(), direccion: cfg.direccion.clone(), correo: cfg.correo.clone(), telefono: cfg.telefono.clone() };
     let hora = ahora_lima().chars().skip(11).collect::<String>();
     let cuerpo = armar_payload(&datos, &emisor, &cfg.serie, &hoy, &hora, documento.as_ref());
@@ -516,20 +554,29 @@ pub async fn crear(
     .map_err(e500)?;
     let id = conn.last_insert_rowid();
 
-    // Se recuerdan los datos de transporte para la próxima guía (sin fallar).
+    recordar_transporte(&conn, &datos).await;
+
+    enviar_y_consultar(&conn, id, &base, &cfg.token).await?;
+    Ok(Json(una(&conn, id).await?))
+}
+
+/// Se recuerdan los datos de transporte para la próxima guía (sin fallar).
+async fn recordar_transporte(conn: &libsql::Connection, datos: &DatosGuia) {
     let ultimo = serde_json::json!({
         "modo": datos.modo, "transportista": datos.transportista, "chofer": datos.chofer, "placa": datos.placa,
     });
     let _ = conn.execute("UPDATE configuracion_tienda SET guia_ultimo = ?1", libsql::params![ultimo.to_string()]).await;
-
-    enviar_y_consultar(&conn, id, &base, &cfg.token).await?;
-    Ok(Json(una(&conn, id).await?))
 }
 
 /// POST /guias/:id/consultar — reintenta el envío y consulta la respuesta
 /// de SUNAT de una guía que quedó registrada, enviada o rechazada.
 pub async fn consultar(Extension(tenant): Extension<Arc<TenantDb>>, Path(id): Path<i64>) -> Resultado<Guia> {
     let conn = tenant.0.connect().map_err(e500)?;
+    if super::guias_directas::es_directa(&conn, id).await {
+        let lycet = super::envios_sunat::Lycet::exigir()?;
+        super::guias_directas::avanzar(&conn, &lycet, id, true).await?;
+        return Ok(Json(una(&conn, id).await?));
+    }
     let cfg = leer_config(&conn).await?;
     if cfg.token.is_empty() || cfg.ruta.is_empty() {
         return Err(malo("Falta configurar FacturaLibre en Configuración."));

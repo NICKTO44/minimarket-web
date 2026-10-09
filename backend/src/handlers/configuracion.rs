@@ -47,7 +47,20 @@ pub async fn obtener_configuracion(
             modo_negocio: negocio.modo_negocio,
             rubro: negocio.rubro,
             modulos: negocio.modulos,
+            razon_social: None,
+            facturacion_proveedor: None,
             };
+            // Datos de la emisión directa (migración 0020). Aparte y sin
+            // fallar: una base sin esas columnas devuelve lo de siempre.
+            if let Ok(mut filas) = conn
+                .query("SELECT razon_social, facturacion_proveedor FROM configuracion_tienda LIMIT 1", ())
+                .await
+            {
+                if let Ok(Some(f)) = filas.next().await {
+                    config.razon_social = f.get::<String>(0).ok().filter(|s| !s.trim().is_empty());
+                    config.facturacion_proveedor = f.get::<String>(1).ok();
+                }
+            }
             // Todos los usuarios leen la configuración (nombre, RUC, series...),
             // pero el token de FacturaLibre es un secreto: solo lo ve el
             // administrador. Al cajero se le envía enmascarado para que el POS

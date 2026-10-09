@@ -132,6 +132,38 @@ pub async fn cerrar_caja(
     }))
 }
 
+/// Efectivo que debería haber ahora en la caja (el mismo cálculo del
+/// cierre): monto inicial + ventas en efectivo + ingresos − retiros − gastos.
+pub async fn efectivo_en_caja(conn: &libsql::Connection, caja_id: i64) -> Result<f64, (StatusCode, String)> {
+    let mut filas = conn
+        .query(
+            "SELECT CAST(COALESCE(monto_inicial, 0) + COALESCE(ventas_efectivo, 0) + COALESCE(ingresos_total, 0)
+                         - COALESCE(retiros_total, 0) - COALESCE(gastos_total, 0) AS REAL)
+             FROM cajas WHERE id = ?1",
+            libsql::params![caja_id],
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    match filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        Some(f) => Ok(f.get::<f64>(0).unwrap_or(0.0)),
+        None => Err((StatusCode::BAD_REQUEST, "La caja no existe".into())),
+    }
+}
+
+/// No se puede sacar de la caja más efectivo del que hay: el efectivo
+/// esperado nunca queda negativo. Lo que se pagó con plata de otro lado
+/// (o por Yape) se registra en Gastos con esa forma de pago.
+pub fn alcanza_efectivo(disponible: f64, monto: f64) -> Result<(), String> {
+    if monto > disponible + 0.005 {
+        let hay = disponible.max(0.0);
+        return Err(format!(
+            "En la caja solo hay S/ {:.2} en efectivo y quieres sacar S/ {:.2}. Si lo pagaste con plata de otro lado o por Yape/Plin, regístralo en Gastos con esa forma de pago.",
+            hay, monto
+        ));
+    }
+    Ok(())
+}
+
 pub async fn registrar_movimiento(
     Extension(tenant): Extension<Arc<TenantDb>>,
     Extension(claims): Extension<Claims>,
@@ -153,6 +185,12 @@ pub async fn registrar_movimiento(
 
     if rows.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?.is_none() {
         return Err((StatusCode::BAD_REQUEST, "La caja no existe o ya está cerrada".into()));
+    }
+    drop(rows);
+
+    if payload.tipo != "INGRESO" {
+        let disponible = efectivo_en_caja(&conn, payload.caja_id).await?;
+        alcanza_efectivo(disponible, payload.monto).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     }
 
     conn.execute(
@@ -177,6 +215,63 @@ pub async fn registrar_movimiento(
         message: "Movimiento registrado".into(),
         caja_id: Some(payload.caja_id),
     }))
+}
+
+#[derive(serde::Serialize)]
+pub struct MovimientoCaja {
+    pub id: i64,
+    /// RETIRO | INGRESO | GASTO
+    pub tipo: String,
+    pub monto: f64,
+    pub motivo: String,
+    pub hora: String,
+    pub usuario: String,
+    /// Si es un gasto registrado en el módulo Gastos, su número.
+    pub gasto_id: Option<i64>,
+}
+
+/// GET /cajas/movimientos — gastos, retiros e ingresos de la caja abierta,
+/// del más reciente al más antiguo.
+pub async fn movimientos_caja_abierta(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+) -> Result<Json<Vec<MovimientoCaja>>, (StatusCode, String)> {
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // La base (Turso) guarda la hora en UTC: se muestra la de Perú.
+    const COLUMNAS: &str = "m.id, m.tipo, CAST(m.monto AS REAL), m.motivo,
+         COALESCE(strftime('%H:%M', m.fecha_hora, '-5 hours'), ''), COALESCE(u.nombre_completo, '')";
+    const DESDE: &str = "FROM movimientos_caja m
+         JOIN cajas c ON c.id = m.caja_id AND c.estado = 'ABIERTA'
+         LEFT JOIN usuarios u ON u.id = m.usuario_id";
+    // Con el número de gasto (migración 0022); sin ella, la consulta simple.
+    let mut filas = match conn
+        .query(
+            &format!(
+                "SELECT {}, (SELECT g.id FROM gastos g WHERE g.movimiento_caja_id = m.id) {} ORDER BY m.id DESC",
+                COLUMNAS, DESDE
+            ),
+            (),
+        )
+        .await
+    {
+        Ok(f) => f,
+        Err(_) => conn
+            .query(&format!("SELECT {}, NULL {} ORDER BY m.id DESC", COLUMNAS, DESDE), ())
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
+    };
+    let mut lista = Vec::new();
+    while let Some(f) = filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        lista.push(MovimientoCaja {
+            id: f.get(0).unwrap_or_default(),
+            tipo: f.get(1).unwrap_or_default(),
+            monto: f.get(2).unwrap_or(0.0),
+            motivo: f.get(3).unwrap_or_default(),
+            hora: f.get(4).unwrap_or_default(),
+            usuario: f.get(5).unwrap_or_default(),
+            gasto_id: f.get(6).unwrap_or(None),
+        });
+    }
+    Ok(Json(lista))
 }
 
 /// Columnas de la migración 0019, al final de cada consulta de cajas.
@@ -289,4 +384,19 @@ pub async fn listar_cajas(
     }
 
     Ok(Json(cajas))
+}
+#[cfg(test)]
+mod pruebas {
+    use super::alcanza_efectivo;
+
+    #[test]
+    fn no_se_saca_mas_efectivo_del_que_hay() {
+        assert!(alcanza_efectivo(27.5, 27.5).is_ok());
+        assert!(alcanza_efectivo(27.5, 10.0).is_ok());
+        // La venta fue por Yape: en la caja no hay efectivo.
+        let error = alcanza_efectivo(0.0, 10.0).unwrap_err();
+        assert!(error.contains("S/ 0.00") && error.contains("S/ 10.00"));
+        // Una caja que ya quedó en negativo no muestra "hay S/ -12".
+        assert!(alcanza_efectivo(-12.0, 1.0).unwrap_err().contains("S/ 0.00"));
+    }
 }

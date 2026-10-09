@@ -23,6 +23,10 @@ pub struct ConfiguracionTienda {
     pub rubro: String,
     /// Módulos encendidos (MESAS, SERVICIOS...).
     pub modulos: Vec<String>,
+    /// Razón social exacta (va en los comprobantes junto al nombre comercial).
+    pub razon_social: Option<String>,
+    /// 'SUNAT_DIRECTO' = emite directo a SUNAT; otro valor = FacturaLibre.
+    pub facturacion_proveedor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

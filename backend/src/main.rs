@@ -142,6 +142,10 @@ async fn main() {
         });
     }
 
+    // Reintento automático de lo que quedó pendiente con SUNAT (solo con
+    // SUNAT_REINTENTOS=1 y LYCET_URL en el .env; ver handlers/envios_sunat.rs).
+    handlers::envios_sunat::iniciar_tarea(state.clone());
+
     let origenes_permitidos = AllowOrigin::list([
         HeaderValue::from_static("https://frontend-sigma-three-23.vercel.app"),
         HeaderValue::from_static("http://localhost:5173"),
@@ -156,6 +160,7 @@ async fn main() {
         .route("/login", post(handlers::auth::login))
         .route("/login/identificar", post(handlers::auth::identificar_usuario))
         .route("/registro", post(handlers::registro::registrar_negocio))
+        .route("/panel/login", post(handlers::panel::login))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_login));
 
     let rutas_verificacion = Router::new()
@@ -215,6 +220,12 @@ async fn main() {
         .route("/cajas/cerrar", post(handlers::cajas::cerrar_caja))
         .route("/cajas/movimiento", post(handlers::cajas::registrar_movimiento))
         .route("/cajas/abierta", get(handlers::cajas::obtener_caja_abierta))
+        .route("/cajas/movimientos", get(handlers::cajas::movimientos_caja_abierta))
+        // Gastos del negocio (alquiler, luz, sueldos...); ver handlers/gastos.rs.
+        .route("/gastos", get(handlers::gastos::listar).post(handlers::gastos::registrar))
+        .route("/gastos/:id/anular", post(handlers::gastos::anular))
+        .route("/gastos/categorias", get(handlers::gastos::listar_categorias).post(handlers::gastos::crear_categoria))
+        .route("/gastos/categorias/:id", axum::routing::put(handlers::gastos::actualizar_categoria))
         .route("/cajas", get(handlers::cajas::listar_cajas))
         .route("/proveedores", get(handlers::proveedores::obtener_proveedores))
         .route("/proveedores", post(handlers::proveedores::agregar_proveedor))
@@ -235,6 +246,23 @@ async fn main() {
         .route("/comprobantes/:id/pdf", get(handlers::comprobantes::descargar_pdf))
         .route("/comprobantes/:id/xml", get(handlers::comprobantes::descargar_xml))
         .route("/comprobantes/:id/cdr", get(handlers::comprobantes::descargar_cdr))
+        .route("/comprobantes/:id/documento", get(handlers::comprobantes::documento_enviado))
+        // Emisión directa: reenviar un pendiente y avisos de plazos de SUNAT.
+        .route("/comprobantes/:id/reenviar", post(handlers::envios_sunat::reenviar))
+        .route("/sunat/avisos", get(handlers::envios_sunat::avisos))
+        // Notas de crédito (emisión directa); ver handlers/notas_credito.rs.
+        .route(
+            "/comprobantes/:id/nota-credito",
+            get(handlers::notas_credito::preparar).post(handlers::notas_credito::emitir),
+        )
+        .route("/notas-credito/:id/reenviar", post(handlers::notas_credito::reenviar))
+        // Anulación (baja de facturas, resumen diario de boletas); ver handlers/anulaciones.rs.
+        .route("/comprobantes/:id/anulacion", get(handlers::anulaciones::preparar))
+        .route("/comprobantes/:id/anular", post(handlers::anulaciones::anular))
+        .route("/comprobantes/:id/anulacion/consultar", post(handlers::anulaciones::consultar))
+        .route("/notas-credito/:id/documento", get(handlers::notas_credito::documento))
+        .route("/notas-credito/:id/xml", get(handlers::notas_credito::descargar_xml))
+        .route("/notas-credito/:id/cdr", get(handlers::notas_credito::descargar_cdr))
         .route("/impresora/imprimir", post(handlers::impresora::imprimir_boleta))
         .route("/configuracion", get(handlers::configuracion::obtener_configuracion))
         .route("/configuracion", axum::routing::put(handlers::configuracion::actualizar_configuracion))
@@ -284,6 +312,8 @@ async fn main() {
         .route("/guias/venta/:folio", get(handlers::guias::venta_para_guia))
         .route("/guias/:id", get(handlers::guias::detalle))
         .route("/guias/:id/consultar", post(handlers::guias::consultar))
+        .route("/guias/:id/xml", get(handlers::guias_directas::descargar_xml))
+        .route("/guias/:id/cdr", get(handlers::guias_directas::descargar_cdr))
         .route("/configuracion/guias", axum::routing::put(handlers::guias::guardar_config))
         .route("/configuracion/detraccion", axum::routing::put(handlers::detraccion::guardar_detraccion))
         // Ropa y calzado: tallas y colores, y cambio de prenda.
@@ -303,8 +333,28 @@ async fn main() {
         .route("/suscripcion/estado", get(handlers::suscripcion::estado_suscripcion))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), middleware_auth::requiere_auth));
 
+    // Panel de Monspeet (el dueño del sistema, no un negocio). Su propio
+    // login y su propio middleware; apagado si faltan PANEL_USUARIO y
+    // PANEL_CLAVE en el .env. Ver handlers/panel.rs.
+    let rutas_panel = Router::new()
+        .route("/panel/negocios", get(handlers::panel::listar_negocios))
+        .route("/panel/negocios/:id/renovar", post(handlers::panel::renovar))
+        .route("/panel/negocios/:id/estado", post(handlers::panel::cambiar_estado))
+        .route("/panel/negocios/:id/vencimiento", axum::routing::put(handlers::panel::fijar_vencimiento))
+        .route("/panel/negocios/:id/facturacion", get(handlers::panel::detalle_facturacion))
+        .route("/panel/negocios/:id/facturacion/datos", axum::routing::put(handlers::panel::guardar_datos))
+        .route(
+            "/panel/negocios/:id/facturacion/alta",
+            post(handlers::panel::dar_de_alta).layer(DefaultBodyLimit::max(2 * 1024 * 1024)),
+        )
+        .route("/panel/negocios/:id/facturacion/modo", axum::routing::put(handlers::panel::cambiar_modo))
+        .route("/panel/negocios/:id/facturacion/probar", post(handlers::panel::probar_conexion))
+        .route("/panel/codigos", get(handlers::panel::listar_codigos).post(handlers::panel::generar_codigo_panel))
+        .route_layer(axum::middleware::from_fn_with_state(state.clone(), handlers::panel::requiere_panel));
+
     let app = rutas_publicas
         .merge(rutas_protegidas)
+        .merge(rutas_panel)
         .with_state(state)
         .layer(cors);
 

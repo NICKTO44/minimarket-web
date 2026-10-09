@@ -68,6 +68,10 @@ pub struct CambioVenta {
     pub productos: Vec<CambioItem>,
     #[serde(default)]
     pub motivo: Option<String>,
+    /// Emisión directa: el cajero pidió la nota de crédito de lo devuelto
+    /// (si la venta original tiene boleta o factura aceptada).
+    #[serde(default)]
+    pub emitir_nota_credito: bool,
 }
 
 /// Línea revisada: (detalle_id, producto_id, cantidad, valor unitario, subtotal, con falla).
@@ -92,6 +96,11 @@ pub struct CambioHecho {
     pub total_nuevo: f64,
     /// Positivo: el cliente pagó esa diferencia. Negativo: se le devolvió.
     pub diferencia: f64,
+    #[serde(skip)]
+    pub devolucion_id: i64,
+    /// La nota de crédito de lo devuelto, si el cajero la pidió.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nota_credito: Option<crate::handlers::notas_credito::NotaDeDevolucion>,
 }
 
 /// Una línea de la venta original con lo que aún se puede cambiar.
@@ -334,6 +343,8 @@ pub async fn registrar(
         valor_devuelto: listo.valor,
         total_nuevo: round2(total_nuevo),
         diferencia,
+        devolucion_id,
+        nota_credito: None,
     })
 }
 
@@ -368,6 +379,9 @@ pub struct VentaParaCambio {
     pub fuera_de_plazo: bool,
     /// Venta al crédito: no se cambia desde aquí.
     pub al_credito: bool,
+    /// La venta tiene boleta o factura directa aceptada por SUNAT: el cajero
+    /// puede emitir la nota de crédito de lo que el cliente devuelve.
+    pub nota_credito_posible: bool,
 }
 
 /// GET /cambios/venta/:identificador — la venta (por folio o número de
@@ -408,6 +422,9 @@ pub async fn venta_para_cambio(
         limite: original.limite,
         fuera_de_plazo,
         al_credito: original.al_credito,
+        nota_credito_posible: crate::handlers::notas_credito::comprobante_directo_de_venta(&conn, base.venta_id)
+            .await
+            .is_some_and(|(_, _, estado)| estado == "ACEPTADO"),
     }))
 }
 

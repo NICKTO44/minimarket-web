@@ -648,5 +648,15 @@ pub async fn procesar_venta(
         }
     };
 
+    // Cambio de prenda con nota de crédito pedida por el cajero: va después
+    // de confirmar la venta (la nota no deshace nada si falla; se avisa).
+    let mut cambio_prenda = cambio_prenda;
+    if let Some(hecho) = cambio_prenda.as_mut() {
+        if payload.cambio_prenda.as_ref().is_some_and(|c| c.emitir_nota_credito) {
+            hecho.nota_credito =
+                crate::handlers::notas_credito::emitir_por_devolucion(&conn, hecho.devolucion_id, Some(usuario_id)).await;
+        }
+    }
+
     Ok(Json(VentaResult { venta_id, folio, cambio_prenda }))
 }

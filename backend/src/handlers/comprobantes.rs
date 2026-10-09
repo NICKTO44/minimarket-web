@@ -42,7 +42,16 @@ pub async fn listar_comprobantes(
          LEFT JOIN comprobantes_electronicos ce ON ce.venta_id = v.id
          LEFT JOIN clientes c ON c.id = v.cliente_id
          WHERE v.estado = 'COMPLETADA'",
-            if con_archivos { ", ce.enlace_xml, ce.enlace_cdr" } else { "" }
+            // Emitidos directo a SUNAT: el XML y el CDR están en
+            // comprobante_archivos (migración 0020), no en un enlace.
+            if con_archivos {
+                ", ce.enlace_xml, ce.enlace_cdr,
+                 (SELECT a.xml IS NOT NULL FROM comprobante_archivos a WHERE a.comprobante_id = ce.id),
+                 (SELECT a.cdr_zip IS NOT NULL FROM comprobante_archivos a WHERE a.comprobante_id = ce.id),
+                 ce.proveedor"
+            } else {
+                ""
+            }
         );
 
         let mut idx = 1;
@@ -80,6 +89,8 @@ pub async fn listar_comprobantes(
         let enlace_pdf: Option<String> = row.get(11).ok();
         let enlace_cdr = limpio(row.get(16).ok());
         let enlace_xml = enlace_xml_de(row.get(15).ok(), enlace_cdr.as_deref(), enlace_pdf.as_deref());
+        let xml_guardado = row.get::<i64>(17).unwrap_or(0) == 1;
+        let cdr_guardado = row.get::<i64>(18).unwrap_or(0) == 1;
         comprobantes.push(ComprobanteResumen {
             id: row.get(0).ok(),
             venta_id: row.get(1).unwrap_or_default(),
@@ -97,9 +108,29 @@ pub async fn listar_comprobantes(
             cliente_documento: row.get(13).ok(),
             ruc_emisor: ruc_emisor.clone(),
             fecha_emision_corta: row.get(14).ok(),
-            tiene_xml: enlace_xml.is_some(),
-            tiene_cdr: enlace_cdr.is_some(),
+            tiene_xml: enlace_xml.is_some() || xml_guardado,
+            tiene_cdr: enlace_cdr.is_some() || cdr_guardado,
+            proveedor: row.get::<String>(19).ok(),
+            notas: Vec::new(),
+            anulacion: None,
         });
+    }
+
+    // Notas de crédito de los comprobantes directos de la página.
+    let directos: Vec<i64> = comprobantes
+        .iter()
+        .filter(|c| c.proveedor.as_deref() == Some("SUNAT_DIRECTO"))
+        .filter_map(|c| c.id)
+        .collect();
+    let mut notas = crate::handlers::notas_credito::notas_de(&conn, &directos).await;
+    let mut anulaciones = crate::handlers::anulaciones::anulaciones_de(&conn, &directos).await;
+    for c in comprobantes.iter_mut() {
+        if let Some(id) = c.id {
+            if let Some(n) = notas.remove(&id) {
+                c.notas = n;
+            }
+            c.anulacion = anulaciones.remove(&id);
+        }
     }
 
     Ok(Json(comprobantes))
@@ -207,9 +238,21 @@ fn tipo_de_contenido(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
 
 async fn descargar_archivo(tenant: Arc<TenantDb>, id: i64, archivo: Archivo) -> Result<Response, (StatusCode, String)> {
     // La base se consulta y se suelta antes de salir a buscar el archivo.
-    let (tipo, serie, numero, estado, enlace_xml, enlace_cdr, ruc) = {
+    let (tipo, serie, numero, estado, enlace_xml, enlace_cdr, ruc, guardados) = {
         let interno = |e: libsql::Error| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
         let conn = tenant.0.connect().map_err(interno)?;
+        // Emitidos directo a SUNAT: XML y CDR (ZIP en base64) guardados en la
+        // base. Si la tabla no existe todavía, se sigue con los enlaces.
+        let guardados: (Option<String>, Option<String>) = match conn
+            .query("SELECT xml, cdr_zip FROM comprobante_archivos WHERE comprobante_id = ?1", libsql::params![id])
+            .await
+        {
+            Ok(mut filas) => match filas.next().await {
+                Ok(Some(f)) => (limpio(f.get(0).ok()), limpio(f.get(1).ok())),
+                _ => (None, None),
+            },
+            Err(_) => (None, None),
+        };
         let sql = |columna_xml: &str| {
             format!(
                 "SELECT tipo, serie, numero, estado, {}, enlace_cdr, enlace_pdf,
@@ -241,6 +284,7 @@ async fn descargar_archivo(tenant: Arc<TenantDb>, id: i64, archivo: Archivo) -> 
             enlace_xml,
             enlace_cdr,
             limpio(fila.get(7).ok()),
+            guardados,
         )
     };
 
@@ -251,34 +295,50 @@ async fn descargar_archivo(tenant: Arc<TenantDb>, id: i64, archivo: Archivo) -> 
         ));
     }
 
-    let (enlace, que) = match archivo {
-        Archivo::Xml => (enlace_xml, "el XML"),
-        Archivo::Cdr => (enlace_cdr, "la constancia de SUNAT (CDR)"),
-    };
-    let enlace = enlace.ok_or((StatusCode::NOT_FOUND, format!("Este comprobante no tiene {} disponible.", que)))?;
-
-    let no_llego = || match archivo {
-        Archivo::Xml => (StatusCode::BAD_GATEWAY, "FacturaLibre no entregó el XML. Intenta de nuevo en un momento.".to_string()),
-        Archivo::Cdr => (
-            StatusCode::BAD_GATEWAY,
-            "La constancia de SUNAT (CDR) de este comprobante todavía no está disponible. Intenta más tarde.".to_string(),
-        ),
+    let guardado: Option<Vec<u8>> = match archivo {
+        Archivo::Xml => guardados.0.map(String::into_bytes),
+        Archivo::Cdr => guardados.1.and_then(|b64| {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD.decode(b64.trim()).ok()
+        }),
     };
 
-    let cliente = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let resp = cliente
-        .get(&enlace)
-        .send()
-        .await
-        .map_err(|_| (StatusCode::BAD_GATEWAY, "No se pudo conectar con FacturaLibre. Intenta de nuevo en un momento.".to_string()))?;
-    if !resp.status().is_success() {
-        return Err(no_llego());
-    }
-    let bytes = resp.bytes().await.map_err(|_| no_llego())?;
-    let (tipo_mime, extension) = tipo_de_contenido(&bytes).ok_or_else(no_llego)?;
+    let bytes: Vec<u8> = match guardado {
+        Some(bytes) => bytes,
+        None => {
+            let (enlace, que) = match archivo {
+                Archivo::Xml => (enlace_xml, "el XML"),
+                Archivo::Cdr => (enlace_cdr, "la constancia de SUNAT (CDR)"),
+            };
+            let enlace = enlace.ok_or((StatusCode::NOT_FOUND, format!("Este comprobante no tiene {} disponible.", que)))?;
+
+            let no_llego = || match archivo {
+                Archivo::Xml => (StatusCode::BAD_GATEWAY, "FacturaLibre no entregó el XML. Intenta de nuevo en un momento.".to_string()),
+                Archivo::Cdr => (
+                    StatusCode::BAD_GATEWAY,
+                    "La constancia de SUNAT (CDR) de este comprobante todavía no está disponible. Intenta más tarde.".to_string(),
+                ),
+            };
+
+            let cliente = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            let resp = cliente
+                .get(&enlace)
+                .send()
+                .await
+                .map_err(|_| (StatusCode::BAD_GATEWAY, "No se pudo conectar con FacturaLibre. Intenta de nuevo en un momento.".to_string()))?;
+            if !resp.status().is_success() {
+                return Err(no_llego());
+            }
+            resp.bytes().await.map_err(|_| no_llego())?.to_vec()
+        }
+    };
+    let (tipo_mime, extension) = tipo_de_contenido(&bytes).ok_or((
+        StatusCode::BAD_GATEWAY,
+        "El archivo de este comprobante no es válido. Intenta de nuevo en un momento.".to_string(),
+    ))?;
 
     // Nombre con el que SUNAT identifica al comprobante:
     // RUC-tipo-serie-número (y "R-" delante para la constancia).
@@ -312,4 +372,26 @@ pub async fn descargar_cdr(
     Path(id): Path<i64>,
 ) -> Result<Response, (StatusCode, String)> {
     descargar_archivo(tenant, id, Archivo::Cdr).await
+}
+
+/// GET /comprobantes/:id/documento — el documento tal como se envió a SUNAT
+/// (solo emisión directa). El frontend arma con él el A4, así la hoja
+/// impresa coincide exactamente con el XML: mismas líneas, cuotas y fechas.
+pub async fn documento_enviado(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Path(id): Path<i64>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let no_hay = || (StatusCode::NOT_FOUND, "Este comprobante no tiene documento guardado.".to_string());
+    let mut filas = conn
+        .query("SELECT documento FROM comprobante_archivos WHERE comprobante_id = ?1", libsql::params![id])
+        .await
+        .map_err(|_| no_hay())?;
+    let texto: String = match filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        Some(f) => f.get(0).map_err(|_| no_hay())?,
+        None => return Err(no_hay()),
+    };
+    serde_json::from_str(&texto)
+        .map(Json)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "El documento guardado no es válido.".to_string()))
 }

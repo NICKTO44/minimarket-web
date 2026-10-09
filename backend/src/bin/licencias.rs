@@ -3,7 +3,7 @@ use std::env;
 use libsql::Builder;
 use minimarket_backend::{
     crypto,
-    licencias_logica::{calcular_nueva_fecha, generar_codigo, hoy},
+    licencias_logica::{calcular_nueva_fecha, generar_codigo, hoy, normalizar_unidad},
     tenants::RegistroTiendas,
 };
 
@@ -161,15 +161,6 @@ async fn cambiar_estado(conn: &libsql::Connection, identificador: &str, estado: 
         println!("No se encontró ningún negocio con identificador '{}'.", identificador);
     } else {
         println!("✅ {} -> {}", identificador, estado);
-    }
-}
-
-fn normalizar_unidad(unidad: &str) -> Option<&'static str> {
-    match unidad {
-        "dia" | "dias" | "día" | "días" => Some("DIA"),
-        "mes" | "meses" => Some("MES"),
-        "anio" | "anios" | "año" | "años" => Some("ANIO"),
-        _ => None,
     }
 }
 

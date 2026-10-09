@@ -329,6 +329,10 @@ mod pruebas {
             (&g, "/ganancias"),
             (&g, "/igv/venta/3"),
             (&g, "/documentos/consultar"),
+            (&g, "/gastos"),
+            (&p, "/gastos"),
+            (&g, "/gastos/categorias"),
+            (&g, "/cajas/movimientos"),
             // Empiezan parecido a una ruta permitida, pero son otra cosa.
             (&g, "/productos-secretos"),
             (&p, "/reportes/ventas"),

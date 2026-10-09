@@ -68,9 +68,25 @@ pub async fn aplicar_migraciones_a_tienda(
         let contenido = std::fs::read_to_string(&ruta)
             .map_err(|e| format!("{}: no se pudo leer el archivo: {}", nombre, e))?;
 
-        conn.execute_batch(&contenido)
-            .await
-            .map_err(|e| format!("{}: error aplicando la migración: {}", nombre, e))?;
+        if let Err(e) = conn.execute_batch(&contenido).await {
+            let error = e.to_string();
+            // Un corte a mitad de un archivo deja aplicadas sus primeras
+            // sentencias (cada ALTER TABLE se guarda solo) y el reintento
+            // choca con "duplicate column name". Se completa sentencia por
+            // sentencia, saltando lo que ya existe. Solo en archivos sin
+            // triggers (sus BEGIN...END llevan ';' por dentro).
+            if !(error.contains("duplicate column name") && !contenido.to_uppercase().contains("CREATE TRIGGER")) {
+                return Err(format!("{}: error aplicando la migración: {}", nombre, error));
+            }
+            for sentencia in sentencias(&contenido) {
+                if let Err(e) = conn.execute(&sentencia, ()).await {
+                    let e = e.to_string();
+                    if !(e.contains("duplicate column name") || e.contains("already exists")) {
+                        return Err(format!("{}: error aplicando la migración: {}", nombre, e));
+                    }
+                }
+            }
+        }
 
         conn.execute(
             "INSERT INTO _migraciones_aplicadas (nombre) VALUES (?1)",
@@ -84,6 +100,34 @@ pub async fn aplicar_migraciones_a_tienda(
 
     Ok(aplicadas)
 }
+/// Las sentencias de un archivo de migración sin triggers: sin los
+/// comentarios de línea y separadas por ';'.
+fn sentencias(sql: &str) -> Vec<String> {
+    let sin_comentarios: String = sql
+        .lines()
+        .map(|l| match l.find("--") {
+            Some(i) => &l[..i],
+            None => l,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    sin_comentarios.split(';').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect()
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::sentencias;
+
+    #[test]
+    fn separa_sentencias() {
+        let sql = "-- Comentario; con punto y coma\nALTER TABLE a ADD COLUMN b TEXT; -- otro\nCREATE INDEX IF NOT EXISTS i ON a(b);\n\nALTER TABLE a ADD COLUMN c TEXT DEFAULT 'x';\n";
+        assert_eq!(
+            sentencias(sql),
+            vec!["ALTER TABLE a ADD COLUMN b TEXT", "CREATE INDEX IF NOT EXISTS i ON a(b)", "ALTER TABLE a ADD COLUMN c TEXT DEFAULT 'x'"]
+        );
+    }
+}
+
 /// Solo LEE: ventas que quedaron registradas sin ningún producto. Es la
 /// huella de una venta que se cortó a mitad de camino antes de que todo se
 /// guardara en una sola transacción (ver handlers/ventas.rs). Devuelve

@@ -129,7 +129,30 @@ pub async fn procesar_devolucion(
     Json(payload): Json<NuevaDevolucion>,
 ) -> Result<Json<DevolucionResponse>, (StatusCode, String)> {
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let (devolucion_id, folio_devolucion) = registrar_devolucion(&conn, claims.sub, &payload).await?;
 
+    // Si la venta tiene boleta o factura emitida directo a SUNAT, la nota de
+    // crédito de lo devuelto sale sola. La devolución ya quedó registrada:
+    // si la nota falla, se avisa y se puede emitir desde Comprobantes.
+    let nota_credito = crate::handlers::notas_credito::emitir_por_devolucion(&conn, devolucion_id, Some(claims.sub)).await;
+
+    Ok(Json(DevolucionResponse {
+        success: true,
+        message: "Devolución procesada exitosamente".into(),
+        folio_devolucion: Some(folio_devolucion),
+        nota_credito,
+    }))
+}
+
+/// Registra una devolución: revisa las cantidades, devuelve el dinero por el
+/// medio que corresponde (la caja y Yape/Plin) y el stock (trigger de
+/// detalles_devolucion). La usan Devoluciones y la anulación de un
+/// comprobante. Devuelve (id, folio) de la devolución.
+pub async fn registrar_devolucion(
+    conn: &libsql::Connection,
+    usuario_id: i64,
+    payload: &NuevaDevolucion,
+) -> Result<(i64, String), (StatusCode, String)> {
     let fecha_actual = Local::now().format("%Y%m%d").to_string();
     let query_folio = format!(
         "SELECT COALESCE(MAX(CAST(substr(folio_devolucion,-4) AS INTEGER)),0)+1
@@ -199,7 +222,7 @@ pub async fn procesar_devolucion(
             // Venta al crédito: lo devuelto se descuenta de la deuda (si la
             // deuda pendiente no alcanza, hay que devolver en efectivo).
             if otro == crate::handlers::creditos::METODO_CREDITO {
-                crate::handlers::creditos::descontar_devolucion(&conn, payload.venta_id, monto_total).await?;
+                crate::handlers::creditos::descontar_devolucion(conn, payload.venta_id, monto_total).await?;
             }
             otro
         } else {
@@ -217,7 +240,7 @@ pub async fn procesar_devolucion(
     conn.execute(
         "INSERT INTO devoluciones (venta_original_id, folio_devolucion, monto_reembolsado, metodo_reembolso, motivo, usuario_id, estado)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'PROCESADA')",
-        libsql::params![payload.venta_id, folio_devolucion.clone(), monto_total, metodo_reembolso, payload.motivo.clone(), claims.sub],
+        libsql::params![payload.venta_id, folio_devolucion.clone(), monto_total, metodo_reembolso, payload.motivo.clone(), usuario_id],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar devolución: {}", e)))?;
 
     let devolucion_id = conn.last_insert_rowid();
@@ -225,8 +248,8 @@ pub async fn procesar_devolucion(
     // Devuelto por Yape o Plin: sale también de su línea en la caja (el
     // trigger ya lo restó del total de transferencias). No puede fallar.
     if metodo_para_caja == crate::handlers::billeteras::YAPE_PLIN {
-        let billetera = crate::handlers::billeteras::de_venta(&conn, payload.venta_id).await;
-        crate::handlers::billeteras::descontar(&conn, claims.sub, billetera.as_deref(), monto_total).await;
+        let billetera = crate::handlers::billeteras::de_venta(conn, payload.venta_id).await;
+        crate::handlers::billeteras::descontar(conn, usuario_id, billetera.as_deref(), monto_total).await;
     }
 
     for p in &payload.productos {
@@ -246,9 +269,5 @@ pub async fn procesar_devolucion(
         ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar detalle: {}", e)))?;
     }
 
-    Ok(Json(DevolucionResponse {
-        success: true,
-        message: "Devolución procesada exitosamente".into(),
-        folio_devolucion: Some(folio_devolucion),
-    }))
+    Ok((devolucion_id, folio_devolucion))
 }

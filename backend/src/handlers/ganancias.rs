@@ -346,6 +346,10 @@ pub struct MesGanancia {
     pub sin_costo: f64,
     /// Lo que se gastó en mercadería que entró ese mes.
     pub compras: f64,
+    /// Gastos del negocio del mes (alquiler, luz, sueldos...; módulo Gastos).
+    pub gastos: f64,
+    /// Ganancia de las ventas menos los gastos del negocio.
+    pub ganancia_neta: f64,
     /// Parte del costo se calculó con el precio de compra de hoy (ventas
     /// anteriores a encender el módulo).
     pub estimado: bool,
@@ -446,6 +450,8 @@ pub async fn reporte(
             margen: None,
             sin_costo: 0.0,
             compras: 0.0,
+            gastos: 0.0,
+            ganancia_neta: 0.0,
             estimado: false,
         })
         .collect();
@@ -538,12 +544,22 @@ pub async fn reporte(
     }
     drop(filas);
 
+    // 3b. Gastos del negocio de cada mes (la fecha del gasto ya es de Perú).
+    let primer_dia_rango = sumar_meses(mes, -11).format("%Y-%m-%d").to_string();
+    let ultimo_dia_mes = sumar_meses(mes, 1).pred_opt().unwrap_or(mes).format("%Y-%m-%d").to_string();
+    for (clave_mes, total) in crate::handlers::gastos::totales_por_mes(&conn, &primer_dia_rango, &ultimo_dia_mes).await {
+        if let Some(i) = posicion.get(&clave_mes) {
+            meses[*i].gastos = redondear_2(total);
+        }
+    }
+
     for m in &mut meses {
         m.vendido = redondear_2(m.vendido);
         m.vendido_con_costo = redondear_2(m.vendido_con_costo);
         m.costo = redondear_2(m.costo);
         m.sin_costo = redondear_2(m.vendido - m.vendido_con_costo);
         m.ganancia = redondear_2(m.vendido_con_costo - m.costo);
+        m.ganancia_neta = redondear_2(m.ganancia - m.gastos);
         m.margen = Some(m.vendido_con_costo).filter(|v| *v > 0.005).map(|v| (m.ganancia / v * 1000.0).round() / 10.0);
     }
 

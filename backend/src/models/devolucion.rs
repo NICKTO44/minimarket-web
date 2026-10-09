@@ -56,4 +56,8 @@ pub struct DevolucionResponse {
     pub success: bool,
     pub message: String,
     pub folio_devolucion: Option<String>,
+    /// Emisión directa: la nota de crédito de lo devuelto (o por qué no se
+    /// emitió). Ausente si la venta no tiene comprobante directo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nota_credito: Option<crate::handlers::notas_credito::NotaDeDevolucion>,
 }
