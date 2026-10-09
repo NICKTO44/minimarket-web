@@ -4,6 +4,11 @@
 // coincidan siempre.
 
 export const UNIDAD_PIE_TABLAR = 'PIE_TABLAR';
+
+// Unidades que se venden por fracción (0.75 kg, 1/2 litro, 2.5 m): al
+// agregarlas al carrito se pregunta cuánto se lleva.
+const UNIDADES_FRACCIONADAS = new Set(['KG', 'GRAMO', 'LIBRA', 'ONZA', 'LITRO', 'ML', 'METRO']);
+export const seVendeFraccionado = (unidad) => UNIDADES_FRACCIONADAS.has(unidad);
 export const PIES_POR_METRO = 3.28084;
 
 export const redondear2 = (n) => Math.round(n * 100) / 100;

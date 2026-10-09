@@ -1,10 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
-import { api } from '../../api/api';
+import { api, API_URL } from '../../api/api';
+import { datosA4DeDocumento, imprimirComprobanteA4 } from '../../utils/facturaA4';
 import Recibo from '../../components/Recibo';
+import FormularioNotaCredito from '../../components/FormularioNotaCredito';
+import FormularioAnulacion from '../../components/FormularioAnulacion';
+import { imprimirNotaCredito } from '../../utils/notaCredito';
 import '../../components/Recibo.css';
-import { fechaHoraLima } from '../../utils/formato';
+import { fechaHoraLima, hoyLima } from '../../utils/formato';
 import { descargarArchivo, pdfDeVenta } from '../../utils/pdfTicket';
 import './Comprobantes.css';
 
@@ -36,6 +40,25 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   const [pdfCargando, setPdfCargando] = useState(false);
   const [pdfError, setPdfError] = useState(null);
   const pdfContenedorRef = useRef(null);
+  // Configuración del negocio: razón social, logo y color para el A4.
+  const [cfgEmisor, setCfgEmisor] = useState(null);
+  // Emisión directa: lo que todavía no llega a SUNAT y la fila que se está
+  // reenviando.
+  const [avisos, setAvisos] = useState(null);
+  const [reenviando, setReenviando] = useState(null);
+  // Comprobante para el que se está emitiendo una nota de crédito.
+  const [notaPara, setNotaPara] = useState(null);
+  const cerrarNota = useCallback(() => setNotaPara(null), []);
+  // Comprobante que se está anulando.
+  const [anularPara, setAnularPara] = useState(null);
+  const cerrarAnular = useCallback(() => setAnularPara(null), []);
+
+  useEffect(() => {
+    api
+      .configuracionObtener()
+      .then(setCfgEmisor)
+      .catch(() => setCfgEmisor(null));
+  }, []);
 
   const cargar = () => {
     setCargando(true);
@@ -47,6 +70,56 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
       .then(setComprobantes)
       .catch((e) => setMensaje({ tipo: 'error', texto: e.message }))
       .finally(() => setCargando(false));
+    api
+      .sunatAvisos()
+      .then(setAvisos)
+      .catch(() => setAvisos(null));
+  };
+
+  // Fila o nota que se reenvía: { clave, nombre, enviar }.
+  const reenviarAlgo = async (clave, nombre, enviar) => {
+    setReenviando(clave);
+    setMensaje(null);
+    try {
+      const r = await enviar();
+      setMensaje(
+        r.estado === 'ACEPTADO'
+          ? { tipo: 'ok', texto: `${nombre}: aceptado por SUNAT.` }
+          : { tipo: r.estado === 'PENDIENTE' ? 'aviso' : 'error', texto: `${nombre}: ${r.mensaje}` }
+      );
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    } finally {
+      setReenviando(null);
+      cargar();
+    }
+  };
+  const reenviar = (comp) => reenviarAlgo(comp.id, `${comp.serie}-${comp.numero}`, () => api.comprobanteReenviar(comp.id));
+  const reenviarNota = (n) => reenviarAlgo(`nc-${n.id}`, `Nota ${n.serie}-${n.numero}`, () => api.notaCreditoReenviar(n.id));
+
+  const consultarAnulacion = (c) =>
+    reenviarAlgo(`an-${c.id}`, `Anulación de ${c.serie}-${c.numero}`, async () => {
+      const r = await api.comprobanteAnulacionConsultar(c.id);
+      const estado = r.anulacion === 'ANULADO' ? 'ACEPTADO' : r.anulacion === 'EN_PROCESO' ? 'PENDIENTE' : 'RECHAZADO';
+      return { estado, mensaje: r.mensaje };
+    });
+
+  const imprimirNota = (n, formato) => {
+    setMensaje(null);
+    imprimirNotaCredito(n, formato, cfgEmisor, telefono).catch((e) =>
+      setMensaje({ tipo: 'error', texto: `No se pudo preparar la nota: ${e.message}` })
+    );
+  };
+
+  const descargarNota = async (n, cual) => {
+    setMensaje(null);
+    try {
+      const { blob, extension } = await api.notaCreditoArchivo(n.id, cual);
+      const nombre = `${cual === 'cdr' ? 'R-' : ''}${[cfgEmisor?.ruc || ruc, '07', n.serie, n.numero].filter(Boolean).join('-')}.${extension}`;
+      descargarArchivo(blob, nombre, { tipo: extension === 'zip' ? 'application/zip' : 'application/xml' });
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    }
   };
 
   useEffect(() => {
@@ -225,6 +298,8 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     // servidor aún no lo ofrece, se imprime como siempre (todo al 18 %).
     const igvVenta = await api.igvVenta(comp.venta_id).catch(() => null);
 
+    // Sin documento: la emisión directa envía "-" a SUNAT (catálogo 06,
+    // ventas menores); el QR debe llevar lo mismo que el XML.
     const tipoDocCliente =
       comp.tipo === 'FACTURA'
         ? '6'
@@ -232,7 +307,9 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
           ? comp.cliente_documento.length === 11
             ? '6'
             : '1'
-          : '0';
+          : comp.proveedor === 'SUNAT_DIRECTO'
+            ? '-'
+            : '0';
 
     // El cliente sale de la fila (la venta no lo detalla). En una factura
     // se busca además su dirección fiscal entre los clientes guardados; si
@@ -281,8 +358,27 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     };
   };
 
-  // Factura que FacturaLibre emitió de verdad: tiene su PDF oficial en A4.
-  const facturaConA4 = (comp) => comp.tipo === 'FACTURA' && !!comp.enlace_pdf && !!comp.id;
+  // Factura con hoja A4: la de FacturaLibre (su PDF oficial) o la emitida
+  // directo a SUNAT y aceptada (nuestro diseño, utils/facturaA4.js).
+  const a4Propio = (comp) => comp.proveedor === 'SUNAT_DIRECTO' && comp.estado === 'ACEPTADO' && !comp.enlace_pdf;
+  const facturaConA4 = (comp) => comp.tipo === 'FACTURA' && !!comp.id && (!!comp.enlace_pdf || a4Propio(comp));
+
+  // Nuestro A4, armado con el documento que se envió a SUNAT.
+  const imprimirA4Propio = async (comp) => {
+    try {
+      const documento = await api.comprobanteDocumento(comp.id);
+      const datos = await datosA4DeDocumento(documento, {
+        hash: comp.hash,
+        telefono: cfgEmisor?.telefono || telefono,
+        email: cfgEmisor?.email,
+        logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,
+        color: cfgEmisor?.color_acento,
+      });
+      imprimirComprobanteA4(datos);
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: `No se pudo preparar la hoja A4: ${e.message}` });
+    }
+  };
 
   // Nuestro ticket de 80 mm (boleta, nota simple, y también la factura).
   const imprimirTicket = async (comp) => {
@@ -295,7 +391,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   };
 
   // El PDF oficial en A4, incrustado en el modal (renderizado con pdf.js).
-  const verA4 = (comp) => setPdfVisible(api.comprobantePdfUrl(comp.id));
+  const verA4 = (comp) => (comp.enlace_pdf ? setPdfVisible(api.comprobantePdfUrl(comp.id)) : imprimirA4Propio(comp));
 
   const reimprimir = (evento, comp) => {
     setMensaje(null);
@@ -303,7 +399,11 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     if (facturaConA4(comp)) {
       abrirMenu(evento, comp, [
         { cual: 'ticket', titulo: 'Ticket 80 mm', detalle: 'Para la impresora térmica, igual que la boleta' },
-        { cual: 'a4', titulo: 'Hoja A4', detalle: 'El PDF de FacturaLibre, como hasta ahora' },
+        {
+          cual: 'a4',
+          titulo: 'Hoja A4',
+          detalle: comp.enlace_pdf ? 'El PDF de FacturaLibre, como hasta ahora' : 'Con el logo del negocio',
+        },
       ]);
       return;
     }
@@ -321,7 +421,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     setMensaje(null);
     setExportando(claveFila(comp));
     try {
-      if (facturaConA4(comp) && !enTicket) {
+      if (facturaConA4(comp) && comp.enlace_pdf && !enTicket) {
         const respuesta = await fetch(api.comprobantePdfUrl(comp.id));
         if (!respuesta.ok) throw new Error('No se pudo descargar el PDF de la factura. Intenta de nuevo en un momento.');
         entregarPdf(await respuesta.blob(), `Factura-${comp.serie}-${String(comp.numero).padStart(6, '0')}.pdf`);
@@ -382,7 +482,12 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   // Lo que se puede descargar de una fila. El PDF siempre; el XML y la
   // constancia solo de boletas y facturas aceptadas por SUNAT.
   const opcionesDescarga = (comp) => {
-    const opciones = facturaConA4(comp)
+    const opciones = a4Propio(comp) && comp.tipo === 'FACTURA'
+      ? [
+          { cual: 'a4', titulo: 'PDF A4', detalle: 'Se abre para imprimir: elige "Guardar como PDF"' },
+          { cual: 'pdf80', titulo: 'PDF ticket 80 mm', detalle: 'La misma factura en formato ticket' },
+        ]
+      : facturaConA4(comp)
       ? [
           { cual: 'pdf', titulo: 'PDF A4', detalle: 'El de FacturaLibre, para imprimir o enviar' },
           { cual: 'pdf80', titulo: 'PDF ticket 80 mm', detalle: 'La misma factura en formato ticket' },
@@ -469,6 +574,18 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         </select>
       </div>
 
+      {avisos?.pendientes > 0 && <AvisoSunat avisos={avisos} />}
+
+      {anularPara && <FormularioAnulacion comprobante={anularPara} onHecho={() => cargar()} onCerrar={cerrarAnular} />}
+
+      {notaPara && (
+        <FormularioNotaCredito
+          comprobante={notaPara}
+          onEmitida={() => cargar()}
+          onCerrar={cerrarNota}
+        />
+      )}
+
       {mensaje && <p className={`comp-mensaje comp-mensaje-${mensaje.tipo}`}>{mensaje.texto}</p>}
 
       {cargando ? (
@@ -499,6 +616,42 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                         {c.serie}-{String(c.numero).padStart(6, '0')}
                       </>
                     )}
+                    {c.notas?.map((n) => (
+                      <div key={n.id} className="comp-nota">
+                        <span className="comp-tipo comp-tipo-nota">Nota de crédito</span> {n.serie}-{String(n.numero).padStart(6, '0')}
+                        <span className={`comp-badge comp-badge-${n.estado.toLowerCase()}`}>{n.estado}</span>
+                        <span className="comp-nota-monto">− S/ {n.total.toFixed(2)}</span>
+                        <span className="comp-nota-motivo">{n.motivo}</span>
+                        {n.estado !== 'ACEPTADO' && n.mensaje_sunat && <span className="comp-motivo">{n.mensaje_sunat}</span>}
+                        <span className="comp-nota-acciones">
+                          {n.estado === 'ACEPTADO' && (
+                            <>
+                              <button type="button" onClick={() => imprimirNota(n, 'ticket')}>
+                                🖨 Ticket
+                              </button>
+                              <button type="button" onClick={() => imprimirNota(n, 'a4')}>
+                                A4
+                              </button>
+                              {n.tiene_xml && (
+                                <button type="button" onClick={() => descargarNota(n, 'xml')}>
+                                  XML
+                                </button>
+                              )}
+                              {n.tiene_cdr && (
+                                <button type="button" onClick={() => descargarNota(n, 'cdr')}>
+                                  CDR
+                                </button>
+                              )}
+                            </>
+                          )}
+                          {n.estado === 'PENDIENTE' && (
+                            <button type="button" onClick={() => reenviarNota(n)} disabled={reenviando === `nc-${n.id}`}>
+                              {reenviando === `nc-${n.id}` ? 'Enviando…' : '↻ Reenviar'}
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                    ))}
                   </td>
                   <td className="comp-folio-venta">{c.folio_venta}</td>
                   <td>{c.cliente_nombre || '—'}</td>
@@ -506,7 +659,20 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                   <td>
                     {c.estado ? (
                       <>
-                        <span className={`comp-badge comp-badge-${c.estado.toLowerCase()}`}>{c.estado}</span>
+                        <span className="comp-badges">
+                          <span className={`comp-badge comp-badge-${c.estado.toLowerCase()}`}>{c.estado}</span>
+                          {c.anulacion && (
+                            <span className={`comp-badge comp-badge-anulacion-${c.anulacion.toLowerCase()}`}>
+                              {
+                                {
+                                  ANULADO: 'ANULADO',
+                                  EN_PROCESO: 'ANULANDO…',
+                                  VERIFICAR: 'REVISAR ANULACIÓN EN SUNAT',
+                                }[c.anulacion] || 'BAJA RECHAZADA'
+                              }
+                            </span>
+                          )}
+                        </span>
                         {c.mensaje_sunat && <p className="comp-motivo">{c.mensaje_sunat}</p>}
                       </>
                     ) : (
@@ -536,6 +702,38 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                     <button className="comp-boton-whatsapp" onClick={() => abrirEnvioWhatsapp(c)}>
                       📲
                     </button>
+                    {c.proveedor === 'SUNAT_DIRECTO' && c.id && ['ACEPTADO', 'PENDIENTE'].includes(c.estado) && (
+                      <div className="comp-acciones-sunat">
+                        {c.estado === 'ACEPTADO' && vigente(c) && (
+                          <button className="comp-boton-imprimir comp-boton-nota" onClick={() => setNotaPara(c)}>
+                            Nota de crédito
+                          </button>
+                        )}
+                        {puedeAnular(c) && (
+                          <button className="comp-boton-imprimir comp-boton-anular" onClick={() => setAnularPara(c)}>
+                            Anular
+                          </button>
+                        )}
+                        {c.anulacion === 'EN_PROCESO' && (
+                          <button
+                            className="comp-boton-imprimir comp-boton-reenviar"
+                            onClick={() => consultarAnulacion(c)}
+                            disabled={reenviando === `an-${c.id}`}
+                          >
+                            {reenviando === `an-${c.id}` ? 'Consultando…' : '↻ Consultar anulación'}
+                          </button>
+                        )}
+                        {c.estado === 'PENDIENTE' && (
+                          <button
+                            className="comp-boton-imprimir comp-boton-reenviar"
+                            onClick={() => reenviar(c)}
+                            disabled={reenviando === c.id}
+                          >
+                            {reenviando === c.id ? 'Enviando…' : '↻ Reenviar'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -673,6 +871,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
           comprobante={ventaParaImprimir.comprobante}
           cliente={ventaParaImprimir.cliente}
           nombreTienda={nombreTienda}
+          razonSocial={cfgEmisor?.razon_social}
           direccion={direccion}
           telefono={telefono}
           ruc={ruc}
@@ -710,5 +909,54 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         </div>
       )}
     </div>
+  );
+}
+
+/** Aviso de comprobantes que todavía no llegan a SUNAT (emisión directa). */
+function AvisoSunat({ avisos }) {
+  const urgente = avisos.avisos[0];
+  const vencido = urgente && urgente.dias_restantes < 0;
+  const plazo = !urgente
+    ? ''
+    : vencido
+      ? `${urgente.documento} ya pasó el plazo de envío de SUNAT.`
+      : urgente.dias_restantes === 0
+        ? `${urgente.documento} vence hoy.`
+        : `Al más antiguo (${urgente.documento}) le ${urgente.dias_restantes === 1 ? 'queda 1 día' : `quedan ${urgente.dias_restantes} días`} de plazo.`;
+  return (
+    <div className={`comp-aviso-sunat${vencido || urgente?.dias_restantes <= 1 ? ' comp-aviso-urgente' : ''}`} role="status">
+      <strong>
+        {avisos.pendientes === 1
+          ? '1 comprobante todavía no llega a SUNAT.'
+          : `${avisos.pendientes} comprobantes todavía no llegan a SUNAT.`}
+      </strong>{' '}
+      El sistema los reenvía solo cada 10 minutos; también puedes usar «Reenviar». {plazo}
+    </div>
+  );
+}
+
+/** El comprobante sigue vigente ante SUNAT (no anulado ni anulándose). */
+function vigente(c) {
+  return !c.anulacion || c.anulacion === 'RECHAZADA';
+}
+
+/** Días calendario entre dos fechas "AAAA-MM-DD". */
+function diasEntre(desde, hasta) {
+  const d = Date.parse(`${String(desde).slice(0, 10)}T00:00:00Z`);
+  const h = Date.parse(`${String(hasta).slice(0, 10)}T00:00:00Z`);
+  return Number.isNaN(d) || Number.isNaN(h) ? 0 : Math.round((h - d) / 86400000);
+}
+
+/**
+ * Se puede anular (el servidor lo vuelve a revisar): emitido directo y
+ * aceptado, vigente, sin notas de crédito y dentro de los 7 días.
+ */
+function puedeAnular(c) {
+  return (
+    c.proveedor === 'SUNAT_DIRECTO' &&
+    c.estado === 'ACEPTADO' &&
+    vigente(c) &&
+    !(c.notas || []).some((n) => n.estado === 'ACEPTADO' || n.estado === 'PENDIENTE') &&
+    diasEntre(c.fecha_emision_corta, hoyLima()) <= 7
   );
 }

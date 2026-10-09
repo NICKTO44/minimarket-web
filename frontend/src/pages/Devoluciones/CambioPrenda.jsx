@@ -15,6 +15,8 @@ export default function CambioPrenda({ onIniciarCambio }) {
   const [elegidos, setElegidos] = useState({});
   const [motivo, setMotivo] = useState('');
   const [mensaje, setMensaje] = useState(null);
+  // Emisión directa: el cajero decide si sale la nota de crédito de lo devuelto.
+  const [conNota, setConNota] = useState(false);
 
   const buscar = async () => {
     if (!busqueda.trim()) return;
@@ -24,6 +26,7 @@ export default function CambioPrenda({ onIniciarCambio }) {
     try {
       const resultado = await api.cambioVenta(busqueda.trim());
       setVenta(resultado);
+      setConNota(false);
       // Una sola prenda en la venta: lo normal es que sea esa la que cambia.
       const cambiables = resultado.productos.filter((p) => p.disponible > 0);
       setElegidos(
@@ -67,6 +70,7 @@ export default function CambioPrenda({ onIniciarCambio }) {
       folio: venta.folio,
       valor,
       motivo: motivo.trim() || null,
+      emitir_nota_credito: !!venta.nota_credito_posible && conNota,
       items: items.map((p) => ({
         detalle_id: p.detalle_id,
         nombre: p.nombre,
@@ -200,6 +204,19 @@ export default function CambioPrenda({ onIniciarCambio }) {
                   maxLength={200}
                 />
               </div>
+
+              {venta.nota_credito_posible && (
+                <label className="dev-cambio-nota">
+                  <input type="checkbox" checked={conNota} onChange={(e) => setConNota(e.target.checked)} />
+                  <span>
+                    <strong>Emitir nota de crédito de lo que devuelve</strong>
+                    <small>
+                      Ante SUNAT lo correcto es la nota por lo devuelto y una boleta nueva por lo que se lleva. Si solo cambia la
+                      talla o el color al mismo precio, puedes no emitirla.
+                    </small>
+                  </span>
+                </label>
+              )}
 
               <div className="dev-total-row dev-cambio-total">
                 <span>A favor del cliente</span>

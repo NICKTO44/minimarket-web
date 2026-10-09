@@ -217,6 +217,35 @@ export default function Ganancias({ onVerSinPrecio }) {
         </div>
       </div>
 
+      {/* Lo que de verdad quedó: la ganancia de las ventas menos los gastos
+          del negocio del mes (alquiler, luz, sueldos…; pantalla Gastos). */}
+      <div className="gan-neta" aria-label="Ganancia neta del mes">
+        <div>
+          <span>Ganancia de las ventas</span>
+          <strong>{soles(actual.ganancia)}</strong>
+        </div>
+        <span className="gan-neta-signo" aria-hidden="true">
+          −
+        </span>
+        <div>
+          <span>Gastos del negocio</span>
+          <strong>{soles(actual.gastos || 0)}</strong>
+        </div>
+        <span className="gan-neta-signo" aria-hidden="true">
+          =
+        </span>
+        <div className={`gan-neta-total ${(actual.ganancia_neta ?? actual.ganancia) < 0 ? 'negativa' : ''}`}>
+          <span>Ganancia neta</span>
+          <strong>{soles(actual.ganancia_neta ?? actual.ganancia)}</strong>
+        </div>
+      </div>
+      {!(actual.gastos > 0) && (
+        <p className="gan-neta-nota">
+          Aún no hay gastos registrados en {MESES[Number(actual.mes.slice(5, 7)) - 1]}. Anota el alquiler, la luz o los sueldos en la
+          pantalla <strong>Gastos</strong> para ver tu ganancia neta real.
+        </p>
+      )}
+
       {(actual.sin_costo > 0.005 || actual.estimado || datos.devoluciones.monto > 0.005) && (
         <ul className="gan-notas">
           {actual.sin_costo > 0.005 && (
@@ -464,7 +493,8 @@ export default function Ganancias({ onVerSinPrecio }) {
 
       <p className="gan-pie">
         Ganancia = lo vendido menos lo que costó esa mercadería, con IGV incluido en ambos. El costo es el promedio de lo
-        que había en la tienda el día de cada venta. No incluye otros gastos del negocio (alquiler, sueldos, servicios).
+        que había en la tienda el día de cada venta. La ganancia neta resta además los gastos del negocio del mes (alquiler,
+        sueldos, servicios) registrados en Gastos.
       </p>
     </div>
   );

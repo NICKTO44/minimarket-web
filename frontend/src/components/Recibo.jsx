@@ -14,6 +14,9 @@ export default function Recibo({
   venta,
   items,
   nombreTienda,
+  // Razón social (emisión directa): va debajo del nombre comercial cuando
+  // es distinta, como pide SUNAT en la representación impresa.
+  razonSocial = null,
   direccion,
   telefono,
   ruc,
@@ -100,6 +103,9 @@ export default function Recibo({
   return (
     <div className="recibo-imprimible">
       <div className="recibo-centro recibo-nombre-tienda">{nombreTienda}</div>
+      {razonSocial && razonSocial.trim() !== String(nombreTienda || '').trim() && (
+        <div className="recibo-centro recibo-dato-tienda">{razonSocial}</div>
+      )}
       {direccion && <div className="recibo-centro recibo-dato-tienda">{direccion}</div>}
       {telefono && <div className="recibo-centro recibo-dato-tienda">Tel: {telefono}</div>}
       {ruc && <div className="recibo-centro recibo-dato-tienda recibo-ruc">RUC {ruc}</div>}
@@ -244,6 +250,18 @@ export default function Recibo({
             <span>Plazo</span>
             <span>{venta.credito.dias} días</span>
           </div>
+          {venta.credito.dias > 0 && (
+            <div className="recibo-fila-meta">
+              <span>Cuota 1 vence</span>
+              <span>
+                {(() => {
+                  const vence = new Date();
+                  vence.setDate(vence.getDate() + Number(venta.credito.dias));
+                  return vence.toLocaleDateString('es-PE');
+                })()}
+              </span>
+            </div>
+          )}
         </div>
       )}
       {cambioPrenda && (
@@ -289,8 +307,10 @@ export default function Recibo({
         </div>
       )}
 
-      {esFactura && (
-        <div className="recibo-centro recibo-disclaimer">Representación impresa de la FACTURA ELECTRÓNICA.</div>
+      {esComprobanteReal && (
+        <div className="recibo-centro recibo-disclaimer">
+          Representación impresa de la {esFactura ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'}.
+        </div>
       )}
 
       {esComprobanteReal && (

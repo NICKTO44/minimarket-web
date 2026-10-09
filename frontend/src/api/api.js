@@ -109,8 +109,27 @@ export const api = {
   cajaAbrir: (data) => request('/cajas/abrir', { method: 'POST', body: JSON.stringify(data) }),
   cajaCerrar: (data) => request('/cajas/cerrar', { method: 'POST', body: JSON.stringify(data) }),
   comprobanteEmitir: (data) => request('/comprobantes', { method: 'POST', body: JSON.stringify(data) }),
+  // Emisión directa: el documento tal como se envió a SUNAT (para el A4).
+  comprobanteDocumento: (id) => request(`/comprobantes/${id}/documento`),
+  // Emisión directa: reenviar un comprobante PENDIENTE y avisos de plazos.
+  comprobanteReenviar: (id) => request(`/comprobantes/${id}/reenviar`, { method: 'POST' }),
+  sunatAvisos: () => request('/sunat/avisos'),
   cajaAbierta: () => request('/cajas/abierta'),
   cajasListar: (inicio, fin) => request(`/cajas?fecha_inicio=${inicio}&fecha_fin=${fin}`),
+  // Retiro o ingreso de efectivo en la caja abierta (los gastos van por /gastos).
+  cajaMovimiento: (data) => request('/cajas/movimiento', { method: 'POST', body: JSON.stringify(data) }),
+  cajaMovimientos: () => request('/cajas/movimientos'),
+  // Módulo Gastos.
+  gastos: (filtro = {}) => {
+    const q = new URLSearchParams(Object.entries(filtro).filter(([, v]) => v !== '' && v != null && v !== false));
+    return request(`/gastos${q.toString() ? `?${q}` : ''}`);
+  },
+  gastoRegistrar: (data) => request('/gastos', { method: 'POST', body: JSON.stringify(data) }),
+  gastoAnular: (id, motivo) => request(`/gastos/${id}/anular`, { method: 'POST', body: JSON.stringify({ motivo }) }),
+  gastoCategorias: () => request('/gastos/categorias'),
+  gastoCategoriaCrear: (nombre) => request('/gastos/categorias', { method: 'POST', body: JSON.stringify({ nombre }) }),
+  gastoCategoriaActualizar: (id, cambios) =>
+    request(`/gastos/categorias/${id}`, { method: 'PUT', body: JSON.stringify(cambios) }),
   categorias: () => request('/categorias'),
   categoriaCrear: (data) => request('/categorias', { method: 'POST', body: JSON.stringify(data) }),
   productosStockBajo: () => request('/productos/stock-bajo'),
@@ -214,6 +233,8 @@ export const api = {
   guiaVenta: (folio) => request(`/guias/venta/${encodeURIComponent(folio)}`),
   guiaCrear: (datos) => request('/guias', { method: 'POST', body: JSON.stringify(datos) }),
   guiaConsultar: (id) => request(`/guias/${id}/consultar`, { method: 'POST' }),
+  // Guía emitida directo a SUNAT: XML firmado ('xml') o constancia ('cdr').
+  guiaArchivo: (id, cual) => descargarArchivoSunat(`/guias/${id}/${cual}`),
   // Ropa y calzado: tallas y colores (módulo VARIANTES) y cambio de prenda (módulo CAMBIOS)
   modeloCrear: (datos) => request('/modelos', { method: 'POST', body: JSON.stringify(datos) }),
   modeloActualizar: (id, datos) => request(`/modelos/${id}`, { method: 'PUT', body: JSON.stringify(datos) }),
@@ -259,24 +280,18 @@ export const api = {
   },
   // XML firmado ('xml') o constancia de SUNAT ('cdr') de un comprobante.
   // Devuelve el archivo y su extensión: el CDR puede llegar como XML o ZIP.
-  comprobanteArchivo: async (id, cual) => {
-    const token = obtenerToken();
-    const res = await fetch(`${API_URL}/comprobantes/${id}/${cual}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (res.status === 401) {
-      localStorage.removeItem(STORAGE_KEY);
-      window.location.reload();
-      throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
-    }
-    if (!res.ok) {
-      const texto = await res.text().catch(() => '');
-      // Un servidor que aún no tiene esta descarga responde 404 sin texto.
-      throw new Error(texto && texto.length < 200 ? texto : 'No se pudo descargar el archivo. Intenta de nuevo en un momento.');
-    }
-    const tipo = res.headers.get('content-type') || '';
-    return { blob: await res.blob(), extension: tipo.includes('zip') ? 'zip' : 'xml' };
-  },
+  comprobanteArchivo: (id, cual) => descargarArchivoSunat(`/comprobantes/${id}/${cual}`),
+  // Notas de crédito (emisión directa).
+  notaCreditoPreparar: (comprobanteId) => request(`/comprobantes/${comprobanteId}/nota-credito`),
+  notaCreditoEmitir: (comprobanteId, data) =>
+    request(`/comprobantes/${comprobanteId}/nota-credito`, { method: 'POST', body: JSON.stringify(data) }),
+  notaCreditoReenviar: (id) => request(`/notas-credito/${id}/reenviar`, { method: 'POST' }),
+  notaCreditoDocumento: (id) => request(`/notas-credito/${id}/documento`),
+  notaCreditoArchivo: (id, cual) => descargarArchivoSunat(`/notas-credito/${id}/${cual}`),
+  // Anulación (baja de facturas, resumen diario de boletas).
+  comprobanteAnulacion: (id) => request(`/comprobantes/${id}/anulacion`),
+  comprobanteAnular: (id, data) => request(`/comprobantes/${id}/anular`, { method: 'POST', body: JSON.stringify(data) }),
+  comprobanteAnulacionConsultar: (id) => request(`/comprobantes/${id}/anulacion/consultar`, { method: 'POST' }),
   productoSubirImagen: async (id, archivo) => {
     const token = obtenerToken();
     const formData = new FormData();
@@ -293,3 +308,25 @@ export const api = {
     return data;
   },
 };
+
+// XML firmado ('xml') o constancia de SUNAT ('cdr') de un comprobante o de
+// una nota de crédito. Devuelve el archivo y su extensión: el CDR puede
+// llegar como XML o ZIP.
+async function descargarArchivoSunat(ruta) {
+  const token = obtenerToken();
+  const res = await fetch(`${API_URL}${ruta}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (res.status === 401) {
+    localStorage.removeItem(STORAGE_KEY);
+    window.location.reload();
+    throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
+  }
+  if (!res.ok) {
+    const texto = await res.text().catch(() => '');
+    // Un servidor que aún no tiene esta descarga responde 404 sin texto.
+    throw new Error(texto && texto.length < 200 ? texto : 'No se pudo descargar el archivo. Intenta de nuevo en un momento.');
+  }
+  const tipo = res.headers.get('content-type') || '';
+  return { blob: await res.blob(), extension: tipo.includes('zip') ? 'zip' : 'xml' };
+}

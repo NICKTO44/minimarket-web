@@ -53,6 +53,39 @@
   color: #991b1b;
 }
 
+.comp-mensaje-ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.comp-mensaje-aviso {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* Emisión directa: comprobantes que todavía no llegan a SUNAT. */
+.comp-aviso-sunat {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1.5px solid #fcd34d;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.comp-aviso-urgente {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.comp-boton-imprimir.comp-boton-reenviar {
+  border-color: #d97706;
+  color: #92400e;
+}
+
 /* ===== Tabla con scroll horizontal propio =====
    El wrapper ya NO recorta el contenido (overflow: hidden);
    ahora scrollea horizontal si la tabla no entra en el ancho disponible. */
@@ -590,4 +623,93 @@
     font-weight: 600;
     cursor: pointer;
   }
+}
+
+/* Notas de crédito debajo del comprobante que corrigen. */
+.comp-nota {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
+  background: #fffbeb;
+  font-size: 12.5px;
+}
+
+.comp-tipo-nota {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.comp-nota-monto {
+  font-weight: 700;
+  color: #92400e;
+}
+
+.comp-nota-motivo {
+  color: #6b7280;
+}
+
+.comp-nota-acciones {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.comp-nota-acciones button {
+  padding: 3px 8px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.comp-boton-imprimir.comp-boton-nota {
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+/* Acciones de SUNAT (nota de crédito, reenviar, anular) en una segunda línea. */
+.comp-acciones-sunat {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.comp-boton-imprimir.comp-boton-anular {
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.comp-badge-anulacion-anulado {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.comp-badge-anulacion-en_proceso {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.comp-badge-anulacion-rechazada {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.comp-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 150px;
+}
+
+.comp-badge-anulacion-verificar {
+  background: #fee2e2;
+  color: #991b1b;
 }

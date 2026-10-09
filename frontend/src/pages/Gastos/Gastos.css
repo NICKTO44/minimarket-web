@@ -1,0 +1,441 @@
+/* Pantalla Gastos (gst-*). */
+.gst-layout {
+  height: 100vh;
+  height: 100dvh;
+  padding: 24px 28px 48px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  background: #f4f5f7;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #16181d;
+}
+
+.gst-cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.gst-cabecera h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.gst-cabecera p {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.gst-cabecera-acciones {
+  display: flex;
+  gap: 8px;
+}
+
+.gst-boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: #374151;
+  cursor: pointer;
+}
+
+.gst-boton-principal {
+  border-color: var(--color-primario);
+  background: var(--color-primario);
+  color: var(--color-sobre-primario);
+}
+
+.gst-boton-peligro {
+  border-color: #b91c1c !important;
+  background: #b91c1c !important;
+  color: #fff !important;
+}
+
+.gst-icono-peligro {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+}
+
+.gst-mes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.gst-mes > button:not(.gst-mes-hoy) {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.gst-mes > button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gst-mes strong {
+  min-width: 130px;
+  text-align: center;
+  font-size: 16px;
+  text-transform: capitalize;
+}
+
+.gst-mes-hoy {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-primario-suave);
+  color: var(--color-primario-texto);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gst-aviso,
+.gst-error {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.gst-aviso {
+  background: #dcfce7;
+  color: #14532d;
+  cursor: pointer;
+}
+
+.gst-error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.gst-tenue {
+  color: #6b7280;
+}
+
+.gst-resumen {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.gst-tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px solid #e4e6eb;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.gst-tarjeta > span {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gst-tarjeta > small {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.gst-tarjeta-total strong {
+  font-size: 28px;
+  color: #b91c1c;
+}
+
+.gst-barra {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.gst-barra-texto {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.gst-barra-fondo {
+  height: 6px;
+  border-radius: 999px;
+  background: #f1f2f4;
+  overflow: hidden;
+}
+
+.gst-barra-fondo div {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-primario);
+}
+
+.gst-metodos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gst-metodos li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+.gst-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.gst-filtros select {
+  padding: 9px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+}
+
+.gst-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #374151;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.gst-tabla {
+  overflow: hidden;
+  border: 1px solid #e4e6eb;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.gst-fila {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto 110px 34px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f1f4;
+}
+
+.gst-fila:last-child {
+  border-bottom: none;
+}
+
+.gst-fecha {
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.gst-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gst-detalle strong {
+  font-size: 14.5px;
+  overflow-wrap: anywhere;
+}
+
+.gst-detalle small {
+  color: #6b7280;
+  font-size: 12.5px;
+}
+
+.gst-motivo {
+  color: #b91c1c !important;
+}
+
+.gst-monto {
+  text-align: right;
+  font-size: 15px;
+}
+
+.gst-metodo {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #f1f2f4;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.gst-metodo-efectivo_caja {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.gst-metodo-yape {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.gst-metodo-plin {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.gst-anular {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: #9ca3af;
+  cursor: pointer;
+}
+
+.gst-anular:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.gst-anulado {
+  background: #fafafa;
+}
+
+.gst-anulado .gst-detalle strong,
+.gst-anulado .gst-monto {
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.gst-vacio {
+  margin: 0;
+  padding: 28px 16px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.gst-enlace {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primario-texto);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.gst-enlace:disabled {
+  opacity: 0.5;
+}
+
+.gst-nota {
+  margin: 12px 2px 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.gst-nota-modal {
+  margin: 0;
+}
+
+.gst-cat-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gst-cat-lista li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f8f9fb;
+  font-size: 14px;
+}
+
+.gst-cat-lista li > span {
+  flex: 1;
+  font-weight: 600;
+}
+
+.gst-cat-inactiva > span {
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.gst-cat-editar,
+.gst-cat-nueva {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+}
+
+.gst-cat-editar input,
+.gst-cat-nueva input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+}
+
+@media (max-width: 899px) {
+  .gst-layout {
+    padding: 16px;
+  }
+
+  .gst-resumen {
+    grid-template-columns: 1fr;
+  }
+
+  .gst-fila {
+    grid-template-columns: 48px minmax(0, 1fr) auto 30px;
+    gap: 8px 10px;
+  }
+
+  .gst-metodo {
+    display: none;
+  }
+}

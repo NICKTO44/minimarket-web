@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { api } from './api/api';
 import { aplicarTema, limpiarTema } from './utils/tema';
 import POS from './pages/POS/POS';
@@ -27,6 +27,7 @@ import CartaDia from './pages/CartaDia/CartaDia';
 import Cotizaciones from './pages/Cotizaciones/Cotizaciones';
 import Creditos from './pages/Creditos/Creditos';
 import Guias from './pages/Guias/Guias';
+import Gastos from './pages/Gastos/Gastos';
 import AvisosListos from './components/AvisosListos';
 import {
   esAlmacen,
@@ -49,6 +50,9 @@ import {
   MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VARIANTES,
   rubroDe,
 } from './utils/rubros';
+
+// Panel del dueño de Monspeet (/panel): se carga solo si se abre esa dirección.
+const Panel = lazy(() => import('./pages/Panel/Panel'));
 
 const STORAGE_KEY = 'minimarket_sesion';
 const TIENDA_STORAGE_KEY = 'minimarket_tienda';
@@ -263,6 +267,14 @@ function App() {
   useEffect(() => {
     document.title = logueado && nombreNegocioTitulo ? `${nombreNegocioTitulo} · Monspeet POS` : 'Monspeet POS';
   }, [logueado, nombreNegocioTitulo]);
+
+  if (/^\/panel\/?$/.test(window.location.pathname)) {
+    return (
+      <Suspense fallback={null}>
+        <Panel />
+      </Suspense>
+    );
+  }
 
   const matchBoletaPublica = window.location.pathname.match(/^\/boleta\/([^/]+)\/(\d+)$/);
   if (matchBoletaPublica) {
@@ -488,6 +500,7 @@ function App() {
             }}
           />
         )}
+        {pantallaVisible === 'GASTOS' && usuarioActual?.rol_id === 1 && <Gastos />}
         {pantallaVisible === 'SUSCRIPCION' && usuarioActual?.rol_id === 1 && (
           <Suscripcion
             estadoSuscripcion={estadoSuscripcion}

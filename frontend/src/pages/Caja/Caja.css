@@ -231,3 +231,102 @@
 .caja-fila-negativa strong {
   color: #b91c1c;
 }
+/* Gasto, retiro e ingreso de efectivo del turno */
+.caja-mov-acciones {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.caja-mov-acciones button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-primario-texto);
+  cursor: pointer;
+}
+
+.caja-mov-acciones button:hover {
+  border-color: var(--color-primario-borde);
+  background: var(--color-primario-suave);
+}
+
+.caja-mov-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.caja-mov-lista li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f8f9fb;
+  font-size: 13.5px;
+}
+
+.caja-mov-motivo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.caja-mov-motivo small {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.caja-mov-lista strong {
+  white-space: nowrap;
+}
+
+.caja-mov-tipo {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.caja-mov-gasto {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.caja-mov-retiro {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.caja-mov-ingreso {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.caja-mov-alerta {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: left;
+}

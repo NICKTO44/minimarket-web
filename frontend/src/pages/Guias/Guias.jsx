@@ -4,6 +4,7 @@ import { api } from '../../api/api';
 import GuiaImprimible from '../../components/GuiaImprimible';
 import SelectorUbigeo from '../../components/SelectorUbigeo';
 import { fechaCorta } from '../../utils/formato';
+import { descargarArchivo } from '../../utils/pdfTicket';
 import { formatoCantidad } from '../../utils/medidas';
 import { abreviaturaUnidad } from '../../utils/unidades';
 import '../../components/PantallaModulo.css';
@@ -17,6 +18,7 @@ function hoyLocal() {
 function EstadoGuia({ estado }) {
   if (estado === 'ACEPTADA') return <span className="pm-chip pm-chip-ok">Aceptada</span>;
   if (estado === 'RECHAZADA') return <span className="pm-chip pm-chip-mal">Rechazada</span>;
+  if (estado === 'ERROR') return <span className="pm-chip pm-chip-mal">Con error</span>;
   if (estado === 'ENVIADA') return <span className="pm-chip pm-chip-aviso">Esperando a SUNAT</span>;
   return <span className="pm-chip pm-chip-aviso">Sin enviar</span>;
 }
@@ -217,6 +219,17 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
     }
   };
 
+  // Guía directa: XML firmado o constancia de SUNAT.
+  const bajarArchivo = async (guia, cual) => {
+    try {
+      const { blob, extension } = await api.guiaArchivo(guia.id, cual);
+      const nombre = `${cual === 'cdr' ? 'R-' : ''}${guia.numero}.${extension}`;
+      descargarArchivo(blob, nombre, { tipo: extension === 'zip' ? 'application/zip' : 'application/xml' });
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    }
+  };
+
   const guardarLocal = async () => {
     setGuardandoLocal(true);
     try {
@@ -353,6 +366,17 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
                 <a className="pm-boton-secundario" href={abierta.enlace_pdf} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
                   <FileDown size={15} /> Hoja A4
                 </a>
+              )}
+              {/* Emitida directo a SUNAT: el XML firmado y la constancia. */}
+              {abierta.directa && abierta.tiene_xml && (
+                <button className="pm-boton-secundario" onClick={() => bajarArchivo(abierta, 'xml')}>
+                  <FileDown size={15} /> XML
+                </button>
+              )}
+              {abierta.directa && abierta.tiene_cdr && (
+                <button className="pm-boton-secundario" onClick={() => bajarArchivo(abierta, 'cdr')}>
+                  <FileDown size={15} /> CDR
+                </button>
               )}
               <button className="pm-boton-secundario" onClick={() => setAbierta(null)}>
                 Cerrar
@@ -580,7 +604,11 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
                 <label className="pm-campo pm-campo-ancho">
                   <span>Serie de guías</span>
                   <input maxLength={4} value={local.serie} onChange={(e) => setLocal((l) => ({ ...l, serie: e.target.value.toUpperCase() }))} />
-                  <small>La que tienes en FacturaLibre para guías de remitente (empieza con T, por ejemplo T001).</small>
+                  <small>
+                    {config?.directo
+                      ? 'La de tus guías de remitente electrónicas (empieza con T, por ejemplo T001). Si antes emitías con FacturaLibre, usa la misma: la numeración continúa.'
+                      : 'La que tienes en FacturaLibre para guías de remitente (empieza con T, por ejemplo T001).'}
+                  </small>
                 </label>
               </div>
             </div>

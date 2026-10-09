@@ -10,13 +10,16 @@ import { ChevronRight, ShoppingCart } from 'lucide-react';
 import { METODOS_DE_ABONO, METODOS_DE_COBRO, METODOS_OTRO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
 import { tituloPedido } from '../../utils/mesas';
 import { abreviaturaUnidad } from '../../utils/unidades';
-import { UNIDAD_PIE_TABLAR, formatoCantidad, leerCantidad, subtotalLinea } from '../../utils/medidas';
+import { UNIDAD_PIE_TABLAR, formatoCantidad, leerCantidad, seVendeFraccionado, subtotalLinea } from '../../utils/medidas';
 import CalculadoraPieTablar from '../../components/CalculadoraPieTablar';
+import CantidadFraccionada from '../../components/CantidadFraccionada';
 import CotizacionImprimible from '../../components/CotizacionImprimible';
 import { numeroCotizacion } from '../../utils/formato';
 import '../../components/PantallaModulo.css';
 import SelectorTalla from '../../components/SelectorTalla';
+import { datosA4DeDocumento, imprimirComprobanteA4 } from '../../utils/facturaA4';
 import { agruparPorModelo } from '../../utils/variantes';
+import AvisoNotaCredito from '../../components/AvisoNotaCredito';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -240,6 +243,8 @@ export default function POS({
   const [tipoComprobante, setTipoComprobante] = useState('BOLETA');
   // Producto por pie tablar cuya calculadora está abierta (módulo Medidas).
   const [productoAMedir, setProductoAMedir] = useState(null);
+  // Producto por kilos, litros o metros: se pregunta cuánto antes de agregarlo.
+  const [productoAPesar, setProductoAPesar] = useState(null);
   // Modelo del que se está eligiendo la talla (módulo "Tallas y colores").
   const [modeloAElegir, setModeloAElegir] = useState(null);
   // Días que el cliente tiene para cambiar (módulo "Cambio de prenda").
@@ -270,13 +275,19 @@ export default function POS({
   // comprobante (lo que antes dejaba la venta ya registrada y el
   // carrito vacío, con riesgo de duplicar la venta si se reintentaba).
   const [facturacionConfigurada, setFacturacionConfigurada] = useState(true);
+  // Configuración del negocio: razón social, logo y color para el A4.
+  const [cfgEmisor, setCfgEmisor] = useState(null);
 
   useEffect(() => {
     api
       .configuracionObtener()
       .then((cfg) => {
-        const listo = !!(cfg.facturalibre_token?.trim() && cfg.facturalibre_ruta?.trim());
+        // Emisión directa a SUNAT: no usa el token de FacturaLibre.
+        const listo =
+          cfg.facturacion_proveedor === 'SUNAT_DIRECTO' ||
+          !!(cfg.facturalibre_token?.trim() && cfg.facturalibre_ruta?.trim());
         setFacturacionConfigurada(listo);
+        setCfgEmisor(cfg);
       })
       .catch(() => {
         // Si falla la consulta, se asume que sí está configurado --
@@ -610,8 +621,9 @@ export default function POS({
     // Con venta por medidas se puede llevar la fracción que queda (0.5 kg).
     const disponible = disponibleDe(producto.id);
     const esMadera = medidas && producto.unidad_medida === UNIDAD_PIE_TABLAR;
+    const fraccionado = seVendeFraccionado(producto.unidad_medida);
     const cuanto = medidas ? Math.min(1, disponible) : 1;
-    if (disponible <= 0 || (!esMadera && disponible + 1e-6 < cuanto)) {
+    if (disponible <= 0 || (!esMadera && !fraccionado && disponible + 1e-6 < cuanto)) {
       setAvisoStock({ texto: textoSinStock(producto.id, producto.nombre, disponible) });
       recargarProductos();
       return false;
@@ -622,6 +634,12 @@ export default function POS({
       setProductoAMedir(producto);
       return true;
     }
+    // Por kilos, litros o metros: se pregunta cuánto (antes entraba 1 kg
+    // directo y había que corregirlo en el carrito).
+    if (fraccionado) {
+      setProductoAPesar(producto);
+      return true;
+    }
     setCarrito((prev) => {
       const existe = prev.find((i) => !i.clave && i.id === producto.id);
       if (existe) {
@@ -630,6 +648,21 @@ export default function POS({
       return [...prev, { ...producto, cantidad: cuanto, descuentoMonto: 0 }];
     });
     return true;
+  };
+
+  // Cantidad elegida para un producto por kilos, litros o metros: se suma a
+  // su línea si ya estaba en el carrito.
+  const agregarFraccion = (cantidad) => {
+    const producto = productoAPesar;
+    setProductoAPesar(null);
+    if (!producto) return;
+    setCarrito((prev) => {
+      const existe = prev.find((i) => !i.clave && i.id === producto.id);
+      if (existe) {
+        return prev.map((i) => (i === existe ? { ...i, cantidad: redondear3(i.cantidad + cantidad) } : i));
+      }
+      return [...prev, { ...producto, cantidad, descuentoMonto: 0 }];
+    });
   };
 
   // La calculadora devolvió pies y medidas: entra como línea propia (la
@@ -911,6 +944,7 @@ export default function POS({
                 venta_id: cambioEnCurso.venta_id,
                 productos: cambioEnCurso.items.map((i) => ({ detalle_id: i.detalle_id, cantidad: i.cantidad, con_falla: !!i.con_falla })),
                 motivo: cambioEnCurso.motivo || null,
+                emitir_nota_credito: !!cambioEnCurso.emitir_nota_credito,
               },
             }
           : {}),
@@ -967,6 +1001,7 @@ export default function POS({
                 aCobrar,
                 aDevolver,
                 folioDevolucion: resultado.cambio_prenda?.folio_devolucion || null,
+                notaCredito: resultado.cambio_prenda?.nota_credito || null,
               }
             : null,
           pagoOtro: esMixto ? mixtoOtro : null,
@@ -1037,15 +1072,38 @@ export default function POS({
   // entrega un formato genérico A4, no apto para ticket. La factura se
   // puede imprimir de las dos formas: en ticket de 80 mm (el mismo Recibo)
   // o en A4 (el PDF real de FacturaLibre); se elige con dos botones.
+  // Emisión directa: el A4 es nuestro diseño (utils/facturaA4.js), armado
+  // con el documento que se envió a SUNAT; solo si SUNAT lo aceptó.
   const facturaConA4 = (() => {
     const comp = ultimaVentaParaImprimir?.comprobante;
-    return comp?.tipo === 'FACTURA' && !!comp?.enlace_pdf && !!comp?.comprobante_id;
+    return (
+      comp?.tipo === 'FACTURA' && !!comp?.comprobante_id && (!!comp?.enlace_pdf || comp?.estado === 'ACEPTADO')
+    );
   })();
 
-  // formato: 'A4' abre el PDF de la factura; cualquier otro, el ticket.
+  const imprimirA4Propio = async (comp) => {
+    try {
+      const documento = await api.comprobanteDocumento(comp.comprobante_id);
+      const datos = await datosA4DeDocumento(documento, {
+        hash: comp.hash,
+        telefono: cfgEmisor?.telefono || telefono,
+        email: cfgEmisor?.email,
+        logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,
+        color: cfgEmisor?.color_acento,
+      });
+      imprimirComprobanteA4(datos);
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: `No se pudo preparar la hoja A4: ${e.message}` });
+    }
+  };
+
+  // formato: 'A4' abre el PDF de la factura (o nuestro A4); cualquier otro, el ticket.
   const imprimirComprobante = (formato) => {
-    if (formato === 'A4' && facturaConA4) {
-      setPdfVisible(api.comprobantePdfUrl(ultimaVentaParaImprimir.comprobante.comprobante_id));
+    const comp = ultimaVentaParaImprimir?.comprobante;
+    if (formato === 'A4' && facturaConA4 && comp.enlace_pdf) {
+      setPdfVisible(api.comprobantePdfUrl(comp.comprobante_id));
+    } else if (formato === 'A4' && facturaConA4) {
+      imprimirA4Propio(comp);
     } else {
       window.print();
     }
@@ -1555,7 +1613,8 @@ export default function POS({
                       etiqueta={`Precio de ${item.nombre} para esta venta`}
                     />{' '}
                     c/u
-                    {medidas && ` · S/ ${subtotalLinea(item.precio, item.cantidad).toFixed(2)}`}
+                    {(medidas || seVendeFraccionado(item.unidad_medida)) &&
+                      ` · S/ ${subtotalLinea(item.precio, item.cantidad).toFixed(2)}`}
                     {item.precioOriginal != null && (
                       <button
                         type="button"
@@ -1570,7 +1629,9 @@ export default function POS({
                 ) : (
                   <span className="pos-carrito-item-precio">
                     {cobrandoPedido ? `${item.cantidad} × ` : ''}S/ {item.precio.toFixed(2)} c/u
-                    {medidas && !cobrandoPedido && ` · S/ ${subtotalLinea(item.precio, item.cantidad).toFixed(2)}`}
+                    {(medidas || seVendeFraccionado(item.unidad_medida)) &&
+                      !cobrandoPedido &&
+                      ` · S/ ${subtotalLinea(item.precio, item.cantidad).toFixed(2)}`}
                   </span>
                 )}
               </div>
@@ -1583,9 +1644,14 @@ export default function POS({
                     <button className="pos-quitar" onClick={() => quitarDelCarrito(claveDe(item))}>🗑</button>
                   </div>
                 ) : (
-                  <div className={`pos-carrito-item-controles${medidas ? ' pos-carrito-item-editable' : ''}`}>
+                  <div
+                    className={`pos-carrito-item-controles${
+                      medidas || seVendeFraccionado(item.unidad_medida) ? ' pos-carrito-item-editable' : ''
+                    }`}
+                  >
                     <button onClick={() => cambiarCantidad(claveDe(item), -1)}>−</button>
-                    {medidas ? (
+                    {/* Por kilos, litros o metros la cantidad se escribe (0.75) aunque el negocio no tenga el módulo de medidas. */}
+                    {medidas || seVendeFraccionado(item.unidad_medida) ? (
                       <CantidadEditable
                         valor={item.cantidad}
                         onCambiar={(cantidad) => fijarCantidad(claveDe(item), cantidad)}
@@ -1985,6 +2051,15 @@ export default function POS({
         </div>
       )}
 
+      {productoAPesar && (
+        <CantidadFraccionada
+          producto={productoAPesar}
+          yaEnCarrito={carrito.filter((i) => i.id === productoAPesar.id).reduce((s, i) => s + i.cantidad, 0)}
+          onAgregar={agregarFraccion}
+          onCerrar={() => setProductoAPesar(null)}
+        />
+      )}
+
       {productoAMedir && (
         <CalculadoraPieTablar
           producto={productoAMedir}
@@ -2061,6 +2136,9 @@ export default function POS({
                     ).toFixed(2)}
                   </strong>
                 </div>
+                {ultimaVentaParaImprimir.venta.cambioPrenda.notaCredito && (
+                  <AvisoNotaCredito resultado={ultimaVentaParaImprimir.venta.cambioPrenda.notaCredito} />
+                )}
               </>
             )}
             {ultimaVentaParaImprimir.venta.cambio != null && (
@@ -2207,6 +2285,7 @@ export default function POS({
           comprobante={ultimaVentaParaImprimir.comprobante}
           cliente={ultimaVentaParaImprimir.cliente}
           nombreTienda={nombreTienda}
+          razonSocial={cfgEmisor?.razon_social}
           direccion={direccion}
           telefono={telefono}
           ruc={ruc}

@@ -21,6 +21,7 @@ import {
   FileText,
   HandCoins,
   Route,
+  TrendingDown,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
@@ -55,6 +56,7 @@ export const GRUPOS_MENU = [
     items: [
       { id: 'COMPROBANTES', label: 'Comprobantes', icono: Receipt },
       { id: 'REPORTES', label: 'Reportes', icono: BarChart3 },
+      { id: 'GASTOS', label: 'Gastos', icono: TrendingDown, soloAdmin: true },
       { id: 'SUSCRIPCION', label: 'Suscripción', icono: CreditCard, soloAdmin: true },
       { id: 'CONFIGURACION', label: 'Configuración', icono: Settings, soloAdmin: true },
     ],

@@ -1,0 +1,44 @@
+/* Nota de crédito emitida con una devolución o un cambio (anc-*). */
+.anc {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.anc-ok {
+  border: 1.5px solid #86efac;
+  background: #f0fdf4;
+  color: #14532d;
+}
+
+.anc-aviso {
+  border: 1.5px solid #fcd34d;
+  background: #fffbeb;
+  color: #78350f;
+}
+
+.anc-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.anc-botones button {
+  padding: 6px 12px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.anc-error {
+  margin-top: 6px;
+  color: #991b1b;
+  font-weight: 600;
+}

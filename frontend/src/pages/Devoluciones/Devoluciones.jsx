@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../../api/api';
 import { describirPago, nombreMetodo } from '../../utils/metodoPago';
 import CambioPrenda from './CambioPrenda';
+import AvisoNotaCredito from '../../components/AvisoNotaCredito';
 import './Devoluciones.css';
 
 // cambios: el negocio tiene el módulo "Cambio de prenda" (ropa y calzado):
@@ -16,12 +17,15 @@ export default function Devoluciones({ usuario, cambios = false, onIniciarCambio
   const [motivo, setMotivo] = useState('');
   const [procesando, setProcesando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
+  // Emisión directa: la nota de crédito que salió con la devolución.
+  const [notaCredito, setNotaCredito] = useState(null);
   // Solo para ventas MIXTO: cómo se le devuelve el dinero al cliente.
   const [metodoReembolso, setMetodoReembolso] = useState('EFECTIVO');
 
   const buscar = async () => {
     if (!busqueda.trim()) return;
     setMensaje(null);
+    setNotaCredito(null);
     setVenta(null);
     setBuscando(true);
     try {
@@ -101,6 +105,7 @@ export default function Devoluciones({ usuario, cambios = false, onIniciarCambio
         metodo_reembolso: venta.metodo_pago === 'MIXTO' ? metodoReembolso : null,
       });
       setMensaje({ tipo: 'exito', texto: `Devolución ${resultado.folio_devolucion || ''} procesada correctamente. Stock actualizado.` });
+      setNotaCredito(resultado.nota_credito || null);
       setVenta(null);
       setItems([]);
       setBusqueda('');
@@ -148,6 +153,7 @@ export default function Devoluciones({ usuario, cambios = false, onIniciarCambio
       </div>
 
       {mensaje && <p className={`dev-mensaje dev-mensaje-${mensaje.tipo}`}>{mensaje.texto}</p>}
+      {notaCredito && <AvisoNotaCredito resultado={notaCredito} />}
 
       {venta && (
         <div className="dev-venta-card">

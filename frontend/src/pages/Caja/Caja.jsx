@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
+import { ArrowDownToLine, ArrowUpFromLine, ReceiptText } from 'lucide-react';
 import { api } from '../../api/api';
 import { ventasDeCajaPorMetodo } from '../../utils/metodoPago';
+import FormularioGasto from '../../components/FormularioGasto';
+import MovimientoCaja from '../../components/MovimientoCaja';
 import './Caja.css';
+
+const NOMBRE_MOVIMIENTO = { GASTO: 'Gasto', RETIRO: 'Retiro', INGRESO: 'Ingreso' };
 
 export default function Caja({ usuario }) {
   const [caja, setCaja] = useState(null);
@@ -12,14 +17,28 @@ export default function Caja({ usuario }) {
   const [procesando, setProcesando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [resumenCierre, setResumenCierre] = useState(null);
+  // Gastos, retiros e ingresos del turno, y la ventana abierta para
+  // registrar uno ('GASTO' | 'RETIRO' | 'INGRESO').
+  const [movimientos, setMovimientos] = useState([]);
+  const [ventana, setVentana] = useState(null);
 
   const cargarCaja = () => {
     setCargando(true);
     api
       .cajaAbierta()
-      .then(setCaja)
+      .then((c) => {
+        setCaja(c);
+        if (c) api.cajaMovimientos().then(setMovimientos).catch(() => setMovimientos([]));
+        else setMovimientos([]);
+      })
       .catch(() => setCaja(null))
       .finally(() => setCargando(false));
+  };
+
+  const movimientoGuardado = (texto) => {
+    setVentana(null);
+    setMensaje({ tipo: 'exito', texto });
+    cargarCaja();
   };
 
   useEffect(() => {
@@ -252,6 +271,45 @@ export default function Caja({ usuario }) {
           <span>Efectivo esperado</span>
           <strong>S/ {efectivoEsperado.toFixed(2)}</strong>
         </div>
+        {efectivoEsperado < -0.005 && (
+          <p className="caja-mov-alerta">
+            Se registró salida de más efectivo del que había en la caja. Anula en Gastos el gasto que se pagó con plata de otro lado
+            y vuelve a registrarlo con esa forma de pago.
+          </p>
+        )}
+
+        <div className="caja-mov-acciones">
+          <button type="button" onClick={() => setVentana('GASTO')}>
+            <ReceiptText size={16} /> Gasto
+          </button>
+          <button type="button" onClick={() => setVentana('RETIRO')}>
+            <ArrowUpFromLine size={16} /> Retiro
+          </button>
+          <button type="button" onClick={() => setVentana('INGRESO')}>
+            <ArrowDownToLine size={16} /> Ingreso
+          </button>
+        </div>
+
+        {movimientos.length > 0 && (
+          <ul className="caja-mov-lista" aria-label="Movimientos del turno">
+            {movimientos.map((m) => (
+              <li key={m.id}>
+                <span className={`caja-mov-tipo caja-mov-${m.tipo.toLowerCase()}`}>{NOMBRE_MOVIMIENTO[m.tipo] || m.tipo}</span>
+                <span className="caja-mov-motivo">
+                  {m.motivo}
+                  <small>
+                    {m.hora}
+                    {m.usuario ? ` · ${m.usuario}` : ''}
+                    {m.gasto_id ? ` · Gasto N.° ${m.gasto_id}` : ''}
+                  </small>
+                </span>
+                <strong>
+                  {m.tipo === 'INGRESO' ? '+' : '−'} S/ {m.monto.toFixed(2)}
+                </strong>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <div className="caja-separador"></div>
 
@@ -288,6 +346,20 @@ export default function Caja({ usuario }) {
           {procesando ? 'Cerrando...' : 'Cerrar caja'}
         </button>
       </div>
+
+      {ventana === 'GASTO' && (
+        <FormularioGasto soloCaja efectivoCaja={efectivoEsperado} onCerrar={() => setVentana(null)} onGuardado={(r) => movimientoGuardado(r.mensaje)} />
+      )}
+      {(ventana === 'RETIRO' || ventana === 'INGRESO') && (
+        <MovimientoCaja
+          tipo={ventana}
+          cajaId={caja.id}
+          usuario={usuario}
+          disponible={efectivoEsperado}
+          onCerrar={() => setVentana(null)}
+          onGuardado={() => movimientoGuardado(ventana === 'RETIRO' ? 'Retiro registrado.' : 'Ingreso registrado.')}
+        />
+      )}
     </div>
   );
 }

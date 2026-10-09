@@ -322,3 +322,35 @@
     justify-content: flex-start;
   }
 }
+
+/* Cambio de prenda: el cajero elige si sale la nota de crédito. */
+.dev-cambio-nota {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 4px 0 14px;
+  padding: 10px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.dev-cambio-nota input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.dev-cambio-nota strong {
+  display: block;
+  font-size: 13.5px;
+}
+
+.dev-cambio-nota small {
+  display: block;
+  margin-top: 2px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.4;
+}

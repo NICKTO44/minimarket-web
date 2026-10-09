@@ -1,0 +1,322 @@
+/* Ventana para registrar un gasto o un movimiento de caja (fg-*). */
+.fg-velo {
+  position: fixed;
+  inset: 0;
+  /* Encima de la barra inferior del celular (300), debajo del diálogo de confirmación. */
+  z-index: 320;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.fg-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100dvh - 32px);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #16181d;
+}
+
+.fg-cabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid #eef0f3;
+}
+
+.fg-cabecera h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.fg-cabecera p {
+  margin: 3px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.fg-icono {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--color-primario-suave);
+  color: var(--color-primario);
+}
+
+.fg-cerrar {
+  margin-left: auto;
+  padding: 4px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.fg-cerrar:hover {
+  background: #f3f4f6;
+}
+
+.fg-cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.fg-fila {
+  display: flex;
+  gap: 12px;
+}
+
+.fg-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fg-ancho {
+  flex: 1;
+}
+
+.fg-monto {
+  width: 140px;
+  flex-shrink: 0;
+}
+
+.fg-campo > span {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #374151;
+}
+
+.fg-campo input,
+.fg-campo select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+  color: inherit;
+  box-sizing: border-box;
+}
+
+.fg-campo input:focus,
+.fg-campo select:focus {
+  outline: none;
+  border-color: var(--color-primario);
+}
+
+.fg-campo input:disabled {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.fg-monto input {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.fg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fg-chips button {
+  padding: 7px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 999px;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+}
+
+.fg-chips button:hover {
+  border-color: var(--color-primario-borde);
+}
+
+.fg-chips button.activo {
+  border-color: var(--color-primario);
+  background: var(--color-primario-suave);
+  color: var(--color-primario-texto);
+}
+
+.fg-nota {
+  margin: -6px 0 0;
+  color: #6b7280;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.fg-tenue {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.fg-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fg-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px 18px;
+  border-top: 1px solid #eef0f3;
+}
+
+.fg-boton {
+  padding: 10px 16px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: #374151;
+  cursor: pointer;
+}
+
+.fg-boton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fg-boton-principal {
+  border-color: var(--color-primario);
+  background: var(--color-primario);
+  color: var(--color-sobre-primario);
+}
+
+.fg-segmentos {
+  display: flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: #f1f2f4;
+}
+
+.fg-segmentos button {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.fg-segmentos button.activo {
+  background: #fff;
+  color: #16181d;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+@media (max-width: 560px) {
+  .fg-velo {
+    align-items: end;
+    padding: 0;
+  }
+
+  .fg-modal {
+    max-height: 92dvh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .fg-fila {
+    flex-direction: column;
+  }
+
+  .fg-monto {
+    width: auto;
+  }
+}
+
+.fg-nota-error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.fg-chips button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Nota de crédito: una fila por línea del comprobante. */
+.nc-linea {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f2f4;
+}
+
+.nc-desc {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #16181d;
+}
+
+.nc-desc small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.nc-linea input {
+  width: 72px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+  text-align: right;
+}
+
+.nc-linea input:focus {
+  outline: none;
+  border-color: var(--color-primario);
+}
+
+.fg-icono.fg-icono-peligro {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.fg-boton.fg-boton-peligro {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
