@@ -119,6 +119,8 @@ export const api = {
   // Retiro o ingreso de efectivo en la caja abierta (los gastos van por /gastos).
   cajaMovimiento: (data) => request('/cajas/movimiento', { method: 'POST', body: JSON.stringify(data) }),
   cajaMovimientos: () => request('/cajas/movimientos'),
+  // Una caja del historial con sus totales, su cierre y sus movimientos.
+  cajaDetalle: (id) => request(`/cajas/${id}/detalle`),
   // Módulo Gastos.
   gastos: (filtro = {}) => {
     const q = new URLSearchParams(Object.entries(filtro).filter(([, v]) => v !== '' && v != null && v !== false));

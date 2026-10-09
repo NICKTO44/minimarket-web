@@ -6,7 +6,7 @@ import './FormularioGasto.css';
 const TIPOS = {
   RETIRO: {
     titulo: 'Retiro de efectivo',
-    ayuda: 'Plata que se saca de la caja y no es un gasto (por ejemplo, el dueño se lleva lo vendido).',
+    ayuda: 'Plata que se saca de la caja y no es un gasto (por ejemplo, el dueño se lleva lo vendido). Si pagaste algo (pasaje, publicidad, compras menores), regístralo como Gasto: un retiro no cuenta en el reporte de gastos.',
     ejemplo: 'Ej. Retiro del dueño a medio día',
     icono: ArrowUpFromLine,
   },

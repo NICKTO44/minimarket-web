@@ -1,4 +1,4 @@
-use axum::{extract::{Extension, Query}, Json, http::StatusCode};
+use axum::{extract::{Extension, Path, Query}, Json, http::StatusCode};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -385,6 +385,147 @@ pub async fn listar_cajas(
 
     Ok(Json(cajas))
 }
+
+#[derive(serde::Serialize)]
+pub struct DetalleCaja {
+    /// Los mismos datos que la caja abierta (ventas por forma de pago,
+    /// ingresos, retiros, gastos...).
+    #[serde(flatten)]
+    pub caja: CajaEstado,
+    pub estado: String,
+    pub fecha_cierre: Option<String>,
+    pub observaciones_apertura: Option<String>,
+    pub observaciones_cierre: Option<String>,
+    /// Del cierre: lo que debía haber, lo que se contó y la diferencia.
+    pub efectivo_esperado: Option<f64>,
+    pub monto_contado: Option<f64>,
+    pub diferencia: Option<f64>,
+    pub estado_diferencia: Option<String>,
+    pub justificacion_diferencia: Option<String>,
+    pub movimientos: Vec<MovimientoCaja>,
+}
+
+fn e500<E: ToString>(e: E) -> (StatusCode, String) {
+    (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+}
+
+/// GET /cajas/:id/detalle — una caja (abierta o cerrada) con todos sus
+/// totales, el cuadre del cierre y sus gastos, retiros e ingresos.
+pub async fn detalle_caja(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Path(id): Path<i64>,
+) -> Result<Json<DetalleCaja>, (StatusCode, String)> {
+    let conn = tenant.0.connect().map_err(e500)?;
+
+    const COLUMNAS: &str = "c.id, COALESCE(u.nombre_completo, ''), CAST(COALESCE(c.monto_inicial, 0) AS REAL),
+        CAST(COALESCE(c.ventas_efectivo, 0) AS REAL), CAST(COALESCE(c.ventas_tarjeta, 0) AS REAL),
+        CAST(COALESCE(c.ventas_transferencia, 0) AS REAL), CAST(COALESCE(c.total_ventas, 0) AS REAL),
+        COALESCE(c.numero_transacciones, 0), CAST(COALESCE(c.devoluciones_monto, 0) AS REAL),
+        CAST(COALESCE(c.retiros_total, 0) AS REAL), CAST(COALESCE(c.ingresos_total, 0) AS REAL),
+        CAST(COALESCE(c.gastos_total, 0) AS REAL), c.fecha_apertura,
+        c.estado, c.fecha_cierre, c.observaciones_apertura, c.observaciones_cierre,
+        CAST(c.efectivo_esperado AS REAL), CAST(c.monto_final_contado AS REAL), CAST(c.diferencia AS REAL),
+        c.estado_diferencia, c.justificacion_diferencia";
+    const DESDE: &str = "FROM cajas c LEFT JOIN usuarios u ON u.id = c.usuario_id WHERE c.id = ?1";
+    // Con Yape y Plin por separado (columnas 22 a 25); sin la migración 0019,
+    // la consulta de siempre.
+    let (mut filas, con_billeteras) = match conn
+        .query(&format!("SELECT {}, {} {}", COLUMNAS, BILLETERAS, DESDE), libsql::params![id])
+        .await
+    {
+        Ok(f) => (f, true),
+        Err(_) => (
+            conn.query(&format!("SELECT {} {}", COLUMNAS, DESDE), libsql::params![id]).await.map_err(e500)?,
+            false,
+        ),
+    };
+    let f = filas
+        .next()
+        .await
+        .map_err(e500)?
+        .ok_or((StatusCode::NOT_FOUND, "Esa caja no existe.".to_string()))?;
+    let real = |i: i32| f.get::<f64>(i).unwrap_or(0.0);
+    let opcional_real = |i: i32| f.get::<Option<f64>>(i).unwrap_or(None);
+    let opcional_texto = |i: i32| f.get::<Option<String>>(i).unwrap_or(None).filter(|t| !t.trim().is_empty());
+    let caja = CajaEstado {
+        id: f.get(0).unwrap_or_default(),
+        usuario_nombre: f.get(1).unwrap_or_default(),
+        monto_inicial: real(2),
+        ventas_efectivo: real(3),
+        ventas_tarjeta: real(4),
+        ventas_transferencia: real(5),
+        total_ventas: real(6),
+        numero_transacciones: f.get(7).unwrap_or_default(),
+        devoluciones_monto: real(8),
+        retiros_total: real(9),
+        ingresos_total: real(10),
+        gastos_total: real(11),
+        fecha_apertura: f.get(12).unwrap_or_default(),
+        ventas_yape: if con_billeteras { real(22) } else { 0.0 },
+        ventas_plin: if con_billeteras { real(23) } else { 0.0 },
+        ventas_yape_plin: if con_billeteras { real(24) } else { 0.0 },
+        detalle_billeteras: con_billeteras && f.get::<i64>(25).unwrap_or(0) == 1,
+    };
+    let estado: String = f.get(13).unwrap_or_default();
+    let fecha_cierre = opcional_texto(14);
+    let observaciones_apertura = opcional_texto(15);
+    let observaciones_cierre = opcional_texto(16);
+    let efectivo_esperado = opcional_real(17);
+    let monto_contado = opcional_real(18);
+    let diferencia = opcional_real(19);
+    let estado_diferencia = opcional_texto(20);
+    let justificacion_diferencia = opcional_texto(21);
+    drop(filas);
+
+    // Gastos, retiros e ingresos de esta caja, en el orden en que pasaron.
+    // La base (Turso) guarda la hora en UTC: se muestra la de Perú.
+    const MOV: &str = "m.id, m.tipo, CAST(m.monto AS REAL), m.motivo,
+         COALESCE(strftime('%H:%M', m.fecha_hora, '-5 hours'), ''), COALESCE(u.nombre_completo, '')";
+    const MOV_DESDE: &str = "FROM movimientos_caja m LEFT JOIN usuarios u ON u.id = m.usuario_id WHERE m.caja_id = ?1";
+    let mut filas = match conn
+        .query(
+            &format!(
+                "SELECT {}, (SELECT g.id FROM gastos g WHERE g.movimiento_caja_id = m.id) {} ORDER BY m.id",
+                MOV, MOV_DESDE
+            ),
+            libsql::params![id],
+        )
+        .await
+    {
+        Ok(f) => f,
+        Err(_) => conn
+            .query(&format!("SELECT {}, NULL {} ORDER BY m.id", MOV, MOV_DESDE), libsql::params![id])
+            .await
+            .map_err(e500)?,
+    };
+    let mut movimientos = Vec::new();
+    while let Some(m) = filas.next().await.map_err(e500)? {
+        movimientos.push(MovimientoCaja {
+            id: m.get(0).unwrap_or_default(),
+            tipo: m.get(1).unwrap_or_default(),
+            monto: m.get(2).unwrap_or(0.0),
+            motivo: m.get(3).unwrap_or_default(),
+            hora: m.get(4).unwrap_or_default(),
+            usuario: m.get(5).unwrap_or_default(),
+            gasto_id: m.get(6).unwrap_or(None),
+        });
+    }
+
+    Ok(Json(DetalleCaja {
+        caja,
+        estado,
+        fecha_cierre,
+        observaciones_apertura,
+        observaciones_cierre,
+        efectivo_esperado,
+        monto_contado,
+        diferencia,
+        estado_diferencia,
+        justificacion_diferencia,
+        movimientos,
+    }))
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::alcanza_efectivo;

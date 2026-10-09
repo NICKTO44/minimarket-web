@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Eye } from 'lucide-react';
 import { api } from '../../api/api';
+import DetalleCaja from './DetalleCaja';
 import './HistorialCaja.css';
 
 const MESES = [
@@ -22,6 +24,9 @@ export default function HistorialCaja() {
   const [cajas, setCajas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState(null);
+  // Caja abierta en la ventana de detalle.
+  const [detalleId, setDetalleId] = useState(null);
+  const cerrarDetalle = useCallback(() => setDetalleId(null), []);
 
   const cargar = () => {
     setCargando(true);
@@ -104,6 +109,7 @@ export default function HistorialCaja() {
                 <th>Ventas</th>
                 <th>Diferencia</th>
                 <th>Estado</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -128,11 +134,16 @@ export default function HistorialCaja() {
                   <td>
                     <span className={`hcaja-badge hcaja-badge-${c.estado.toLowerCase()}`}>{c.estado}</span>
                   </td>
+                  <td>
+                    <button type="button" className="hcaja-ver" onClick={() => setDetalleId(c.id)}>
+                      <Eye size={14} /> Ver
+                    </button>
+                  </td>
                 </tr>
               ))}
               {cajas.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="hcaja-sin-resultados">
+                  <td colSpan={7} className="hcaja-sin-resultados">
                     No hubo ninguna caja abierta en {MESES[mes]} {anio}.
                   </td>
                 </tr>
@@ -141,6 +152,8 @@ export default function HistorialCaja() {
           </table>
         </div>
       )}
+
+      {detalleId && <DetalleCaja cajaId={detalleId} onCerrar={cerrarDetalle} />}
     </div>
   );
 }

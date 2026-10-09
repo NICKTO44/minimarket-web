@@ -221,6 +221,7 @@ async fn main() {
         .route("/cajas/movimiento", post(handlers::cajas::registrar_movimiento))
         .route("/cajas/abierta", get(handlers::cajas::obtener_caja_abierta))
         .route("/cajas/movimientos", get(handlers::cajas::movimientos_caja_abierta))
+        .route("/cajas/:id/detalle", get(handlers::cajas::detalle_caja))
         // Gastos del negocio (alquiler, luz, sueldos...); ver handlers/gastos.rs.
         .route("/gastos", get(handlers::gastos::listar).post(handlers::gastos::registrar))
         .route("/gastos/:id/anular", post(handlers::gastos::anular))
