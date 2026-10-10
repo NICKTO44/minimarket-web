@@ -277,6 +277,12 @@ export default function POS({
   const [facturacionConfigurada, setFacturacionConfigurada] = useState(true);
   // Configuración del negocio: razón social, logo y color para el A4.
   const [cfgEmisor, setCfgEmisor] = useState(null);
+  // Logo del negocio para el ticket. Se precarga: el ticket se imprime
+  // apenas termina la venta y el logo tiene que estar listo para salir.
+  const logoNegocio = cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null;
+  useEffect(() => {
+    if (logoNegocio) new Image().src = logoNegocio;
+  }, [logoNegocio]);
 
   useEffect(() => {
     api
@@ -2291,6 +2297,7 @@ export default function POS({
           ruc={ruc}
           cajero={usuario.nombre}
           diasCambio={cambios ? diasCambio : 0}
+          logo={logoNegocio}
         />
       )}
     </div>

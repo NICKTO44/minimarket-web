@@ -42,6 +42,12 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   const pdfContenedorRef = useRef(null);
   // Configuración del negocio: razón social, logo y color para el A4.
   const [cfgEmisor, setCfgEmisor] = useState(null);
+  // Logo del negocio para el ticket. Se precarga: el ticket se imprime
+  // apenas termina la venta y el logo tiene que estar listo para salir.
+  const logoNegocio = cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null;
+  useEffect(() => {
+    if (logoNegocio) new Image().src = logoNegocio;
+  }, [logoNegocio]);
   // Emisión directa: lo que todavía no llega a SUNAT y la fila que se está
   // reenviando.
   const [avisos, setAvisos] = useState(null);
@@ -877,6 +883,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
           ruc={ruc}
           cajero={usuario?.nombre || ''}
           fecha={ventaParaImprimir.fecha}
+          logo={logoNegocio}
         />
       )}
 
