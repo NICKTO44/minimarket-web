@@ -1,5 +1,8 @@
 # Etapa 1: compilar los binarios (servidor + comando de migraciones)
-FROM rust:1.98-slim AS builder
+# Misma Debian (bookworm) que la imagen final: "rust:*-slim" a secas ahora
+# es trixie y compila contra una glibc más nueva que la de bookworm, y el
+# binario no corre ("GLIBC_2.39 not found").
+FROM rust:1.98-slim-bookworm AS builder
 
 WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
