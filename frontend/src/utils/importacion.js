@@ -27,7 +27,9 @@ export function normalizar(texto) {
 
 // Nombres con los que otros sistemas llaman a cada campo (ya normalizados).
 const NOMBRES = {
-  codigo: ['codigo', 'cod', 'codigobarras', 'codigodebarras', 'codbarras', 'codbarra', 'barras', 'barcode', 'sku', 'ean', 'codigoproducto', 'codproducto', 'codigointerno', 'codigodelproducto', 'referencia', 'ref', 'clave'],
+  codigo: ['codigo', 'cod', 'codigobarras', 'codigodebarras', 'codbarras', 'codbarra', 'barras', 'barcode', 'sku', 'ean', 'codigoproducto', 'codproducto', 'codigointerno', 'codigodelproducto', 'referencia', 'ref', 'clave',
+    // Odoo: "Referencia interna" (en inglés "Internal Reference" / default_code).
+    'referenciainterna', 'internalreference', 'defaultcode'],
   nombre: ['nombre', 'producto', 'articulo', 'nombreproducto', 'nombredelproducto', 'nombrearticulo', 'denominacion', 'productos'],
   precio: ['precio', 'precioventa', 'preciodeventa', 'pventa', 'pvp', 'pv', 'preciounitario', 'punitario', 'preciopublico', 'precioalpublico', 'preciofinal', 'precio1', 'venta', 'valor', 'importe', 'precios'],
   precio_compra: ['preciocompra', 'preciodecompra', 'pcompra', 'costo', 'costounitario', 'preciocosto', 'preciodecosto', 'coste', 'compra', 'pc'],
