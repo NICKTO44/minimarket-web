@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { api } from '../../api/api';
 import { opcionesUnidad } from '../../utils/unidades';
 import { formatoCantidad } from '../../utils/medidas';
+import { fechaHoraLima, hoyLima } from '../../utils/formato';
 import './Proveedores.css';
 
 
@@ -189,7 +190,7 @@ export default function Proveedores() {
     try {
        await api.compraCrear({
         proveedor_id: parseInt(compraProveedorId, 10),
-        fecha_compra: new Date().toISOString().slice(0, 10),
+        fecha_compra: hoyLima(),
         items: compraItems.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad, precio_compra: i.precio_compra })),
         tipo_pago: compraTipoPago,
         credito_aplicado: parseFloat(compraCreditoAplicado) || 0,
@@ -473,7 +474,7 @@ export default function Proveedores() {
                 <tr key={d.id}>
                   <td>{d.folio}</td>
                   <td>{d.proveedor_nombre}</td>
-                  <td>{d.fecha}</td>
+                  <td>{fechaHoraLima(d.fecha)}</td>
                   <td>{d.motivo}</td>
                   <td>S/ {d.monto_devolucion.toFixed(2)}</td>
                   <td>

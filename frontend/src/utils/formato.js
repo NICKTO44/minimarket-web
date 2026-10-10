@@ -15,12 +15,33 @@ export function numeroCotizacion(numero) {
  * Fecha y hora de una venta en hora de Perú. La base guarda la hora en UTC
  * ("2026-10-04 03:11:14"); aquí se muestra como "3/10/2026, 10:11:14 p. m.".
  */
-export function fechaHoraLima(texto) {
+export function fechaHoraLima(texto, opciones = {}) {
+  const fecha = desdeUtc(texto);
+  if (!fecha) return String(texto || '').trim();
+  return fecha.toLocaleString('es-PE', { timeZone: 'America/Lima', ...opciones });
+}
+
+/** Solo la hora en Perú de una fecha guardada en UTC: "10:11:14 p. m.". */
+export function horaLima(texto, opciones = {}) {
+  const fecha = desdeUtc(texto);
+  if (!fecha) return String(texto || '').trim();
+  return fecha.toLocaleTimeString('es-PE', { timeZone: 'America/Lima', ...opciones });
+}
+
+/** Solo la fecha en Perú de una fecha guardada en UTC, con el formato que se pida. */
+export function diaLima(texto, opciones = {}) {
+  const fecha = desdeUtc(texto);
+  if (!fecha) return String(texto || '').trim();
+  return fecha.toLocaleDateString('es-PE', { timeZone: 'America/Lima', ...opciones });
+}
+
+/** "2026-10-04 03:11:14" (UTC, sin zona) → Date; null si no se entiende. */
+function desdeUtc(texto) {
   const t = String(texto || '').trim();
-  if (!t) return '';
+  if (!t) return null;
   const conZona = /[zZ]$|[+-]\d\d:?\d\d$/.test(t);
   const fecha = new Date(conZona ? t : `${t.replace(' ', 'T')}Z`);
-  return Number.isNaN(fecha.getTime()) ? t : fecha.toLocaleString('es-PE', { timeZone: 'America/Lima' });
+  return Number.isNaN(fecha.getTime()) ? null : fecha;
 }
 
 /**

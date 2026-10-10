@@ -341,7 +341,7 @@ pub async fn listar_cajas(
                     c.ventas_efectivo, c.ventas_tarjeta, c.ventas_transferencia,
                     c.numero_transacciones, c.devoluciones_monto";
     const DESDE: &str = "FROM cajas c JOIN usuarios u ON u.id = c.usuario_id
-             WHERE date(c.fecha_apertura) BETWEEN ?1 AND ?2
+             WHERE date(c.fecha_apertura, '-5 hours') BETWEEN ?1 AND ?2
              ORDER BY c.fecha_apertura DESC";
     // Con Yape y Plin por separado; si la base aún no tiene esas columnas,
     // la consulta de siempre.

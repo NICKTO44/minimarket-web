@@ -3,7 +3,7 @@ import { ArrowLeft, CalendarClock, FileCheck2 } from 'lucide-react';
 import { panelApi } from '../../api/panel';
 import { confirmar } from '../../utils/confirmar';
 import PanelFacturacion from './PanelFacturacion';
-import { fechaCorta, situacion, soles, textoDias, tonoUso, UNIDADES } from './formato';
+import { fechaCorta, fechaCortaUtc, situacion, soles, textoDias, tonoUso, UNIDADES } from './formato';
 
 /** Ficha de un negocio: su suscripción y su facturación electrónica. */
 export default function PanelNegocio({ negocio, onVolver, onActualizado }) {
@@ -33,7 +33,7 @@ export default function PanelNegocio({ negocio, onVolver, onActualizado }) {
           <p>
             {negocio.identificador}
             {negocio.usuarios?.length > 0 && ` · usuarios: ${negocio.usuarios.join(', ')}`}
-            {negocio.fecha_creacion && ` · cliente desde ${fechaCorta(negocio.fecha_creacion)}`}
+            {negocio.fecha_creacion && ` · cliente desde ${fechaCortaUtc(negocio.fecha_creacion)}`}
           </p>
         </div>
         <span className={`pnl-chip pnl-chip-${s.tono} pnl-chip-grande`}>{s.texto}</span>

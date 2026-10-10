@@ -9,7 +9,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { api } from '../../api/api';
-import { hoyLima } from '../../utils/formato';
+import { horaLima, hoyLima } from '../../utils/formato';
 import { ventasDeCajaPorMetodo } from '../../utils/metodoPago';
 import './Resumen.css';
 
@@ -79,7 +79,7 @@ export default function Resumen({ onIrA }) {
       <div className={`res-banner-caja ${caja ? 'res-banner-abierta' : 'res-banner-cerrada'}`}>
         {caja ? <Wallet size={18} /> : <AlertTriangle size={18} />}
         {caja ? (
-          <span>Caja abierta desde las {new Date(caja.fecha_apertura).toLocaleTimeString('es-PE')} — {caja.usuario_nombre}</span>
+          <span>Caja abierta desde las {horaLima(caja.fecha_apertura)} — {caja.usuario_nombre}</span>
         ) : (
           <span>No hay ninguna caja abierta. Ábrela antes de vender.</span>
         )}

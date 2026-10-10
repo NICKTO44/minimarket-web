@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy, Plus } from 'lucide-react';
 import { panelApi } from '../../api/panel';
-import { duracion, fechaCorta, UNIDADES } from './formato';
+import { duracion, fechaCorta, fechaCortaUtc, UNIDADES } from './formato';
 
 /**
  * Códigos de activación: el cliente los canjea en su pantalla Suscripción
@@ -125,14 +125,14 @@ export default function PanelCodigos() {
               <span role="cell">{duracion(c.cantidad, c.unidad)}</span>
               <span role="cell">
                 {c.usado ? (
-                  <span className="pnl-chip pnl-chip-gris">Usado por {c.negocio || 'un negocio'}{c.fecha_uso ? ` · ${fechaCorta(c.fecha_uso)}` : ''}</span>
+                  <span className="pnl-chip pnl-chip-gris">Usado por {c.negocio || 'un negocio'}{c.fecha_uso ? ` · ${fechaCortaUtc(c.fecha_uso)}` : ''}</span>
                 ) : c.vigente ? (
                   <span className="pnl-chip pnl-chip-verde">Disponible hasta {fechaCorta(c.caduca)}</span>
                 ) : (
                   <span className="pnl-chip pnl-chip-rojo">Caducó sin usar</span>
                 )}
               </span>
-              <span role="cell" className="pnl-tenue">{fechaCorta(c.fecha_creacion)}</span>
+              <span role="cell" className="pnl-tenue">{fechaCortaUtc(c.fecha_creacion)}</span>
             </div>
           ))}
           {codigos.length === 0 && <p className="pnl-tenue pnl-vacio">Todavía no hay códigos.</p>}

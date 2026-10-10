@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { Printer, Wallet, X } from 'lucide-react';
 import { api } from '../../api/api';
 import { ventasDeCajaPorMetodo } from '../../utils/metodoPago';
+import { fechaHoraLima } from '../../utils/formato';
 import '../../components/FormularioGasto.css';
 import './Caja.css';
 
 const NOMBRE_MOVIMIENTO = { GASTO: 'Gasto', RETIRO: 'Retiro', INGRESO: 'Ingreso' };
 
 const soles = (n) => `S/ ${Number(n || 0).toFixed(2)}`;
-const fechaHora = (texto) => (texto ? new Date(texto).toLocaleString('es-PE') : '—');
+// La base guarda apertura y cierre en UTC: se muestran en hora de Perú.
+const fechaHora = (texto) => (texto ? fechaHoraLima(texto) : '—');
 
 function estadoDiferencia(dif) {
   if (Math.abs(dif) < 0.01) return 'sin-diferencia';

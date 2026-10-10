@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../../api/api';
 import { describirPago, nombreMetodo } from '../../utils/metodoPago';
+import { fechaHoraLima } from '../../utils/formato';
 import CambioPrenda from './CambioPrenda';
 import AvisoNotaCredito from '../../components/AvisoNotaCredito';
 import './Devoluciones.css';
@@ -167,7 +168,7 @@ export default function Devoluciones({ usuario, cambios = false, onIniciarCambio
                 </span>
               )}
             </div>
-            <span className="dev-venta-fecha">{new Date(venta.fecha_hora).toLocaleString('es-PE')}</span>
+            <span className="dev-venta-fecha">{fechaHoraLima(venta.fecha_hora)}</span>
           </div>
           <div className="dev-venta-total">Total original: S/ {venta.total.toFixed(2)} — {describirPago(venta)}</div>
 

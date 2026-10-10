@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ArrowDownToLine, ArrowUpFromLine, ReceiptText } from 'lucide-react';
 import { api } from '../../api/api';
 import { ventasDeCajaPorMetodo } from '../../utils/metodoPago';
+import { fechaHoraLima } from '../../utils/formato';
 import FormularioGasto from '../../components/FormularioGasto';
 import MovimientoCaja from '../../components/MovimientoCaja';
 import './Caja.css';
@@ -224,7 +225,7 @@ export default function Caja({ usuario }) {
           <h2>Caja abierta</h2>
           <span className="caja-badge">{caja.usuario_nombre}</span>
         </div>
-        <p className="caja-subtitulo">Desde {new Date(caja.fecha_apertura).toLocaleString('es-PE')}</p>
+        <p className="caja-subtitulo">Desde {fechaHoraLima(caja.fecha_apertura)}</p>
 
         <div className="caja-seccion-titulo">Ventas por método de pago</div>
         {ventasDeCajaPorMetodo(caja).map((m) => (
@@ -241,6 +242,12 @@ export default function Caja({ usuario }) {
           <span>Venta neta (descontando devoluciones)</span>
           <strong>S/ {(caja.total_ventas - caja.devoluciones_monto).toFixed(2)}</strong>
         </div>
+        {caja.devoluciones_monto > 0 && (
+          <div className="caja-resumen-fila caja-fila-negativa">
+            <span>Devoluciones</span>
+            <strong>- S/ {caja.devoluciones_monto.toFixed(2)}</strong>
+          </div>
+        )}
 
         <div className="caja-separador"></div>
 
@@ -248,6 +255,10 @@ export default function Caja({ usuario }) {
         <div className="caja-resumen-fila">
           <span>Monto inicial</span>
           <strong>S/ {caja.monto_inicial.toFixed(2)}</strong>
+        </div>
+        <div className="caja-resumen-fila">
+          <span>{caja.devoluciones_monto > 0 ? 'Ventas en efectivo (ya sin devoluciones)' : 'Ventas en efectivo'}</span>
+          <strong>+ S/ {caja.ventas_efectivo.toFixed(2)}</strong>
         </div>
         <div className="caja-resumen-fila">
           <span>Ingresos manuales</span>
@@ -261,12 +272,6 @@ export default function Caja({ usuario }) {
           <span>Gastos</span>
           <strong>- S/ {caja.gastos_total.toFixed(2)}</strong>
         </div>
-        {caja.devoluciones_monto > 0 && (
-          <div className="caja-resumen-fila caja-fila-negativa">
-            <span>Devoluciones</span>
-            <strong>- S/ {caja.devoluciones_monto.toFixed(2)}</strong>
-          </div>
-        )}
         <div className="caja-resumen-fila caja-resumen-total">
           <span>Efectivo esperado</span>
           <strong>S/ {efectivoEsperado.toFixed(2)}</strong>

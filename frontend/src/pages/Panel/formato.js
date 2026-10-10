@@ -9,6 +9,17 @@ export function fechaCorta(texto) {
   return `${Number(m[3])} ${MESES[Number(m[2]) - 1]} ${m[1]}`;
 }
 
+/**
+ * Igual que fechaCorta, para fechas que la base guarda en UTC
+ * ("2026-10-11 02:30:00" → "10 oct 2026": en Perú aún era el día 10).
+ */
+export function fechaCortaUtc(texto) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(texto || '');
+  if (!m) return fechaCorta(texto);
+  const lima = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - 5 * 3600 * 1000);
+  return fechaCorta(lima.toISOString());
+}
+
 /** Texto de los días que quedan de suscripción. */
 export function textoDias(dias) {
   if (dias === null || dias === undefined) return 'Sin vencimiento';

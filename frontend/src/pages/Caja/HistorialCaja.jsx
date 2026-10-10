@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Eye } from 'lucide-react';
 import { api } from '../../api/api';
 import DetalleCaja from './DetalleCaja';
+import { diaLima, horaLima } from '../../utils/formato';
 import './HistorialCaja.css';
 
 const MESES = [
@@ -116,8 +117,8 @@ export default function HistorialCaja() {
               {cajas.map((c) => (
                 <tr key={c.id}>
                   <td>
-                    {new Date(c.fecha_apertura).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}
-                    <span className="hcaja-hora">{new Date(c.fecha_apertura).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</span>
+                    {diaLima(c.fecha_apertura, { day: '2-digit', month: 'short' })}
+                    <span className="hcaja-hora">{horaLima(c.fecha_apertura, { hour: '2-digit', minute: '2-digit' })}</span>
                   </td>
                   <td>{c.usuario_nombre}</td>
                   <td>S/ {c.monto_inicial.toFixed(2)}</td>

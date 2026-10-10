@@ -452,7 +452,8 @@ pub async fn generar_codigo_panel(State(state): State<Arc<AppState>>, Json(datos
         unidad: unidad.to_string(),
         usado: false,
         negocio: None,
-        fecha_creacion: Some(crate::logica::tiempo::ahora_lima()),
+        // En UTC, igual que la columna de la base (el panel la pasa a hora de Perú).
+        fecha_creacion: Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()),
         fecha_uso: None,
         caduca: Some(caduca),
         vigente: true,
