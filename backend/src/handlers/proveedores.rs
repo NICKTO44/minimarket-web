@@ -1,6 +1,5 @@
 use axum::{extract::{Extension, Path}, Json, http::StatusCode};
 use std::sync::Arc;
-use chrono::Local;
 
 use crate::handlers::ganancias;
 use crate::tenants::TenantDb;
@@ -95,7 +94,7 @@ pub async fn crear_compra(
         }
     }
 
-    let fecha = Local::now().format("%Y%m%d").to_string();
+    let fecha = crate::logica::tiempo::hoy_lima_compacto();
     let query_folio = format!(
         "SELECT COALESCE(MAX(CAST(substr(folio,-4) AS INTEGER)),0)+1 FROM compras WHERE folio LIKE 'C-{}%'", fecha
     );

@@ -271,7 +271,8 @@ pub async fn emitir_facturalibre(
     serie_factura: &str,
 ) -> ResultadoEmision {
     let serie = if datos.tipo == "FACTURA" { serie_factura } else { serie_boleta };
-    let ahora = chrono::Local::now();
+    // Hora de Perú: el servidor está en UTC (desde las 7 p. m. ya sería mañana).
+    let ahora = crate::logica::tiempo::ahora_lima_fecha_hora();
     let hoy = ahora.format("%Y-%m-%d").to_string();
     let hora_actual = ahora.format("%H:%M:%S").to_string();
     let payload = armar_payload(datos, codigo_producto_sunat, serie, &hoy, &hora_actual);

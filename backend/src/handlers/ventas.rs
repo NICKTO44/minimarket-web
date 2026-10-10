@@ -1,5 +1,4 @@
 use axum::{extract::Extension, Json, http::StatusCode};
-use chrono::Local;
 
 use crate::models::venta::{NuevaVenta, VentaResult};
 use crate::tenants::TenantDb;
@@ -375,7 +374,7 @@ pub async fn procesar_venta(
     // 3. El folio del día ("V-20261003-0007") lo calcula la misma sentencia
     // que inserta la venta: un viaje menos y sin riesgo de que dos cajas
     // tomen el mismo número.
-    let fecha_actual = Local::now().format("%Y%m%d").to_string();
+    let fecha_actual = crate::logica::tiempo::hoy_lima_compacto();
 
     // 4. Calcular subtotal y descuento
     let mut subtotal = 0.0f64;

@@ -14,7 +14,6 @@
 //! el plazo de cambio del negocio.
 
 use axum::{extract::{Extension, Path}, Json, http::StatusCode};
-use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -272,7 +271,7 @@ pub async fn registrar(
 ) -> Result<CambioHecho, (StatusCode, String)> {
     // El trigger de caja solo distingue EFECTIVO / TARJETA / TRANSFERENCIA.
     let metodo_reembolso = if metodo_pago == "YAPE_PLIN" { "TRANSFERENCIA" } else { metodo_pago };
-    let fecha = Local::now().format("%Y%m%d").to_string();
+    let fecha = crate::logica::tiempo::hoy_lima_compacto();
     let motivo = format!("{} · se llevó {}", listo.motivo, folio_nuevo);
 
     let (devolucion_id, folio_devolucion): (i64, String) = {

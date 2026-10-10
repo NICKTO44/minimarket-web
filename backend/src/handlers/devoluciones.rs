@@ -1,6 +1,5 @@
 use axum::{extract::{Extension, Path}, Json, http::StatusCode};
 use std::sync::Arc;
-use chrono::Local;
 
 use crate::tenants::TenantDb;
 use crate::models::devolucion::*;
@@ -153,7 +152,7 @@ pub async fn registrar_devolucion(
     usuario_id: i64,
     payload: &NuevaDevolucion,
 ) -> Result<(i64, String), (StatusCode, String)> {
-    let fecha_actual = Local::now().format("%Y%m%d").to_string();
+    let fecha_actual = crate::logica::tiempo::hoy_lima_compacto();
     let query_folio = format!(
         "SELECT COALESCE(MAX(CAST(substr(folio_devolucion,-4) AS INTEGER)),0)+1
          FROM devoluciones WHERE folio_devolucion LIKE 'DEV-{}%'", fecha_actual
