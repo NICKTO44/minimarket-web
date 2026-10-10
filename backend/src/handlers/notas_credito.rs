@@ -308,7 +308,7 @@ pub async fn emitir_nota(
         }
     };
 
-    let r = lycet.enviar("note", &documento).await;
+    let r = super::envios_sunat::enviar_primero(lycet, "note", &documento).await;
     guardar_resultado(conn, id, &r, false).await?;
     Ok(NotaEmitida {
         id,

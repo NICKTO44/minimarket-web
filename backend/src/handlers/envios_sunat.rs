@@ -37,6 +37,9 @@ fn interno<E: ToString>(e: E) -> Fallo {
 
 // ===== Cliente de Lycet =====
 
+/// Segundos que se espera la respuesta de Lycet (y de SUNAT detrás) en cada intento.
+const TIEMPO_POR_INTENTO: u64 = 20;
+
 /// Servidor de Lycet configurado en el .env (LYCET_URL, LYCET_TOKEN).
 pub struct Lycet {
     url: String,
@@ -47,7 +50,11 @@ pub struct Lycet {
 impl Lycet {
     pub fn desde_env() -> Option<Lycet> {
         let (url, token) = super::facturacion_directa::servidor_lycet()?;
-        let cliente = reqwest::Client::builder().timeout(Duration::from_secs(60)).build().ok()?;
+        // 20 s por intento: SUNAT responde en 1–3 s; desde el servidor, a veces
+        // una conexión se queda colgada sin respuesta y la siguiente responde
+        // al instante (ver enviar_primero). Dos intentos caben antes de que el
+        // proxy web corte la petición de la caja (60 s).
+        let cliente = reqwest::Client::builder().timeout(Duration::from_secs(TIEMPO_POR_INTENTO)).build().ok()?;
         Some(Lycet { url, token, cliente })
     }
 
@@ -167,7 +174,28 @@ pub async fn reenviar_documento(lycet: &Lycet, ruta: &str, documento: &Value, in
     r
 }
 
-/// Hora de Perú de hace 90 segundos: un envío en curso dura hasta 60.
+/// Primer envío de una boleta, factura o nota (`ruta` = "invoice" o "note"),
+/// con un reintento inmediato si el primero se quedó sin respuesta.
+///
+/// Desde el servidor, la conexión con SUNAT producción a veces se queda
+/// colgada y el intento siguiente responde en menos de un segundo. El
+/// reintento es un reenvío "incierto" (el primero pudo haber llegado): una
+/// factura se consulta antes y un 1033 cuenta como aceptado, así que no se
+/// duplica nada. Si el reintento tampoco responde, queda PENDIENTE y la tarea
+/// automática lo reenvía después.
+pub async fn enviar_primero(lycet: &Lycet, ruta: &str, documento: &Value) -> RespuestaSunat {
+    let primero = lycet.enviar(ruta, documento).await;
+    if !primero.incierto {
+        return primero;
+    }
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let mut segundo = reenviar_documento(lycet, ruta, documento, true).await;
+    // El primer envío pudo haber llegado: queda anotado para los reenvíos.
+    segundo.incierto = true;
+    segundo
+}
+
+/// Hora de Perú de hace 90 segundos: un envío en curso (dos intentos de 20 s) dura menos.
 fn corte_envio_en_curso() -> String {
     (chrono::Utc::now() - chrono::Duration::hours(5) - chrono::Duration::seconds(90)).format("%Y-%m-%d %H:%M:%S").to_string()
 }

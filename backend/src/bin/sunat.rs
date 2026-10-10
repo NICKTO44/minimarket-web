@@ -109,10 +109,26 @@ fn leer_secreto(variable: &str, pregunta: &str) -> String {
             return valor.trim().to_string();
         }
     }
-    print!("{}: ", pregunta);
+    print!("{} (no se verá al escribir): ", pregunta);
     io::stdout().flush().ok();
+    // En una terminal, lo que se escribe no se muestra (stty -echo), igual
+    // que al pedir una contraseña. Se restaura siempre, aunque falle la lectura.
+    let terminal = io::IsTerminal::is_terminal(&io::stdin());
+    let eco = |activo: bool| {
+        if terminal {
+            let _ = std::process::Command::new("stty")
+                .arg(if activo { "echo" } else { "-echo" })
+                .stdin(std::process::Stdio::inherit())
+                .status();
+        }
+    };
+    eco(false);
     let mut valor = String::new();
     io::stdin().read_line(&mut valor).ok();
+    eco(true);
+    if terminal {
+        println!();
+    }
     valor.trim().to_string()
 }
 

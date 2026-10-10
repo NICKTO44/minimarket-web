@@ -210,7 +210,7 @@ pub async fn emitir(
     // Primer envío directo. Volver a emitir una venta pendiente es un
     // reenvío como el del botón (ver envios_sunat::reenviar_comprobante).
     let respuesta = if es_nuevo {
-        let r = lycet.enviar("invoice", &documento).await;
+        let r = super::envios_sunat::enviar_primero(&lycet, "invoice", &documento).await;
         super::envios_sunat::guardar_resultado(conn, comprobante_id, &r, false).await?;
         r
     } else {
