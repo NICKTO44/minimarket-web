@@ -9,6 +9,7 @@ import ConfiguracionNegocio from './ConfiguracionNegocio';
 import SelectorTasaIgv from './SelectorTasaIgv';
 import ConfiguracionDetraccion from './ConfiguracionDetraccion';
 import ConfiguracionCambios from './ConfiguracionCambios';
+import UsoPlan from '../../components/UsoPlan';
 import { etiquetaTasa, TASA_GENERAL } from '../../utils/igv';
 import { datosNegocio, MODULO_CAMBIOS, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
 
@@ -253,6 +254,9 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
           <button className={vista === 'UNIDADES' ? 'activo' : ''} onClick={() => setVista('UNIDADES')}>
             Unidades
           </button>
+          <button className={vista === 'PLAN' ? 'activo' : ''} onClick={() => setVista('PLAN')}>
+            Plan y comprobantes
+          </button>
         </div>
       </div>
 
@@ -277,6 +281,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
 
       {vista === 'RESTAURANTE' && restaurante && <ConfiguracionRestaurante />}
       {vista === 'UNIDADES' && <ConfiguracionUnidades rubro={negocio.rubro} />}
+      {vista === 'PLAN' && <UsoPlan />}
 
       {vista === 'NEGOCIO' && (
         <div className="cfg-card">

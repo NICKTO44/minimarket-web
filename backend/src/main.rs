@@ -332,6 +332,7 @@ async fn main() {
         .route("/carta-dia/:id/quitar", post(handlers::carta::quitar_plato))
         .route("/suscripcion/canjear-codigo", post(handlers::suscripcion::canjear_codigo))
         .route("/suscripcion/estado", get(handlers::suscripcion::estado_suscripcion))
+        .route("/suscripcion/uso", get(handlers::suscripcion::uso_plan))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), middleware_auth::requiere_auth));
 
     // Panel de Monspeet (el dueño del sistema, no un negocio). Su propio

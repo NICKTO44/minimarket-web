@@ -52,3 +52,19 @@ export function duracion(cantidad, unidad) {
   if (!u) return `${cantidad} ${unidad}`;
   return `${cantidad} ${cantidad === 1 ? u.singular : u.plural}`;
 }
+
+/** "3.6" → "S/ 3.60". */
+export function soles(n) {
+  return `S/ ${Number(n || 0).toFixed(2)}`;
+}
+
+/**
+ * Uso del plan para pintarlo: verde hasta 80 %, ámbar hasta el límite y
+ * rojo cuando ya pasó (sigue emitiendo; lo extra se cobra al renovar).
+ */
+export function tonoUso(uso) {
+  if (!uso) return 'gris';
+  if (uso.extra > 0) return 'rojo';
+  if (uso.porcentaje >= 80) return 'ambar';
+  return 'verde';
+}

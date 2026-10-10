@@ -300,7 +300,7 @@
 /* ---------- Resumen y búsqueda ---------- */
 .pnl-resumen {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -369,7 +369,7 @@
 
 .pnl-fila {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) 1fr 1.2fr 1.2fr 24px;
+  grid-template-columns: minmax(0, 2fr) 1fr 1.1fr 1.2fr minmax(0, 1.4fr) 24px;
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -460,6 +460,96 @@ button.pnl-fila:hover {
 
 .pnl-codigo button:hover {
   background: #eef0f3;
+}
+
+/* ---------- Comprobantes del plan ---------- */
+.pnl-uso {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pnl-uso-cifras {
+  color: var(--pnl-tenue);
+  font-size: 13px;
+}
+
+.pnl-uso-cifras strong {
+  color: var(--pnl-texto);
+  font-size: 15px;
+}
+
+.pnl-uso-barra {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef0f3;
+}
+
+.pnl-uso-grande .pnl-uso-barra {
+  height: 12px;
+}
+
+.pnl-uso-relleno {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.pnl-uso-verde {
+  background: var(--pnl-marca);
+}
+
+.pnl-uso-ambar {
+  background: #f59e0b;
+}
+
+.pnl-uso-rojo {
+  background: var(--pnl-rojo);
+}
+
+.pnl-uso-grande {
+  display: grid;
+  gap: 10px;
+}
+
+.pnl-uso-grande .pnl-uso-cifras strong {
+  font-size: 28px;
+}
+
+.pnl-uso-detalle {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 4px 0 0;
+}
+
+.pnl-uso-detalle div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pnl-uso-detalle dt {
+  color: var(--pnl-tenue);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pnl-uso-detalle dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.pnl-uso-aviso {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--pnl-rojo-fondo);
+  color: var(--pnl-rojo);
+  font-weight: 600;
 }
 
 /* ---------- Cajas y formularios ---------- */
@@ -972,6 +1062,14 @@ button.pnl-fila:hover {
 
   .pnl-fila .pnl-flecha {
     display: none;
+  }
+
+  .pnl-fila .pnl-uso {
+    grid-column: 1 / -1;
+  }
+
+  .pnl-uso-detalle {
+    grid-template-columns: 1fr 1fr;
   }
 
   .pnl-formulario > .pnl-campo,

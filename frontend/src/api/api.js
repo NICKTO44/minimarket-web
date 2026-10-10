@@ -256,6 +256,7 @@ export const api = {
   modificadorQuitar: (id) => request(`/modificadores/${id}/desactivar`, { method: 'POST' }),
   canjearCodigo: (codigo) => request('/suscripcion/canjear-codigo', { method: 'POST', body: JSON.stringify({ codigo }) }),
   suscripcionEstado: () => request('/suscripcion/estado'),
+  suscripcionUso: () => request('/suscripcion/uso'),
   comprobantePublico: async (identificador, id) => {
     const res = await fetch(`${API_URL}/publico/comprobante/${encodeURIComponent(identificador)}/${id}`);
     const data = await leerRespuesta(res);

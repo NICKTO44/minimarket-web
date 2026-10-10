@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, RefreshCw, Search } from 'lucide-react';
 import { panelApi } from '../../api/panel';
-import { fechaCorta, modoFacturacion, situacion, textoDias } from './formato';
+import { fechaCorta, modoFacturacion, situacion, soles, textoDias, tonoUso } from './formato';
 
 /** Todos los negocios, con su suscripción y su modo de facturación. */
 export default function PanelNegocios({ onAbrir }) {
@@ -42,6 +42,7 @@ export default function PanelNegocios({ onAbrir }) {
       AL_DIA: lista.filter((n) => tono(n) === 'verde').length,
       ATENCION: lista.filter((n) => tono(n) !== 'verde').length,
       DIRECTO: lista.filter((n) => n.facturacion?.modo === 'DIRECTO').length,
+      EXCESO: lista.filter((n) => n.uso?.extra > 0).length,
     };
   }, [negocios]);
 
@@ -52,6 +53,7 @@ export default function PanelNegocios({ onAbrir }) {
         if (filtro === 'AL_DIA') return situacion(n).tono === 'verde';
         if (filtro === 'ATENCION') return situacion(n).tono !== 'verde';
         if (filtro === 'DIRECTO') return n.facturacion?.modo === 'DIRECTO';
+        if (filtro === 'EXCESO') return n.uso?.extra > 0;
         return true;
       })
       .filter(
@@ -66,6 +68,7 @@ export default function PanelNegocios({ onAbrir }) {
     ['AL_DIA', 'Al día'],
     ['ATENCION', 'Requieren atención'],
     ['DIRECTO', 'Emisión directa'],
+    ['EXCESO', 'Pasaron su plan'],
   ];
 
   return (
@@ -85,7 +88,7 @@ export default function PanelNegocios({ onAbrir }) {
           <button
             key={clave}
             type="button"
-            className={`pnl-tarjeta${filtro === clave ? ' activo' : ''}${clave === 'ATENCION' && conteo.ATENCION > 0 ? ' alerta' : ''}`}
+            className={`pnl-tarjeta${filtro === clave ? ' activo' : ''}${(clave === 'ATENCION' && conteo.ATENCION > 0) || (clave === 'EXCESO' && conteo.EXCESO > 0) ? ' alerta' : ''}`}
             onClick={() => setFiltro(clave)}
           >
             <strong>{negocios ? conteo[clave] : '—'}</strong>
@@ -109,6 +112,7 @@ export default function PanelNegocios({ onAbrir }) {
             <span role="columnheader">Suscripción</span>
             <span role="columnheader">Vence</span>
             <span role="columnheader">Facturación</span>
+            <span role="columnheader">Comprobantes del ciclo</span>
             <span aria-hidden="true" />
           </div>
           {visibles.map((n) => {
@@ -133,6 +137,7 @@ export default function PanelNegocios({ onAbrir }) {
                 <span role="cell">
                   <span className={`pnl-chip pnl-chip-${f.tono}`}>{f.texto}</span>
                 </span>
+                <UsoCorto uso={n.uso} />
                 <ChevronRight size={18} className="pnl-flecha" aria-hidden="true" />
               </button>
             );
@@ -141,5 +146,30 @@ export default function PanelNegocios({ onAbrir }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** Barra corta del plan en la lista: "132 / 250" y lo extra si pasó. */
+function UsoCorto({ uso }) {
+  if (!uso) {
+    return (
+      <span className="pnl-uso" role="cell">
+        <small className="pnl-tenue">Sin datos</small>
+      </span>
+    );
+  }
+  const tono = tonoUso(uso);
+  return (
+    <span className="pnl-uso" role="cell" title={`Ciclo ${fechaCorta(uso.ciclo_inicio)} – ${fechaCorta(uso.ciclo_fin)}`}>
+      <span className="pnl-uso-cifras">
+        <strong className={tono !== 'verde' ? `pnl-texto-${tono}` : ''}>{uso.usados}</strong> / {uso.limite}
+      </span>
+      <span className="pnl-uso-barra" aria-hidden="true">
+        <span className={`pnl-uso-relleno pnl-uso-${tono}`} style={{ width: `${Math.min(100, uso.porcentaje)}%` }} />
+      </span>
+      <small className={uso.extra > 0 ? 'pnl-texto-rojo' : ''}>
+        {uso.extra > 0 ? `+${uso.extra} extra · ${soles(uso.monto_extra)}` : `Quedan ${uso.limite - uso.usados}`}
+      </small>
+    </span>
   );
 }

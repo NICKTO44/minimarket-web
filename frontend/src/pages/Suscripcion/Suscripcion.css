@@ -149,3 +149,7 @@
     flex-direction: column;
   }
 } 
+.susc-uso {
+  max-width: 480px;
+  margin-top: 16px;
+}

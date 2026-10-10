@@ -31,6 +31,7 @@ use crate::handlers::facturacion_directa::{leer_emisor, servidor_lycet};
 use crate::licencias_logica::{calcular_nueva_fecha, generar_codigo, hoy, normalizar_unidad, parsear_fecha};
 use crate::logica::alta_sunat::{self, AltaHecha, Chequeo, CAMPOS};
 use crate::logica::certificado;
+use crate::logica::plan::{uso_del_negocio, UsoPlan};
 use crate::tenants::{NivelAcceso, TiendaConexion};
 use crate::AppState;
 
@@ -160,6 +161,9 @@ pub struct NegocioPanel {
     pub motivo: Option<String>,
     pub usuarios: Vec<String>,
     pub facturacion: FacturacionResumen,
+    /// Boletas y facturas del ciclo frente a su plan. None si no se pudo
+    /// leer su base.
+    pub uso: Option<UsoPlan>,
 }
 
 fn acceso_de(tienda: &TiendaConexion) -> (String, Option<String>) {
@@ -210,6 +214,11 @@ async fn resumen_facturacion(state: &AppState, tienda: &TiendaConexion) -> Factu
     }
 }
 
+async fn uso_de(state: &AppState, tienda: &TiendaConexion) -> Option<UsoPlan> {
+    let conn = state.tiendas.conectar_cacheado(tienda).await.ok()?.connect().ok()?;
+    uso_del_negocio(&conn, tienda.fecha_vencimiento.as_deref()).await.ok()
+}
+
 pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<Vec<NegocioPanel>>, Fallo> {
     let tiendas = state.tiendas.listar_todas().await.map_err(interno)?;
     let central = state.tiendas.conexion_central().map_err(interno)?;
@@ -229,13 +238,17 @@ pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<
         }
     }
 
-    // La facturación se lee de la base de cada negocio, todas a la vez.
-    let resumenes = futures_util::future::join_all(tiendas.iter().map(|t| resumen_facturacion(&state, t))).await;
+    // La facturación y los comprobantes del ciclo se leen de la base de
+    // cada negocio, todas a la vez.
+    let resumenes = futures_util::future::join_all(tiendas.iter().map(|t| async {
+        (resumen_facturacion(&state, t).await, uso_de(&state, t).await)
+    }))
+    .await;
 
     let negocios = tiendas
         .iter()
         .zip(resumenes)
-        .map(|(t, facturacion)| {
+        .map(|(t, (facturacion, uso))| {
             let (acceso, motivo) = acceso_de(t);
             NegocioPanel {
                 id: t.id,
@@ -249,6 +262,7 @@ pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<
                 motivo,
                 usuarios: usuarios.remove(&t.id).unwrap_or_default(),
                 facturacion,
+                uso,
             }
         })
         .collect();

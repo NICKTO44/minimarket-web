@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/api';
 import './Suscripcion.css';
+import UsoPlan from '../../components/UsoPlan';
 
 export default function Suscripcion({ estadoSuscripcion, onRecargar, onSuscripcionActivada }) {
   const [codigo, setCodigo] = useState('');
@@ -90,6 +91,10 @@ export default function Suscripcion({ estadoSuscripcion, onRecargar, onSuscripci
             {canjeando ? 'Canjeando...' : 'Canjear código'}
           </button>
         </div>
+      </div>
+
+      <div className="susc-uso">
+        <UsoPlan />
       </div>
     </div>
   );

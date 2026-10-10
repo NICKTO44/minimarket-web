@@ -46,6 +46,25 @@ pub async fn estado_suscripcion(
     }))
 }
 
+/// GET /suscripcion/uso — boletas y facturas del ciclo frente a su plan,
+/// para que el negocio sepa cuánto lleva antes de renovar.
+pub async fn uso_plan(
+    Extension(claims): Extension<Claims>,
+    Extension(tenant): Extension<Arc<crate::tenants::TenantDb>>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<crate::logica::plan::UsoPlan>, (StatusCode, String)> {
+    let tienda = state
+        .tiendas
+        .resolver_por_id(claims.tienda_id)
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "No se pudo consultar tu suscripción.".to_string()))?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    crate::logica::plan::uso_del_negocio(&conn, tienda.fecha_vencimiento.as_deref())
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
+}
+
 #[derive(Deserialize)]
 pub struct CanjearCodigoRequest {
     pub codigo: String,

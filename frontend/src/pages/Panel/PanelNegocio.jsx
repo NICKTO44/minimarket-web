@@ -3,7 +3,7 @@ import { ArrowLeft, CalendarClock, FileCheck2 } from 'lucide-react';
 import { panelApi } from '../../api/panel';
 import { confirmar } from '../../utils/confirmar';
 import PanelFacturacion from './PanelFacturacion';
-import { fechaCorta, situacion, textoDias, UNIDADES } from './formato';
+import { fechaCorta, situacion, soles, textoDias, tonoUso, UNIDADES } from './formato';
 
 /** Ficha de un negocio: su suscripción y su facturación electrónica. */
 export default function PanelNegocio({ negocio, onVolver, onActualizado }) {
@@ -136,6 +136,8 @@ function Suscripcion({ negocio, onCambio }) {
 
   return (
     <div className="pnl-rejilla">
+      <UsoDelPlan uso={negocio.uso} />
+
       <div className="pnl-caja">
         <h2>Estado actual</h2>
         <div className="pnl-estado-grande">
@@ -219,6 +221,57 @@ function Suscripcion({ negocio, onCambio }) {
       </div>
 
       {aviso && <p className={`pnl-aviso pnl-aviso-${aviso.tipo} pnl-ancho`}>{aviso.texto}</p>}
+    </div>
+  );
+}
+
+/** Boletas y facturas del ciclo frente al plan, y lo que cobrar al renovar. */
+function UsoDelPlan({ uso }) {
+  if (!uso) {
+    return (
+      <div className="pnl-caja pnl-ancho">
+        <h2>Comprobantes del ciclo</h2>
+        <p className="pnl-nota">No se pudo leer la base de este negocio.</p>
+      </div>
+    );
+  }
+  const tono = tonoUso(uso);
+  return (
+    <div className="pnl-caja pnl-ancho pnl-uso pnl-uso-grande">
+      <h2>
+        Comprobantes del ciclo · {uso.plan} ({soles(uso.precio)})
+      </h2>
+      <span className="pnl-uso-cifras">
+        <strong className={tono !== 'verde' ? `pnl-texto-${tono}` : ''}>{uso.usados}</strong> de {uso.limite} boletas y facturas ·
+        del {fechaCorta(uso.ciclo_inicio)} al {fechaCorta(uso.ciclo_fin)}
+      </span>
+      <span className="pnl-uso-barra" aria-hidden="true">
+        <span className={`pnl-uso-relleno pnl-uso-${tono}`} style={{ width: `${Math.min(100, uso.porcentaje)}%` }} />
+      </span>
+      {uso.extra > 0 && (
+        <p className="pnl-uso-aviso">
+          Pasó su plan: {uso.extra} comprobante{uso.extra === 1 ? '' : 's'} extra × {soles(uso.precio_extra)} = {soles(uso.monto_extra)}. En la
+          siguiente renovación cobra {soles(uso.total_siguiente)}.
+        </p>
+      )}
+      <dl className="pnl-uso-detalle">
+        <div>
+          <dt>Boletas</dt>
+          <dd>{uso.boletas}</dd>
+        </div>
+        <div>
+          <dt>Facturas</dt>
+          <dd>{uso.facturas}</dd>
+        </div>
+        <div>
+          <dt>Próxima mensualidad</dt>
+          <dd className={uso.extra > 0 ? 'pnl-texto-rojo' : ''}>{soles(uso.total_siguiente)}</dd>
+        </div>
+      </dl>
+      <p className="pnl-nota">
+        Cuentan las boletas y facturas enviadas a SUNAT (también las anuladas). No cuentan notas de crédito, guías, rechazadas ni con error.
+        Si pasa del límite no se le corta: sigue emitiendo.
+      </p>
     </div>
   );
 }
