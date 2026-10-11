@@ -146,10 +146,26 @@ async fn main() {
     // SUNAT_REINTENTOS=1 y LYCET_URL en el .env; ver handlers/envios_sunat.rs).
     handlers::envios_sunat::iniciar_tarea(state.clone());
 
-    let origenes_permitidos = AllowOrigin::list([
+    // Dominios desde los que se puede usar la API. Los de siempre más los
+    // que se agreguen en el .env, separados por coma (para tener el frontend
+    // en otro lugar sin dejar de aceptar el actual), por ejemplo:
+    //   FRONTEND_ORIGENES=https://monspeet.pages.dev,https://app.monspeet.com
+    let mut origenes = vec![
         HeaderValue::from_static("https://frontend-sigma-three-23.vercel.app"),
         HeaderValue::from_static("http://localhost:5173"),
-    ]);
+    ];
+    for origen in std::env::var("FRONTEND_ORIGENES").unwrap_or_default().split(',') {
+        let origen = origen.trim().trim_end_matches('/');
+        if origen.starts_with("https://") {
+            match HeaderValue::from_str(origen) {
+                Ok(valor) => origenes.push(valor),
+                Err(_) => eprintln!("⚠️  FRONTEND_ORIGENES: '{}' no es un dominio válido, se ignora.", origen),
+            }
+        } else if !origen.is_empty() {
+            eprintln!("⚠️  FRONTEND_ORIGENES: '{}' debe empezar con https://, se ignora.", origen);
+        }
+    }
+    let origenes_permitidos = AllowOrigin::list(origenes);
 
     let cors = CorsLayer::new()
         .allow_origin(origenes_permitidos)
