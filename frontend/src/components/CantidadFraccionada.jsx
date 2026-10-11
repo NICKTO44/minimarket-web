@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Scale } from 'lucide-react';
+import { Package, Scale } from 'lucide-react';
 import { formatoCantidad, leerCantidad, subtotalLinea } from '../utils/medidas';
 import { abreviaturaUnidad, etiquetaUnidad } from '../utils/unidades';
 import './CalculadoraPieTablar.css';
@@ -7,6 +7,8 @@ import './CalculadoraPieTablar.css';
 // Atajos según la unidad: en kilos, litros o metros se vende por fracción
 // (¼ kg); en gramos o mililitros, por cantidades redondas.
 const ATAJOS = {
+  // Docenas: media, una, dos o tres (48 la docena → media a 24).
+  DOCENA: ['1/2', '1', '2', '3'],
   GRAMO: ['100', '250', '500', '1000'],
   ML: ['100', '250', '500', '1000'],
   ONZA: ['1', '4', '8', '16'],
@@ -24,6 +26,10 @@ export default function CantidadFraccionada({ producto, yaEnCarrito = 0, onAgreg
   const [texto, setTexto] = useState('');
   const campo = useRef(null);
   const unidad = abreviaturaUnidad(producto.unidad_medida);
+  // En docenas no se vende "por monto" y se muestra cuántas unidades son.
+  const esDocena = producto.unidad_medida === 'DOCENA';
+  const Icono = esDocena ? Package : Scale;
+  const enUnidades = (n) => (esDocena && n ? ` (${formatoCantidad(n * 12)} unidades)` : '');
 
   useEffect(() => {
     campo.current?.focus();
@@ -63,7 +69,7 @@ export default function CantidadFraccionada({ producto, yaEnCarrito = 0, onAgreg
       <form className="pt-modal" onSubmit={agregar} role="dialog" aria-modal="true" aria-label={`Cantidad de ${producto.nombre}`}>
         <header className="pt-cabecera">
           <span className="pt-icono">
-            <Scale size={18} />
+            <Icono size={18} />
           </span>
           <div>
             <h2>{producto.nombre}</h2>
@@ -74,21 +80,23 @@ export default function CantidadFraccionada({ producto, yaEnCarrito = 0, onAgreg
           </div>
         </header>
 
-        <div className="pt-modos" role="tablist">
-          <button type="button" role="tab" aria-selected={modo === 'CANTIDAD'} className={modo === 'CANTIDAD' ? 'activo' : ''} onClick={() => cambiarModo('CANTIDAD')}>
-            Por cantidad
-          </button>
-          <button type="button" role="tab" aria-selected={modo === 'MONTO'} className={modo === 'MONTO' ? 'activo' : ''} onClick={() => cambiarModo('MONTO')}>
-            Por monto (S/)
-          </button>
-        </div>
+        {!esDocena && (
+          <div className="pt-modos" role="tablist">
+            <button type="button" role="tab" aria-selected={modo === 'CANTIDAD'} className={modo === 'CANTIDAD' ? 'activo' : ''} onClick={() => cambiarModo('CANTIDAD')}>
+              Por cantidad
+            </button>
+            <button type="button" role="tab" aria-selected={modo === 'MONTO'} className={modo === 'MONTO' ? 'activo' : ''} onClick={() => cambiarModo('MONTO')}>
+              Por monto (S/)
+            </button>
+          </div>
+        )}
 
         <label className="pt-campo pt-campo-directo">
           <span>{modo === 'CANTIDAD' ? `Cantidad (${unidad})` : 'Monto en soles'}</span>
           <input
             ref={campo}
             inputMode="decimal"
-            placeholder={modo === 'CANTIDAD' ? '0.75 o 1/2' : '5.00'}
+            placeholder={modo === 'CANTIDAD' ? (esDocena ? '1/2, 1 o 2' : '0.75 o 1/2') : '5.00'}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
           />
@@ -105,7 +113,13 @@ export default function CantidadFraccionada({ producto, yaEnCarrito = 0, onAgreg
         )}
 
         <div className={`pt-resultado${sinStock ? ' pt-resultado-error' : ''}`}>
-          <span>{cantidad ? `${formatoCantidad(cantidad)} ${unidad}` : modo === 'CANTIDAD' ? 'Escribe la cantidad' : 'Escribe el monto'}</span>
+          <span>
+            {cantidad
+              ? `${formatoCantidad(cantidad)} ${unidad}${enUnidades(cantidad)}`
+              : modo === 'CANTIDAD'
+                ? 'Escribe la cantidad'
+                : 'Escribe el monto'}
+          </span>
           <strong>S/ {importe.toFixed(2)}</strong>
         </div>
         {sinStock && (
