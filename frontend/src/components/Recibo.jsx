@@ -254,6 +254,13 @@ export default function Recibo({
           <span>S/.{venta.pagoOtro.toFixed(2)}</span>
         </div>
       )}
+      {/* Mixto sin efectivo (p. ej. Yape + Plin): la otra parte también. */}
+      {venta.metodoPago === 'MIXTO' && venta.pagoSegundo != null && venta.pagoSegundoMetodo && venta.pagoSegundoMetodo !== 'EFECTIVO' && (
+        <div className="recibo-detalle-pago">
+          <span>{nombreMetodo(venta.pagoSegundoMetodo)}</span>
+          <span>S/.{venta.pagoSegundo.toFixed(2)}</span>
+        </div>
+      )}
       {venta.credito && (
         <div className="recibo-detraccion">
           <div className="recibo-detraccion-titulo">VENTA AL CRÉDITO</div>

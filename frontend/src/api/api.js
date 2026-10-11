@@ -54,6 +54,15 @@ export const api = {
     }
     return data;
   },
+  // Login con la dirección del negocio (monspeet.pages.dev/verane): nombre,
+  // logo y color. Acepta la dirección o el identificador. null si no existe.
+  negocioPublico: async (direccion) => {
+    const res = await fetch(`${API_URL}/publico/negocio/${encodeURIComponent(direccion)}`);
+    if (res.status === 404) return null;
+    const data = await leerRespuesta(res);
+    if (!res.ok) throw new Error(typeof data === 'string' ? data : 'No se pudo consultar el negocio');
+    return data;
+  },
   identificarUsuario: async (usuario) => {
     const res = await fetch(`${API_URL}/login/identificar`, {
       method: 'POST',

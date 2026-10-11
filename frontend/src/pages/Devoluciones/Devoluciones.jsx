@@ -33,7 +33,9 @@ export default function Devoluciones({ usuario, cambios = false, onIniciarCambio
       const resultado = await api.ventaParaDevolucion(busqueda.trim());
       setVenta(resultado);
       // Venta al crédito: lo normal es descontar lo devuelto de la deuda.
-      setMetodoReembolso(resultado.pago_otro_metodo === 'CREDITO' ? 'CREDITO' : 'EFECTIVO');
+      // Mixto sin efectivo (p. ej. Yape + Plin): por defecto, por el medio de
+      // esa parte.
+      setMetodoReembolso(resultado.pago_otro_metodo === 'CREDITO' ? 'CREDITO' : resultado.pago_efectivo_metodo || 'EFECTIVO');
       setItems(
         resultado.productos.map((p) => ({
           detalle_id: p.detalle_id,
@@ -209,6 +211,9 @@ export default function Devoluciones({ usuario, cambios = false, onIniciarCambio
             <div className="dev-campo">
               <label>¿Cómo le devuelves el dinero?</label>
               <select value={metodoReembolso} onChange={(e) => setMetodoReembolso(e.target.value)}>
+                {venta.pago_efectivo_metodo && venta.pago_efectivo_metodo !== 'EFECTIVO' && (
+                  <option value={venta.pago_efectivo_metodo}>Por {nombreMetodo(venta.pago_efectivo_metodo)}</option>
+                )}
                 <option value="EFECTIVO">En efectivo (sale de la caja)</option>
                 <option value={venta.pago_otro_metodo}>
                   {venta.pago_otro_metodo === 'CREDITO' ? 'Descontar de su deuda' : `Por ${nombreMetodo(venta.pago_otro_metodo)}`}

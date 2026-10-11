@@ -65,6 +65,7 @@ export const panelApi = {
   renovar: (id, cantidad, unidad) => pedir(`/panel/negocios/${id}/renovar`, { metodo: 'POST', cuerpo: { cantidad, unidad } }),
   cambiarEstado: (id, estado) => pedir(`/panel/negocios/${id}/estado`, { metodo: 'POST', cuerpo: { estado } }),
   fijarVencimiento: (id, fecha) => pedir(`/panel/negocios/${id}/vencimiento`, { metodo: 'PUT', cuerpo: { fecha } }),
+  cambiarDireccion: (id, direccion) => pedir(`/panel/negocios/${id}/direccion`, { metodo: 'PUT', cuerpo: { direccion } }),
 
   codigos: () => pedir('/panel/codigos'),
   generarCodigo: (cantidad, unidad, dias_para_caducar) =>

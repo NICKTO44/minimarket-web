@@ -32,6 +32,7 @@ export default function PanelNegocio({ negocio, onVolver, onActualizado }) {
           <h1>{negocio.nombre}</h1>
           <p>
             {negocio.identificador}
+            {negocio.slug && ` · ${window.location.host}/${negocio.slug}`}
             {negocio.usuarios?.length > 0 && ` · usuarios: ${negocio.usuarios.join(', ')}`}
             {negocio.fecha_creacion && ` · cliente desde ${fechaCortaUtc(negocio.fecha_creacion)}`}
           </p>
@@ -220,7 +221,86 @@ function Suscripcion({ negocio, onCambio }) {
         </div>
       </div>
 
+      <DireccionDelNegocio negocio={negocio} onCambio={onCambio} />
+
       {aviso && <p className={`pnl-aviso pnl-aviso-${aviso.tipo} pnl-ancho`}>{aviso.texto}</p>}
+    </div>
+  );
+}
+
+/** Dirección propia del negocio en el sistema: <dominio>/<direccion>. */
+function DireccionDelNegocio({ negocio, onCambio }) {
+  const [direccion, setDireccion] = useState(negocio.slug || '');
+  const [aviso, setAviso] = useState(null);
+  const [ocupado, setOcupado] = useState(false);
+  const limpia = direccion
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const enlace = `${window.location.origin}/${negocio.slug || ''}`;
+
+  const guardar = async () => {
+    const ok = await confirmar({
+      titulo: '¿Cambiar la dirección?',
+      mensaje: 'El negocio entrará por la dirección nueva. La anterior deja de funcionar (los enlaces de boletas no cambian).',
+      detalle: { etiqueta: negocio.nombre, valor: `${window.location.host}/${limpia}` },
+      textoConfirmar: 'Cambiar',
+      tipo: 'normal',
+      icono: 'tiempo',
+    });
+    if (!ok) return;
+    setOcupado(true);
+    setAviso(null);
+    try {
+      const r = await panelApi.cambiarDireccion(negocio.id, limpia);
+      setDireccion(r.slug);
+      setAviso({ tipo: 'ok', texto: r.mensaje });
+      await onCambio();
+    } catch (e) {
+      setAviso({ tipo: 'error', texto: e.message });
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <div className="pnl-caja pnl-ancho">
+      <h2>Dirección del negocio</h2>
+      <p className="pnl-nota">
+        {negocio.slug ? (
+          <>
+            Entra por{' '}
+            <a href={enlace} target="_blank" rel="noreferrer">
+              {window.location.host}/{negocio.slug}
+            </a>
+            : el login sale con su logo y su color.
+          </>
+        ) : (
+          'Todavía no tiene dirección propia (se le asigna al reiniciar el servidor).'
+        )}
+      </p>
+      <div className="pnl-linea">
+        <input
+          value={direccion}
+          maxLength={30}
+          onChange={(e) => setDireccion(e.target.value)}
+          placeholder="verane"
+          aria-label="Dirección del negocio"
+        />
+        <button
+          type="button"
+          className="pnl-boton"
+          disabled={ocupado || limpia.length < 3 || limpia === negocio.slug}
+          onClick={guardar}
+        >
+          Guardar dirección
+        </button>
+      </div>
+      {limpia && limpia !== direccion.trim() && <p className="pnl-nota">Quedará como: {window.location.host}/{limpia}</p>}
+      {aviso && <p className={`pnl-aviso pnl-aviso-${aviso.tipo}`}>{aviso.texto}</p>}
     </div>
   );
 }

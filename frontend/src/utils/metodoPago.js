@@ -12,6 +12,12 @@ export const METODOS_DE_COBRO = ['EFECTIVO', 'YAPE', 'PLIN', 'TARJETA', 'TRANSFE
 
 export const METODOS_OTRO_MIXTO = ['YAPE', 'PLIN', 'TARJETA', 'TRANSFERENCIA'];
 
+/**
+ * Medios de la otra parte de un pago mixto (migración 0028). Antes era
+ * siempre efectivo; ahora puede ser, p. ej., mitad Yape y mitad Plin.
+ */
+export const METODOS_SEGUNDO_MIXTO = ['EFECTIVO', 'YAPE', 'PLIN', 'TARJETA', 'TRANSFERENCIA'];
+
 /** Con qué se puede pagar un adelanto o un abono de un crédito. */
 export const METODOS_DE_ABONO = ['EFECTIVO', 'YAPE', 'PLIN', 'TRANSFERENCIA', 'TARJETA'];
 
@@ -41,8 +47,10 @@ export function nombreMetodo(metodo) {
 
 /**
  * Texto corto del pago de una venta. Para MIXTO incluye el reparto:
- * "Mixto: Efectivo S/ 30.00 + Yape/Plin S/ 20.00". Acepta los campos
- * del backend (pago_efectivo, pago_otro, pago_otro_metodo).
+ * "Mixto: Efectivo S/ 30.00 + Yape S/ 20.00" o "Mixto: Plin S/ 30.00 +
+ * Yape S/ 20.00". Acepta los campos del backend (pago_efectivo,
+ * pago_otro, pago_otro_metodo y pago_efectivo_metodo; sin este último, la
+ * primera parte es efectivo).
  */
 export function describirPago(venta) {
   if (!venta) return '';
@@ -53,7 +61,8 @@ export function describirPago(venta) {
   if (venta.pago_efectivo == null || venta.pago_otro == null) {
     return 'MIXTO';
   }
-  return `Mixto: Efectivo S/ ${Number(venta.pago_efectivo).toFixed(2)} + ${nombreMetodo(venta.pago_otro_metodo)} S/ ${Number(venta.pago_otro).toFixed(2)}`;
+  const segundo = nombreMetodo(venta.pago_efectivo_metodo || 'EFECTIVO');
+  return `Mixto: ${segundo} S/ ${Number(venta.pago_efectivo).toFixed(2)} + ${nombreMetodo(venta.pago_otro_metodo)} S/ ${Number(venta.pago_otro).toFixed(2)}`;
 }
 
 const centimos = (n) => Math.round((Number(n) || 0) * 100) / 100;

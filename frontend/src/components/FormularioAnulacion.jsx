@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Ban, X } from 'lucide-react';
 import { api } from '../api/api';
+import { nombreMetodo } from '../utils/metodoPago';
 import './FormularioGasto.css';
 
 /**
@@ -107,7 +108,11 @@ export default function FormularioAnulacion({ comprobante, onHecho, onCerrar }) 
                     ))}
                     <p className="fg-nota" style={{ margin: '4px 0 0' }}>
                       Vuelve al stock y se devuelven S/ {info.monto_devolver.toFixed(2)} al cliente por el mismo medio de pago
-                      {info.metodo_pago === 'MIXTO' ? ' (en una venta mixta, en efectivo)' : ''}.
+                      {info.metodo_pago === 'MIXTO'
+                        ? ` (en una venta mixta, ${
+                            !info.devuelve_por || info.devuelve_por === 'EFECTIVO' ? 'en efectivo' : `por ${nombreMetodo(info.devuelve_por)}`
+                          })`
+                        : ''}.
                     </p>
                   </div>
                 )}

@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { api } from './api/api';
 import { aplicarTema, limpiarTema } from './utils/tema';
 import POS from './pages/POS/POS';
@@ -29,6 +29,8 @@ import Creditos from './pages/Creditos/Creditos';
 import Guias from './pages/Guias/Guias';
 import Gastos from './pages/Gastos/Gastos';
 import AvisosListos from './components/AvisosListos';
+import DireccionNegocio from './components/DireccionNegocio';
+import { irADireccion, leerDireccion } from './utils/direccion';
 import {
   esAlmacen,
   esCajero,
@@ -93,6 +95,26 @@ function App() {
   const [abrirPedido, setAbrirPedido] = useState(null);
   const [pedidosListos, setPedidosListos] = useState(0);
 
+  // Dirección propia del negocio (monspeet.pages.dev/verane/caja), leída al
+  // abrir la página. Ver utils/direccion.js.
+  const [direccionInicial] = useState(leerDireccion);
+  // Pantalla escrita en la dirección: se abre al entrar (una sola vez).
+  const pantallaPedida = useRef(direccionInicial.pantalla);
+  // Mientras se averigua de qué negocio es la dirección escrita. No hace
+  // falta si es la del negocio que este navegador ya recuerda.
+  const [resolviendoDireccion, setResolviendoDireccion] = useState(() => {
+    const { slug } = direccionInicial;
+    if (!slug) return false;
+    try {
+      const recordada = JSON.parse(localStorage.getItem(TIENDA_STORAGE_KEY) || 'null');
+      return !(recordada && (recordada.slug === slug || recordada.identificador === slug));
+    } catch {
+      return true;
+    }
+  });
+  // La dirección es de otro negocio que el de la sesión abierta.
+  const [otroNegocio, setOtroNegocio] = useState(null);
+
   const cargarEstadoSuscripcion = () => {
     api.suscripcionEstado().then(setEstadoSuscripcion).catch(() => {});
   };
@@ -113,6 +135,10 @@ function App() {
             }
           } catch {
             // sin negocio recordado: se queda en Resumen
+          }
+          if (pantallaPedida.current) {
+            setPantalla(pantallaPedida.current);
+            pantallaPedida.current = null;
           }
           setLogueado(true);
           setModoLectura(!!sesion.modoLectura);
@@ -157,6 +183,11 @@ function App() {
             ? 'PREPARACION'
             : 'MESAS'
     );
+    // Si se entró por una dirección con pantalla (/verane/caja), se abre esa.
+    if (pantallaPedida.current) {
+      setPantalla(pantallaPedida.current);
+      pantallaPedida.current = null;
+    }
     setUsuarioActual(sesionUsuario);
     setLogueado(true);
     setModoLectura(!!data.modo_lectura);
@@ -268,6 +299,63 @@ function App() {
     document.title = logueado && nombreNegocioTitulo ? `${nombreNegocioTitulo} · Monspeet POS` : 'Monspeet POS';
   }, [logueado, nombreNegocioTitulo]);
 
+  // La dirección escrita (/verane): sin sesión, el login sale con el logo y
+  // el color de ese negocio; con la sesión de otro negocio, se pregunta.
+  useEffect(() => {
+    if (verificandoSesion || !resolviendoDireccion) return;
+    const { slug } = direccionInicial;
+    let recordada = null;
+    try {
+      recordada = JSON.parse(localStorage.getItem(TIENDA_STORAGE_KEY) || 'null');
+    } catch {
+      recordada = null;
+    }
+    let vigente = true;
+    api
+      .negocioPublico(slug)
+      .then((negocioDeLaDireccion) => {
+        if (!vigente || !negocioDeLaDireccion) return;
+        if (negocioDeLaDireccion.identificador === recordada?.identificador) return;
+        if (logueado) setOtroNegocio(negocioDeLaDireccion);
+        else handleTiendaIdentificada(negocioDeLaDireccion);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (vigente) setResolviendoDireccion(false);
+      });
+    return () => {
+      vigente = false;
+    };
+    // Solo al abrir la página, cuando ya se sabe si hay sesión.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verificandoSesion]);
+
+  // Con sesión: se trae la dirección del negocio (las sesiones de antes no
+  // la tienen, o pudo cambiarse desde el panel).
+  const identificadorEnSesion = logueado ? tiendaRecordada?.identificador : null;
+  useEffect(() => {
+    if (!identificadorEnSesion) return;
+    api
+      .negocioPublico(identificadorEnSesion)
+      .then((negocioPropio) => {
+        if (!negocioPropio || negocioPropio.identificador !== identificadorEnSesion) return;
+        setTiendaRecordada((actual) => {
+          if (!actual || actual.identificador !== identificadorEnSesion || actual.slug === negocioPropio.slug) return actual;
+          const actualizada = { ...actual, slug: negocioPropio.slug };
+          localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(actualizada));
+          return actualizada;
+        });
+      })
+      .catch(() => {});
+  }, [identificadorEnSesion]);
+
+  // Sin sesión: la dirección es la del negocio recordado (/verane) o la raíz.
+  const slugRecordado = tiendaRecordada?.slug || null;
+  useEffect(() => {
+    if (verificandoSesion || logueado || resolviendoDireccion || direccionInicial.delSistema) return;
+    irADireccion(slugRecordado ? `/${slugRecordado}` : '/');
+  }, [verificandoSesion, logueado, resolviendoDireccion, slugRecordado, direccionInicial.delSistema]);
+
   if (/^\/panel\/?$/.test(window.location.pathname)) {
     return (
       <Suspense fallback={null}>
@@ -282,7 +370,9 @@ function App() {
     return <BoletaPublica identificador={identificadorUrl} comprobanteId={comprobanteIdUrl} />;
   }
 
-  if (verificandoSesion) {
+  // Mientras se averigua de quién es la dirección escrita (un instante, y
+  // solo si no es la del negocio recordado) no se muestra nada.
+  if (verificandoSesion || resolviendoDireccion) {
     return null;
   }
 
@@ -302,6 +392,36 @@ function App() {
   }
 
   const nombreTienda = configuracionTienda?.nombre_tienda || tiendaRecordada?.nombre_negocio || 'Mi Minimarket';
+
+  // Se abrió la dirección de otro negocio con una sesión ya abierta: nunca
+  // se mezclan; se elige con cuál seguir.
+  if (otroNegocio) {
+    return (
+      <div className="login-tienda-container">
+        <div className="login-tienda-form">
+          <h1 className="login-tienda-nombre">{otroNegocio.nombre_negocio}</h1>
+          <p className="login-tienda-subtitulo">
+            Esta dirección es de {otroNegocio.nombre_negocio}, pero en este navegador está abierta la sesión de {nombreTienda}.
+          </p>
+          <button
+            type="button"
+            className="login-tienda-submit"
+            onClick={() => {
+              const destino = otroNegocio;
+              setOtroNegocio(null);
+              handleLogout();
+              handleTiendaIdentificada(destino);
+            }}
+          >
+            Cerrar sesión y entrar a {otroNegocio.nombre_negocio}
+          </button>
+          <button type="button" className="login-tienda-cambiar" onClick={() => setOtroNegocio(null)}>
+            Seguir en {nombreTienda}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ¿El negocio atiende en mesas? Mientras llega la configuración del
   // servidor se usa lo que dijo el login.
@@ -366,6 +486,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      <DireccionNegocio slug={tiendaRecordada?.slug} pantalla={pantallaVisible} onCambiarPantalla={setPantalla} />
       <Sidebar
         pantalla={pantallaVisible}
         restaurante={restaurante}

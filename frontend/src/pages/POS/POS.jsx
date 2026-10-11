@@ -7,7 +7,7 @@ import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
 import { ChevronRight, ShoppingCart } from 'lucide-react';
-import { METODOS_DE_ABONO, METODOS_DE_COBRO, METODOS_OTRO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
+import { METODOS_DE_ABONO, METODOS_DE_COBRO, METODOS_OTRO_MIXTO, METODOS_SEGUNDO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
 import { tituloPedido } from '../../utils/mesas';
 import { abreviaturaUnidad } from '../../utils/unidades';
 import { UNIDAD_PIE_TABLAR, formatoCantidad, formatoPrecio, leerCantidad, seVendeFraccionado, subtotalLinea } from '../../utils/medidas';
@@ -224,10 +224,12 @@ export default function POS({
   const [carritoAbierto, setCarritoAbierto] = useState(false);
   const [metodoPago, setMetodoPago] = useState('EFECTIVO');
   const [montoRecibido, setMontoRecibido] = useState('');
-  // Pago MIXTO = efectivo + un medio digital. El cajero escribe cuánto se
-  // pagó por el medio digital; la parte en efectivo se calcula sola.
+  // Pago MIXTO = dos medios. El cajero elige el primero y escribe cuánto
+  // se pagó por él; el resto se calcula solo y va por el segundo medio:
+  // efectivo (como siempre) u otro distinto, p. ej. mitad Yape y mitad Plin.
   const [mixtoOtroMetodo, setMixtoOtroMetodo] = useState('YAPE');
   const [mixtoMontoOtro, setMixtoMontoOtro] = useState('');
+  const [mixtoSegundoMetodo, setMixtoSegundoMetodo] = useState('EFECTIVO');
   const [cliente, setCliente] = useState(() =>
     !pedidoACobrar && cotizacionACargar?.cliente_id
       ? {
@@ -847,14 +849,17 @@ export default function POS({
   const deudaActual = esCredito && cliente && deudaCliente?.cliente_id === cliente.id ? deudaCliente : null;
   const recibidoNum = parseFloat(montoRecibido) || 0;
   const mixtoOtro = redondear2(parseFloat(mixtoMontoOtro) || 0);
+  // La parte del segundo medio (se llama "efectivo" porque antes siempre lo era).
   const mixtoEfectivo = redondear2(Math.max(0, total - mixtoOtro));
+  const segundoEsEfectivo = mixtoSegundoMetodo === 'EFECTIVO';
+  const mixtoConEfectivo = esMixto && segundoEsEfectivo;
 
   const cambio = useMemo(() => {
     const recibido = parseFloat(montoRecibido) || 0;
     if (metodoPago === 'EFECTIVO') return Math.max(0, recibido - aCobrar);
-    if (metodoPago === 'MIXTO') return redondear2(Math.max(0, recibido - mixtoEfectivo));
+    if (metodoPago === 'MIXTO' && segundoEsEfectivo) return redondear2(Math.max(0, recibido - mixtoEfectivo));
     return 0;
-  }, [montoRecibido, aCobrar, metodoPago, mixtoEfectivo]);
+  }, [montoRecibido, aCobrar, metodoPago, mixtoEfectivo, segundoEsEfectivo]);
 
   // Estado del pago mixto: null = listo para cobrar; si no, un texto
   // que explica qué falta (solo se muestra como error cuando ya hay
@@ -866,6 +871,11 @@ export default function POS({
     if (mixtoOtro >= total) {
       return { listo: false, error: `El monto por ${nombreOtro} debe ser menor al total. Si pagó todo por ${nombreOtro}, usa ese botón.` };
     }
+    if (mixtoSegundoMetodo === mixtoOtroMetodo) {
+      return { listo: false, error: 'Elige dos medios distintos.' };
+    }
+    // Sin efectivo (p. ej. Yape + Plin) no hay efectivo que recibir ni vuelto.
+    if (!segundoEsEfectivo) return { listo: true, error: null };
     if (montoRecibido === '') return { listo: false, error: null };
     if (recibidoNum + 0.005 < mixtoEfectivo) {
       return { listo: false, error: `Faltan S/ ${(mixtoEfectivo - recibidoNum).toFixed(2)} en efectivo para completar el pago.` };
@@ -963,13 +973,14 @@ export default function POS({
             }
           : {}),
         monto_recibido:
-          metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || aCobrar : esMixto ? recibidoNum : null,
-        cambio: metodoPago === 'EFECTIVO' || esMixto ? cambio : null,
+          metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || aCobrar : mixtoConEfectivo ? recibidoNum : null,
+        cambio: metodoPago === 'EFECTIVO' || mixtoConEfectivo ? cambio : null,
         usuario_id: usuario.id,
         cliente_id: cliente?.id || null,
         pago_efectivo: esMixto ? mixtoEfectivo : null,
         pago_otro: esMixto ? mixtoOtro : null,
         pago_otro_metodo: esMixto ? mixtoOtroMetodo : null,
+        pago_efectivo_metodo: esMixto ? mixtoSegundoMetodo : null,
         pedido_id: pedidoACobrar?.id || null,
       });
 
@@ -1003,8 +1014,8 @@ export default function POS({
           folio: resultado.folio,
           total,
           montoRecibido:
-            metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || aCobrar : esMixto ? recibidoNum : null,
-          cambio: metodoPago === 'EFECTIVO' || esMixto ? cambio : null,
+            metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || aCobrar : mixtoConEfectivo ? recibidoNum : null,
+          cambio: metodoPago === 'EFECTIVO' || mixtoConEfectivo ? cambio : null,
           metodoPago,
           // Cambio de prenda: lo devuelto, lo que valía y la diferencia.
           cambioPrenda: enCambio
@@ -1020,6 +1031,8 @@ export default function POS({
             : null,
           pagoOtro: esMixto ? mixtoOtro : null,
           pagoOtroMetodo: esMixto ? mixtoOtroMetodo : null,
+          pagoSegundo: esMixto ? mixtoEfectivo : null,
+          pagoSegundoMetodo: esMixto ? mixtoSegundoMetodo : null,
           credito: esCredito
             ? { adelanto: adelantoNum, adelantoMetodo: creditoAdelantoMetodo, saldo: redondear2(total - adelantoNum), dias: creditoDias }
             : null,
@@ -1053,6 +1066,7 @@ export default function POS({
       // Un pago mixto es excepcional: la siguiente venta vuelve a Efectivo
       // para que nadie cobre en mixto por accidente.
       setMixtoMontoOtro('');
+      setMixtoSegundoMetodo('EFECTIVO');
       // Lo mismo con el crédito.
       setMetodoPago((actual) => (actual === 'MIXTO' || actual === 'CREDITO' ? 'EFECTIVO' : actual));
       setCreditoAdelanto('');
@@ -1730,7 +1744,7 @@ export default function POS({
                 className={`pos-metodo-mixto${esMixto ? ' activo' : ''}`}
                 onClick={() => setMetodoPago('MIXTO')}
               >
-                {esMixto ? 'MIXTO · EFECTIVO + OTRO' : '+ MIXTO · EFECTIVO + OTRO'}
+                {esMixto ? 'MIXTO · DOS MEDIOS' : '+ MIXTO · DOS MEDIOS'}
               </button>
             )}
             {credito && !enCambio && (
@@ -1803,14 +1817,18 @@ export default function POS({
               <span className="pos-mixto-titulo">Pago mixto</span>
 
               <div className="pos-mixto-paso">
-                <span className="pos-mixto-label">1. ¿Con qué pagó la otra parte?</span>
+                <span className="pos-mixto-label">1. ¿Con qué pagó una parte?</span>
                 <div className="pos-mixto-chips">
                   {METODOS_OTRO_MIXTO.map((m) => (
                     <button
                       key={m}
                       type="button"
                       className={mixtoOtroMetodo === m ? 'activo' : ''}
-                      onClick={() => setMixtoOtroMetodo(m)}
+                      onClick={() => {
+                        setMixtoOtroMetodo(m);
+                        // Los dos medios deben ser distintos.
+                        if (m === mixtoSegundoMetodo) setMixtoSegundoMetodo('EFECTIVO');
+                      }}
                     >
                       {nombreMetodo(m)}
                     </button>
@@ -1843,42 +1861,60 @@ export default function POS({
                 </div>
               </div>
 
+              <div className="pos-mixto-paso">
+                <span className="pos-mixto-label">3. ¿Y el resto con qué?</span>
+                <div className="pos-mixto-chips">
+                  {METODOS_SEGUNDO_MIXTO.filter((m) => m !== mixtoOtroMetodo).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={mixtoSegundoMetodo === m ? 'activo' : ''}
+                      onClick={() => setMixtoSegundoMetodo(m)}
+                    >
+                      {nombreMetodo(m)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="pos-mixto-calculado">
                 <span>
-                  3. Parte en efectivo <small>(automático)</small>
+                  Parte por {nombreMetodo(mixtoSegundoMetodo)} <small>(automático)</small>
                 </span>
                 <strong>S/ {mixtoEfectivo.toFixed(2)}</strong>
               </div>
 
-              <div className="pos-mixto-paso">
-                <span className="pos-mixto-label">
-                  <span>4. Efectivo que entregó el cliente</span>
-                  <button
-                    type="button"
-                    className="pos-mixto-rapido"
-                    onClick={() => setMontoRecibido(mixtoEfectivo.toFixed(2))}
-                    disabled={mixtoOtro <= 0 || mixtoOtro >= total}
+              {segundoEsEfectivo && (
+                <div className="pos-mixto-paso">
+                  <span className="pos-mixto-label">
+                    <span>4. Efectivo que entregó el cliente</span>
+                    <button
+                      type="button"
+                      className="pos-mixto-rapido"
+                      onClick={() => setMontoRecibido(mixtoEfectivo.toFixed(2))}
+                      disabled={mixtoOtro <= 0 || mixtoOtro >= total}
+                    >
+                      Exacto
+                    </button>
+                  </span>
+                  <div
+                    className={`pos-mixto-campo${
+                      montoRecibido !== '' && recibidoNum + 0.005 < mixtoEfectivo ? ' error' : ''
+                    }`}
                   >
-                    Exacto
-                  </button>
-                </span>
-                <div
-                  className={`pos-mixto-campo${
-                    montoRecibido !== '' && recibidoNum + 0.005 < mixtoEfectivo ? ' error' : ''
-                  }`}
-                >
-                  <span>S/</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={montoRecibido}
-                    onChange={(e) => setMontoRecibido(e.target.value)}
-                  />
+                    <span>S/</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={montoRecibido}
+                      onChange={(e) => setMontoRecibido(e.target.value)}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {cambio > 0 && <span className="pos-cambio">Cambio: S/ {cambio.toFixed(2)}</span>}
 
@@ -1888,7 +1924,7 @@ export default function POS({
                     <div className="pos-mixto-barra-otro" style={{ width: `${(mixtoOtro / total) * 100}%` }} />
                     <div
                       className="pos-mixto-barra-efectivo"
-                      style={{ width: `${(Math.min(recibidoNum, mixtoEfectivo) / total) * 100}%` }}
+                      style={{ width: `${((segundoEsEfectivo ? Math.min(recibidoNum, mixtoEfectivo) : mixtoEfectivo) / total) * 100}%` }}
                     />
                   </div>
                   <div className="pos-mixto-leyenda">
@@ -1898,7 +1934,7 @@ export default function POS({
                     </span>
                     <span>
                       <i className="pos-mixto-punto-efectivo" />
-                      Efectivo S/ {mixtoEfectivo.toFixed(2)}
+                      {nombreMetodo(mixtoSegundoMetodo)} S/ {mixtoEfectivo.toFixed(2)}
                     </span>
                   </div>
                 </>
