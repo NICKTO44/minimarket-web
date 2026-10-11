@@ -874,7 +874,13 @@ export default function POS({
   })();
 
   // Al crédito siempre hace falta saber quién debe, aunque sea nota simple.
-  const clienteEsObligatorio = tipoComprobante === 'BOLETA' || tipoComprobante === 'FACTURA' || esCredito;
+  // Boleta de menos de S/ 700: SUNAT no exige identificar al comprador; sin
+  // cliente sale a nombre de "CLIENTES VARIOS" (sin documento). Desde S/ 700
+  // hace falta su DNI.
+  const LIMITE_BOLETA_SIN_DNI = 700;
+  const boletaSinClientePermitida = tipoComprobante === 'BOLETA' && !esCredito && total < LIMITE_BOLETA_SIN_DNI;
+  const clienteEsObligatorio =
+    (tipoComprobante === 'BOLETA' && !boletaSinClientePermitida) || tipoComprobante === 'FACTURA' || esCredito;
   const clienteEsOpcionalVisible = tipoComprobante === 'NINGUNO' && !esCredito;
 
   const puedeCobrar =
@@ -1215,7 +1221,7 @@ export default function POS({
   };
 
   const mostrarFormularioNuevo = sinResultadosCliente && !buscandoCliente;
-  const mostrarSeccionCliente = clienteEsObligatorio || mostrarBusquedaCliente || cliente;
+  const mostrarSeccionCliente = clienteEsObligatorio || tipoComprobante === 'BOLETA' || mostrarBusquedaCliente || cliente;
 
   return (
     <div className="pos-layout">
@@ -1477,6 +1483,14 @@ export default function POS({
           <button className="pos-cliente-opcional" onClick={() => setMostrarBusquedaCliente(true)}>
             + Agregar cliente (opcional)
           </button>
+        )}
+
+        {tipoComprobante === 'BOLETA' && !cliente && !esCredito && (
+          <p className="pos-cliente-boleta-aviso">
+            {boletaSinClientePermitida
+              ? 'Sin DNI: la boleta sale a nombre de CLIENTES VARIOS (permitido en ventas menores a S/ 700).'
+              : 'Desde S/ 700 la boleta necesita el DNI o documento del cliente.'}
+          </p>
         )}
 
         {mostrarSeccionCliente && (

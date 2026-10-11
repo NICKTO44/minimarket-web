@@ -510,6 +510,13 @@
   margin: 0;
 }
 
+/* Boleta sin cliente (menos de S/ 700) o aviso de que pide DNI. */
+.pos-cliente-boleta-aviso {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--pos-texto-tenue);
+}
+
 /* font-size en 16px, no 13px -- mismo motivo: evita zoom automático de
    iOS al enfocar documento/nombre del cliente nuevo. */
 .pos-cliente-nuevo input {
