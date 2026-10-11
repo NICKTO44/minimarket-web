@@ -15,6 +15,7 @@
 import QRCode from 'qrcode';
 import { montoEnLetras } from './numeroALetras';
 import { construirCadenaQrSunat } from './qrSunat';
+import { formatoPrecio } from './medidas';
 
 const COLOR_POR_DEFECTO = '#0f7b37'; // verde Monspeet, versión oscura (imprime bien)
 
@@ -28,6 +29,13 @@ function escapar(texto) {
 
 const soles = (n) =>
   Number(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Precio unitario: como soles() si es al céntimo; si tiene más decimales
+// (320 la docena = 26.666667 c/u) se muestran, para que cuadre con el importe.
+const precioUnit = (n) => {
+  const texto = formatoPrecio(n);
+  return texto.split('.')[1]?.length > 2 ? texto : soles(n);
+};
 
 const cantidad = (n) =>
   Number(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
@@ -121,7 +129,7 @@ export function htmlComprobanteA4(datos) {
         <td class="desc">${escapar(it.descripcion)}${it.codigo ? `<span class="codigo">Cód. ${escapar(it.codigo)}</span>` : ''}</td>
         <td class="num">${cantidad(it.cantidad)}</td>
         <td class="unidad">${escapar(it.unidad || 'Unidad')}</td>
-        <td class="num">${soles(it.precioUnitario)}</td>
+        <td class="num">${precioUnit(it.precioUnitario)}</td>
         <td class="num fuerte">${soles(it.importe)}</td>
       </tr>`
     )
@@ -547,7 +555,7 @@ export function htmlComprobanteTicket(datos) {
       <tbody>
         ${items
           .map(
-            (it) => `<tr><td>${cantidad(it.cantidad)}</td><td>${escapar(it.descripcion)}<br><span class="pequeno">P. unit. S/ ${soles(it.precioUnitario)}</span></td><td class="num">${soles(it.importe)}</td></tr>`
+            (it) => `<tr><td>${cantidad(it.cantidad)}</td><td>${escapar(it.descripcion)}<br><span class="pequeno">P. unit. S/ ${precioUnit(it.precioUnitario)}</span></td><td class="num">${soles(it.importe)}</td></tr>`
           )
           .join('')}
       </tbody>

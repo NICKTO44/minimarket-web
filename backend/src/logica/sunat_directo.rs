@@ -699,6 +699,28 @@ mod tests {
         assert_eq!(monto_en_letras(374.0), "TRESCIENTOS SETENTA Y CUATRO CON 00/100 SOLES");
     }
 
+    /// Media docena a S/ 320 la docena: precio unitario con 6 decimales
+    /// (26.666667) y el importe exacto de S/ 160.00, como lo cobra el POS.
+    #[test]
+    fn precio_con_decimales_cuadra() {
+        let precio = 26.666667;
+        let total = (6.0 * precio * 100.0_f64).round() / 100.0;
+        assert_eq!(total, 160.0);
+        let d = crate::logica::igv::desglosar(total, &[(total, Afectacion::Gravado)], 18.0);
+        let mut datos = boleta();
+        datos.items = vec![item("Boxer media docena", 6.0, precio, Afectacion::Gravado)];
+        datos.subtotal = d.gravadas;
+        datos.igv = d.igv;
+        datos.total = d.total;
+        let doc = armar_documento(&datos, &emisor(), "BM01", 3, "2026-10-10", "20:00:00", "");
+        let linea = &doc["details"][0];
+        assert_eq!(linea["mtoPrecioUnitario"], 26.666667);
+        assert_eq!(doc["mtoImpVenta"], 160.0);
+        assert!((linea["mtoValorVenta"].as_f64().unwrap() - doc["mtoOperGravadas"].as_f64().unwrap()).abs() < 0.005);
+        assert!((linea["igv"].as_f64().unwrap() - doc["mtoIGV"].as_f64().unwrap()).abs() < 0.005);
+        assert!((doc["mtoOperGravadas"].as_f64().unwrap() + doc["mtoIGV"].as_f64().unwrap() - 160.0).abs() < 0.005);
+    }
+
     #[test]
     fn boleta_cuadra() {
         let doc = armar_documento(&boleta(), &emisor(), "BM01", 7, "2026-10-08", "15:04:05", "50000000");

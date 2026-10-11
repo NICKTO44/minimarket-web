@@ -19,6 +19,18 @@ export function subtotalLinea(precio, cantidad) {
   return redondear2(precio * cantidad);
 }
 
+/**
+ * Precio unitario para mostrar: "26.67" si es al céntimo, o con los
+ * decimales que tenga (hasta 6) si no: "26.666667". Así 6 × 26.666667 se
+ * ve igual que el importe (S/ 160.00), sin redondear el precio a la vista.
+ */
+export function formatoPrecio(n) {
+  const valor = Number(n) || 0;
+  const centimos = valor * 100;
+  if (Math.abs(centimos - Math.round(centimos)) < 1e-6) return valor.toFixed(2);
+  return valor.toFixed(6).replace(/0+$/, '');
+}
+
 /** "33.33", "24", "2.5": hasta 3 decimales, sin ceros de relleno. */
 export function formatoCantidad(n) {
   return String(redondear3(Number(n) || 0));

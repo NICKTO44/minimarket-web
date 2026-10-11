@@ -1873,7 +1873,8 @@
 }
 
 .pos-precio-input {
-  width: 74px;
+  /* Cabe un precio con decimales: 26.666667 */
+  width: 86px;
   flex-shrink: 0;
 }
 

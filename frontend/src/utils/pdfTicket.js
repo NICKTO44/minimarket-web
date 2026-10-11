@@ -8,7 +8,7 @@
 // reflejarlo también aquí.
 import QRCode from 'qrcode';
 import { desgloseDeComprobante, etiquetaTasa } from './igv';
-import { formatoCantidad, subtotalLinea } from './medidas';
+import { formatoCantidad, formatoPrecio, subtotalLinea } from './medidas';
 import { montoEnLetras } from './numeroALetras';
 import { construirCadenaQrSunat } from './qrSunat';
 
@@ -254,7 +254,7 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
 
   for (const item of items) {
     l.parrafo(item.nombre, { negrita: true });
-    l.fila(`${formatoCantidad(item.cantidad)} x ${soles(item.precio)}`, soles(subtotalLinea(item.precio, item.cantidad)));
+    l.fila(`${formatoCantidad(item.cantidad)} x S/.${formatoPrecio(item.precio)}`, soles(subtotalLinea(item.precio, item.cantidad)));
     l.espacio(2);
   }
   l.linea();

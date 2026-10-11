@@ -10,7 +10,7 @@ import { ChevronRight, ShoppingCart } from 'lucide-react';
 import { METODOS_DE_ABONO, METODOS_DE_COBRO, METODOS_OTRO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
 import { tituloPedido } from '../../utils/mesas';
 import { abreviaturaUnidad } from '../../utils/unidades';
-import { UNIDAD_PIE_TABLAR, formatoCantidad, leerCantidad, seVendeFraccionado, subtotalLinea } from '../../utils/medidas';
+import { UNIDAD_PIE_TABLAR, formatoCantidad, formatoPrecio, leerCantidad, seVendeFraccionado, subtotalLinea } from '../../utils/medidas';
 import CalculadoraPieTablar from '../../components/CalculadoraPieTablar';
 import CantidadFraccionada from '../../components/CantidadFraccionada';
 import CotizacionImprimible from '../../components/CotizacionImprimible';
@@ -84,8 +84,10 @@ function CantidadEditable({ valor, onCambiar, etiqueta }) {
 
 // Precio de una línea del carrito que se puede cambiar SOLO para esta venta
 // (módulo "Cambiar precio al vender"). El producto conserva su precio.
+// Acepta hasta 6 decimales (320 la docena = 26.666667 c/u): el importe de
+// la línea sí va al céntimo (6 × 26.666667 = S/ 160.00 exacto).
 function leerPrecio(texto) {
-  const precio = Math.round(parseFloat(String(texto).trim().replace(',', '.')) * 100) / 100;
+  const precio = Math.round(parseFloat(String(texto).trim().replace(',', '.')) * 1e6) / 1e6;
   return Number.isFinite(precio) && precio > 0 && precio < 10000000 ? precio : null;
 }
 
@@ -101,7 +103,7 @@ function PrecioEditable({ valor, onCambiar, etiqueta }) {
     <input
       className="pos-cantidad-input pos-precio-input"
       inputMode="decimal"
-      value={texto ?? valor.toFixed(2)}
+      value={texto ?? formatoPrecio(valor)}
       onChange={(e) => setTexto(e.target.value)}
       onFocus={(e) => e.target.select()}
       onBlur={aplicar}
@@ -1634,7 +1636,7 @@ export default function POS({
                   </span>
                 ) : (
                   <span className="pos-carrito-item-precio">
-                    {cobrandoPedido ? `${item.cantidad} × ` : ''}S/ {item.precio.toFixed(2)} c/u
+                    {cobrandoPedido ? `${item.cantidad} × ` : ''}S/ {formatoPrecio(item.precio)} c/u
                     {(medidas || seVendeFraccionado(item.unidad_medida)) &&
                       !cobrandoPedido &&
                       ` · S/ ${subtotalLinea(item.precio, item.cantidad).toFixed(2)}`}

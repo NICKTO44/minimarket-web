@@ -4,7 +4,7 @@ import { montoEnLetras } from '../utils/numeroALetras';
 import { construirCadenaQrSunat } from '../utils/qrSunat';
 import { nombreMetodo } from '../utils/metodoPago';
 import { desgloseDeComprobante, etiquetaTasa } from '../utils/igv';
-import { formatoCantidad, subtotalLinea } from '../utils/medidas';
+import { formatoCantidad, formatoPrecio, subtotalLinea } from '../utils/medidas';
 
 /** Iniciales del negocio para el círculo que va en lugar del logo: "Mi Minimarket" -> "MM". */
 function iniciales(nombre) {
@@ -182,7 +182,7 @@ export default function Recibo({
         <div key={idx} className="recibo-item">
           <div className="recibo-item-nombre">{item.nombre}</div>
           <div className="recibo-item-detalle">
-            <span>{formatoCantidad(item.cantidad)} x S/.{item.precio.toFixed(2)}</span>
+            <span>{formatoCantidad(item.cantidad)} x S/.{formatoPrecio(item.precio)}</span>
             <span>S/.{subtotalLinea(item.precio, item.cantidad).toFixed(2)}</span>
           </div>
         </div>
