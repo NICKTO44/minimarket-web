@@ -11,44 +11,83 @@ fn redondear_2(valor: f64) -> f64 {
     (valor * 100.0).round() / 100.0
 }
 
-/// Valida el reparto de un pago MIXTO y devuelve (pago_efectivo,
-/// pago_otro, pago_otro_metodo) listos para guardar. Para cualquier otro
-/// método devuelve (None, None, None): esas columnas solo se usan en
-/// ventas mixtas y el trigger de caja las ignora en el resto.
-fn validar_pago(payload: &NuevaVenta) -> Result<(Option<f64>, Option<f64>, Option<String>), String> {
+/// Medios posibles de la parte guardada en `pago_efectivo` de un mixto
+/// (migración 0028). Efectivo se guarda como NULL.
+const METODOS_SEGUNDO_MIXTO: &[&str] = &["EFECTIVO", "TARJETA", "TRANSFERENCIA", "YAPE", "PLIN"];
+
+/// Reparto validado de un pago MIXTO, listo para guardar.
+#[derive(Debug, Default, PartialEq)]
+struct Reparto {
+    /// La parte "de abajo" (antes siempre efectivo).
+    pago_efectivo: Option<f64>,
+    pago_otro: Option<f64>,
+    pago_otro_metodo: Option<String>,
+    /// Medio de `pago_efectivo`: None = efectivo; si no, TARJETA,
+    /// TRANSFERENCIA, YAPE o PLIN.
+    pago_efectivo_metodo: Option<String>,
+}
+
+/// Valida el reparto de un pago MIXTO. Para cualquier otro método devuelve
+/// todo vacío: esas columnas solo se usan en ventas mixtas y el trigger de
+/// caja las ignora en el resto. `billetera` es la de la parte de arriba
+/// cuando fue Yape o Plin (llega ya como 'YAPE_PLIN').
+fn validar_pago(payload: &NuevaVenta, billetera: Option<&str>) -> Result<Reparto, String> {
     if !METODOS_PAGO_VALIDOS.contains(&payload.metodo_pago.as_str()) {
         return Err(format!("Método de pago no válido: {}", payload.metodo_pago));
     }
     if payload.metodo_pago != "MIXTO" {
-        return Ok((None, None, None));
+        return Ok(Reparto::default());
     }
 
     let efectivo = redondear_2(payload.pago_efectivo.unwrap_or(0.0));
     let otro = redondear_2(payload.pago_otro.unwrap_or(0.0));
     let metodo_otro = payload.pago_otro_metodo.clone().unwrap_or_default();
+    let segundo = payload
+        .pago_efectivo_metodo
+        .as_deref()
+        .map(|m| m.trim().to_uppercase())
+        .filter(|m| !m.is_empty())
+        .unwrap_or_else(|| "EFECTIVO".to_string());
 
     if !METODOS_OTRO_MIXTO.contains(&metodo_otro.as_str()) {
         return Err("En un pago mixto, el otro medio debe ser Tarjeta, Transferencia o Yape/Plin".into());
     }
+    if !METODOS_SEGUNDO_MIXTO.contains(&segundo.as_str()) {
+        return Err(format!("Medio de pago no válido en el pago mixto: {}", segundo));
+    }
+    // Los dos medios tienen que ser distintos (Yape + Yape no es mixto).
+    let mismo = segundo == metodo_otro
+        || (metodo_otro == crate::handlers::billeteras::YAPE_PLIN && billetera == Some(segundo.as_str()));
+    if mismo {
+        return Err("En un pago mixto los dos medios deben ser distintos".into());
+    }
     if efectivo <= 0.0 || otro <= 0.0 {
-        return Err("En un pago mixto, la parte en efectivo y la del otro medio deben ser mayores a cero".into());
+        return Err("En un pago mixto, las dos partes deben ser mayores a cero".into());
     }
     // Comparación en céntimos: tolera 1 céntimo por redondeo, nada más.
     if ((efectivo + otro - payload.total) * 100.0).round().abs() > 1.0 {
         return Err(format!(
-            "El pago mixto no cuadra: efectivo S/ {:.2} + otro medio S/ {:.2} debe sumar el total S/ {:.2}",
+            "El pago mixto no cuadra: S/ {:.2} + S/ {:.2} debe sumar el total S/ {:.2}",
             efectivo, otro, payload.total
         ));
     }
-    if let Some(recibido) = payload.monto_recibido {
-        if recibido + 0.005 < efectivo {
-            return Err(format!(
-                "El efectivo recibido (S/ {:.2}) no alcanza para la parte en efectivo (S/ {:.2})",
-                recibido, efectivo
-            ));
+    let es_efectivo = segundo == "EFECTIVO";
+    if es_efectivo {
+        if let Some(recibido) = payload.monto_recibido {
+            if recibido + 0.005 < efectivo {
+                return Err(format!(
+                    "El efectivo recibido (S/ {:.2}) no alcanza para la parte en efectivo (S/ {:.2})",
+                    recibido, efectivo
+                ));
+            }
         }
     }
-    Ok((Some(efectivo), Some(otro), Some(metodo_otro)))
+    Ok(Reparto {
+        pago_efectivo: Some(efectivo),
+        pago_otro: Some(otro),
+        pago_otro_metodo: Some(metodo_otro),
+        pago_efectivo_metodo: if es_efectivo { None } else { Some(segundo) },
+    })
 }
 
 /// true si el error es que la base (Turso) perdió la sesión abierta entre
@@ -271,7 +310,7 @@ pub async fn procesar_venta(
         Some(c) => Some(crate::handlers::creditos::validar_venta(&conn, c, payload.cliente_id, payload.total).await?),
         None => None,
     };
-    let (metodo_pago, pago_efectivo, pago_otro, pago_otro_metodo, monto_recibido, cambio) = if credito.is_some() {
+    let (metodo_pago, pago_efectivo, pago_otro, pago_otro_metodo, pago_efectivo_metodo, monto_recibido, cambio) = if credito.is_some() {
         (
             "MIXTO".to_string(),
             Some(0.0),
@@ -279,10 +318,17 @@ pub async fn procesar_venta(
             Some(crate::handlers::creditos::METODO_CREDITO.to_string()),
             None,
             None,
+            None,
         )
     } else {
-        let (efectivo, otro, metodo_otro) = validar_pago(&payload).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-        (payload.metodo_pago.clone(), efectivo, otro, metodo_otro, payload.monto_recibido, payload.cambio)
+        let r = validar_pago(&payload, billetera).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+        // Mixto sin efectivo (p. ej. Yape + Plin): no hay efectivo recibido ni vuelto.
+        let (recibido, vuelto) = if r.pago_efectivo_metodo.is_some() {
+            (None, None)
+        } else {
+            (payload.monto_recibido, payload.cambio)
+        };
+        (payload.metodo_pago.clone(), r.pago_efectivo, r.pago_otro, r.pago_otro_metodo, r.pago_efectivo_metodo, recibido, vuelto)
     };
 
     // 1c. Cambio de prenda (módulo CAMBIOS): se revisa lo que el cliente
@@ -410,20 +456,42 @@ pub async fn procesar_venta(
 
             // 5. Insertar venta
             let (venta_id, folio): (i64, String) = {
+                // La columna del medio de la segunda parte (migración 0028)
+                // solo se nombra cuando hace falta: una venta de siempre
+                // entra igual aunque la base aún no la tenga. El trigger de
+                // caja la lee al insertar, por eso va en el mismo INSERT.
+                let (columna_segundo, valor_segundo) = if pago_efectivo_metodo.is_some() {
+                    (", pago_efectivo_metodo", ", ?13")
+                } else {
+                    ("", "")
+                };
+                let sql = format!(
+                    "INSERT INTO ventas (folio, cliente_id, subtotal, descuento, total, metodo_pago, monto_recibido, cambio, usuario_id, estado,
+                                         pago_efectivo, pago_otro, pago_otro_metodo{columna_segundo})
+                     VALUES ((SELECT 'V-' || ?1 || '-' || printf('%04d', COALESCE(MAX(CAST(substr(folio, -4) AS INTEGER)), 0) + 1)
+                                FROM ventas WHERE folio LIKE 'V-' || ?1 || '%'),
+                             ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'COMPLETADA', ?10, ?11, ?12{valor_segundo})
+                     RETURNING id, folio"
+                );
+                let mut parametros = vec![
+                    libsql::Value::from(fecha_actual.clone()),
+                    payload.cliente_id.map(libsql::Value::from).unwrap_or(libsql::Value::Null),
+                    libsql::Value::from(subtotal),
+                    libsql::Value::from(descuento_total),
+                    libsql::Value::from(payload.total),
+                    libsql::Value::from(metodo_pago.clone()),
+                    monto_recibido.map(libsql::Value::from).unwrap_or(libsql::Value::Null),
+                    cambio.map(libsql::Value::from).unwrap_or(libsql::Value::Null),
+                    libsql::Value::from(usuario_id),
+                    pago_efectivo.map(libsql::Value::from).unwrap_or(libsql::Value::Null),
+                    pago_otro.map(libsql::Value::from).unwrap_or(libsql::Value::Null),
+                    pago_otro_metodo.clone().map(libsql::Value::from).unwrap_or(libsql::Value::Null),
+                ];
+                if let Some(m) = &pago_efectivo_metodo {
+                    parametros.push(libsql::Value::from(m.clone()));
+                }
                 let mut filas = conn
-                    .query(
-                        "INSERT INTO ventas (folio, cliente_id, subtotal, descuento, total, metodo_pago, monto_recibido, cambio, usuario_id, estado,
-                                             pago_efectivo, pago_otro, pago_otro_metodo)
-                         VALUES ((SELECT 'V-' || ?1 || '-' || printf('%04d', COALESCE(MAX(CAST(substr(folio, -4) AS INTEGER)), 0) + 1)
-                                    FROM ventas WHERE folio LIKE 'V-' || ?1 || '%'),
-                                 ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'COMPLETADA', ?10, ?11, ?12)
-                         RETURNING id, folio",
-                        libsql::params![
-                            fecha_actual.clone(), payload.cliente_id, subtotal, descuento_total, payload.total,
-                            metodo_pago.clone(), monto_recibido, cambio, usuario_id,
-                            pago_efectivo, pago_otro, pago_otro_metodo.clone()
-                        ],
-                    )
+                    .query(&sql, libsql::params_from_iter(parametros))
                     .await
                     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar venta: {}", e)))?;
                 let datos: (i64, String) = match filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
@@ -553,6 +621,11 @@ pub async fn procesar_venta(
             if por_billetera > 0.0 {
                 crate::handlers::billeteras::anotar_venta(&conn, venta_id, usuario_id, billetera, por_billetera).await;
             }
+            // Mixto cuya otra parte también fue por Yape o Plin (p. ej. Yape +
+            // Plin): esa parte suma en la línea de su billetera.
+            if let Some(b @ ("YAPE" | "PLIN")) = pago_efectivo_metodo.as_deref() {
+                crate::handlers::billeteras::sumar_en_caja(&conn, usuario_id, Some(b), pago_efectivo.unwrap_or(0.0)).await;
+            }
 
             // 6c. Venta al crédito: se abre la cuenta por cobrar y, si el cliente
             //     dejó un adelanto, entra como su primer abono.
@@ -658,4 +731,52 @@ pub async fn procesar_venta(
     }
 
     Ok(Json(VentaResult { venta_id, folio, cambio_prenda }))
+}
+#[cfg(test)]
+mod pruebas_pago {
+    use super::*;
+
+    fn venta(json: serde_json::Value) -> NuevaVenta {
+        let mut base = serde_json::json!({
+            "productos": [], "subtotal": 50.0, "descuento": 0.0, "total": 50.0,
+            "metodo_pago": "MIXTO", "monto_recibido": null, "cambio": null, "usuario_id": 1, "cliente_id": null
+        });
+        for (k, v) in json.as_object().unwrap() {
+            base[k] = v.clone();
+        }
+        serde_json::from_value(base).expect("venta de prueba")
+    }
+
+    #[test]
+    fn mixto_de_siempre_sigue_igual() {
+        let v = venta(serde_json::json!({"pago_efectivo": 20.0, "pago_otro": 30.0, "pago_otro_metodo": "YAPE_PLIN", "monto_recibido": 20.0}));
+        let r = validar_pago(&v, Some("YAPE")).unwrap();
+        assert_eq!(r.pago_efectivo_metodo, None);
+        assert_eq!((r.pago_efectivo, r.pago_otro), (Some(20.0), Some(30.0)));
+        // Efectivo que no alcanza.
+        let v = venta(serde_json::json!({"pago_efectivo": 20.0, "pago_otro": 30.0, "pago_otro_metodo": "TARJETA", "monto_recibido": 10.0}));
+        assert!(validar_pago(&v, None).is_err());
+    }
+
+    #[test]
+    fn yape_mas_plin() {
+        let v = venta(serde_json::json!({"pago_efectivo": 20.0, "pago_otro": 30.0, "pago_otro_metodo": "YAPE_PLIN", "pago_efectivo_metodo": "PLIN"}));
+        let r = validar_pago(&v, Some("YAPE")).unwrap();
+        assert_eq!(r.pago_efectivo_metodo.as_deref(), Some("PLIN"));
+        // "EFECTIVO" explícito es lo mismo que nada.
+        let v = venta(serde_json::json!({"pago_efectivo": 20.0, "pago_otro": 30.0, "pago_otro_metodo": "TARJETA", "pago_efectivo_metodo": "EFECTIVO"}));
+        assert_eq!(validar_pago(&v, None).unwrap().pago_efectivo_metodo, None);
+    }
+
+    #[test]
+    fn rechaza_mismo_medio_y_descuadre() {
+        let v = venta(serde_json::json!({"pago_efectivo": 20.0, "pago_otro": 30.0, "pago_otro_metodo": "YAPE_PLIN", "pago_efectivo_metodo": "YAPE"}));
+        assert!(validar_pago(&v, Some("YAPE")).is_err());
+        let v = venta(serde_json::json!({"pago_efectivo": 20.0, "pago_otro": 30.0, "pago_otro_metodo": "TARJETA", "pago_efectivo_metodo": "TARJETA"}));
+        assert!(validar_pago(&v, None).is_err());
+        let v = venta(serde_json::json!({"pago_efectivo": 10.0, "pago_otro": 30.0, "pago_otro_metodo": "TARJETA", "pago_efectivo_metodo": "PLIN"}));
+        assert!(validar_pago(&v, None).is_err());
+        let v = venta(serde_json::json!({"pago_efectivo": 20.0, "pago_otro": 30.0, "pago_otro_metodo": "TARJETA", "pago_efectivo_metodo": "CREDITO"}));
+        assert!(validar_pago(&v, None).is_err());
+    }
 }

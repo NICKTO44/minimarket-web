@@ -23,31 +23,30 @@ pub async fn ventas_por_rango(
 
     // El método sale con Yape y Plin por separado (migración 0019); si la
     // base aún no tiene la columna, como siempre ("YAPE_PLIN").
-    let consulta = |metodo: &str, otro: &str| {
+    // `segundo` = medio de la parte de pago_efectivo en un mixto (migración
+    // 0028); con una base que aún no la tiene, va NULL (efectivo).
+    let consulta = |metodo: &str, otro: &str, segundo: &str| {
         format!(
             "SELECT v.id, v.folio, v.fecha_hora, v.total, {}, u.nombre_completo, v.estado,
-                    v.pago_efectivo, v.pago_otro, {}
+                    v.pago_efectivo, v.pago_otro, {}, {}
              FROM ventas v JOIN usuarios u ON v.usuario_id = u.id
              WHERE date(v.fecha_hora, '-5 hours') BETWEEN ?1 AND ?2
              ORDER BY v.fecha_hora DESC",
-            metodo, otro
+            metodo, otro, segundo
         )
     };
-    let mut rows = match conn
-        .query(
-            &consulta(
-                "CASE WHEN v.metodo_pago = 'YAPE_PLIN' THEN COALESCE(v.billetera, 'YAPE_PLIN') ELSE v.metodo_pago END",
-                "CASE WHEN v.pago_otro_metodo = 'YAPE_PLIN' THEN COALESCE(v.billetera, 'YAPE_PLIN') ELSE v.pago_otro_metodo END",
-            ),
-            libsql::params![rango.fecha_inicio.clone(), rango.fecha_fin.clone()],
-        )
-        .await
-    {
+    let metodo = "CASE WHEN v.metodo_pago = 'YAPE_PLIN' THEN COALESCE(v.billetera, 'YAPE_PLIN') ELSE v.metodo_pago END";
+    let otro = "CASE WHEN v.pago_otro_metodo = 'YAPE_PLIN' THEN COALESCE(v.billetera, 'YAPE_PLIN') ELSE v.pago_otro_metodo END";
+    let parametros = || libsql::params![rango.fecha_inicio.clone(), rango.fecha_fin.clone()];
+    let mut rows = match conn.query(&consulta(metodo, otro, "v.pago_efectivo_metodo"), parametros()).await {
         Ok(r) => r,
-        Err(_) => conn
-            .query(&consulta("v.metodo_pago", "v.pago_otro_metodo"), libsql::params![rango.fecha_inicio.clone(), rango.fecha_fin.clone()])
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+        Err(_) => match conn.query(&consulta(metodo, otro, "NULL"), parametros()).await {
+            Ok(r) => r,
+            Err(_) => conn
+                .query(&consulta("v.metodo_pago", "v.pago_otro_metodo", "NULL"), parametros())
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+        },
     };
 
     let mut ventas = Vec::new();
@@ -61,6 +60,7 @@ pub async fn ventas_por_rango(
             pago_efectivo: row.get::<Option<f64>>(7).ok().flatten(),
             pago_otro: row.get::<Option<f64>>(8).ok().flatten(),
             pago_otro_metodo: row.get::<Option<String>>(9).ok().flatten(),
+            pago_efectivo_metodo: row.get::<Option<String>>(10).ok().flatten(),
             cajero: row.get(5).unwrap_or_default(),
             estado: row.get(6).unwrap_or_default(),
         });
@@ -149,14 +149,14 @@ pub async fn estadisticas_completas(
 /// de antes del cambio quedan como "YAPE_PLIN". Es un detalle del reporte:
 /// si algo falla, va vacío y el resto del reporte sale igual.
 async fn pagos_por_metodo(conn: &libsql::Connection, rango: &RangoFechas) -> Vec<PagoPorMetodo> {
-    let consulta = |billetera: &str| {
+    let consulta = |billetera: &str, segundo: &str| {
         format!(
             "SELECT metodo, COUNT(*), CAST(SUM(monto) AS REAL) FROM (
                  SELECT CASE WHEN v.metodo_pago = 'YAPE_PLIN' THEN {b} ELSE v.metodo_pago END AS metodo, v.total AS monto
                    FROM ventas v
                   WHERE date(v.fecha_hora, '-5 hours') BETWEEN ?1 AND ?2 AND v.estado = 'COMPLETADA' AND v.metodo_pago <> 'MIXTO'
                  UNION ALL
-                 SELECT 'EFECTIVO', v.pago_efectivo
+                 SELECT {s}, v.pago_efectivo
                    FROM ventas v
                   WHERE date(v.fecha_hora, '-5 hours') BETWEEN ?1 AND ?2 AND v.estado = 'COMPLETADA' AND v.metodo_pago = 'MIXTO'
                     AND COALESCE(v.pago_efectivo, 0) > 0
@@ -166,16 +166,22 @@ async fn pagos_por_metodo(conn: &libsql::Connection, rango: &RangoFechas) -> Vec
                   WHERE date(v.fecha_hora, '-5 hours') BETWEEN ?1 AND ?2 AND v.estado = 'COMPLETADA' AND v.metodo_pago = 'MIXTO'
                     AND COALESCE(v.pago_otro, 0) > 0
              ) GROUP BY metodo ORDER BY SUM(monto) DESC",
-            b = billetera
+            b = billetera,
+            s = segundo
         )
     };
     let parametros = || libsql::params![rango.fecha_inicio.clone(), rango.fecha_fin.clone()];
-    let mut filas = match conn.query(&consulta("COALESCE(v.billetera, 'YAPE_PLIN')"), parametros()).await {
+    // La parte de pago_efectivo va por su medio (migración 0028; NULL = efectivo).
+    let segundo = "COALESCE(v.pago_efectivo_metodo, 'EFECTIVO')";
+    let mut filas = match conn.query(&consulta("COALESCE(v.billetera, 'YAPE_PLIN')", segundo), parametros()).await {
         Ok(f) => f,
-        // Base que aún no tiene la columna de la billetera.
-        Err(_) => match conn.query(&consulta("'YAPE_PLIN'"), parametros()).await {
+        // Base que aún no tiene esas columnas.
+        Err(_) => match conn.query(&consulta("COALESCE(v.billetera, 'YAPE_PLIN')", "'EFECTIVO'"), parametros()).await {
             Ok(f) => f,
-            Err(_) => return Vec::new(),
+            Err(_) => match conn.query(&consulta("'YAPE_PLIN'", "'EFECTIVO'"), parametros()).await {
+                Ok(f) => f,
+                Err(_) => return Vec::new(),
+            },
         },
     };
     let mut lista = Vec::new();

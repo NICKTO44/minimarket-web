@@ -11,6 +11,8 @@ pub struct VentaResumen {
     pub pago_efectivo: Option<f64>,
     pub pago_otro: Option<f64>,
     pub pago_otro_metodo: Option<String>,
+    /// Medio de `pago_efectivo` (migración 0028). None = efectivo.
+    pub pago_efectivo_metodo: Option<String>,
     pub cajero: String,
     pub estado: String,
 }

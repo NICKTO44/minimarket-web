@@ -62,6 +62,27 @@ pub async fn anotar_venta(conn: &libsql::Connection, venta_id: i64, usuario_id: 
         .await;
 }
 
+/// Suma en la línea de esa billetera de la caja abierta, sin marcar la
+/// venta. Es la segunda parte de un pago mixto que también fue por Yape o
+/// Plin (migración 0028): el trigger ya la sumó en transferencias. No
+/// puede fallar.
+pub async fn sumar_en_caja(conn: &libsql::Connection, usuario_id: i64, billetera: Option<&str>, monto: f64) {
+    if !(monto > 0.0) || !monto.is_finite() {
+        return;
+    }
+    let _ = conn
+        .execute(
+            &format!(
+                "UPDATE cajas SET {col} = {col} + {monto} WHERE id = {caja}",
+                col = columna(billetera),
+                monto = monto,
+                caja = caja_de(usuario_id)
+            ),
+            (),
+        )
+        .await;
+}
+
 /// Una devolución por Yape/Plin: sale de la misma línea de la caja abierta
 /// (el trigger ya la restó de `ventas_transferencia`).
 pub async fn descontar(conn: &libsql::Connection, usuario_id: i64, billetera: Option<&str>, monto: f64) {

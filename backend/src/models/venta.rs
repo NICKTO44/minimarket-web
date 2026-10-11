@@ -31,6 +31,11 @@ pub struct NuevaVenta {
     pub pago_otro: Option<f64>,
     #[serde(default)]
     pub pago_otro_metodo: Option<String>,
+    /// Con qué se pagó la parte de `pago_efectivo` (migración 0028): None o
+    /// "EFECTIVO" = efectivo, como siempre; si no, "YAPE", "PLIN", "TARJETA"
+    /// o "TRANSFERENCIA" (p. ej. mitad Yape y mitad Plin).
+    #[serde(default)]
+    pub pago_efectivo_metodo: Option<String>,
     /// Pedido de mesa que se está cobrando (módulo Cafetería/Restaurante).
     /// None en una venta normal del POS.
     #[serde(default)]

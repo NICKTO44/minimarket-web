@@ -193,12 +193,22 @@ pub struct InfoAnulacion {
     pub por_devolver: Vec<PorDevolver>,
     pub monto_devolver: f64,
     pub metodo_pago: Option<String>,
+    /// Venta mixta: por qué medio se devuelve el dinero al anular (el de la
+    /// parte de `pago_efectivo`: efectivo, o p. ej. Plin en Yape + Plin).
+    pub devuelve_por: Option<String>,
 }
 
 /// GET /comprobantes/:id/anulacion — si se puede anular y qué se devuelve.
 pub async fn preparar(Extension(tenant): Extension<Arc<TenantDb>>, Path(id): Path<i64>) -> Result<Json<InfoAnulacion>, Fallo> {
     let conn = tenant.0.connect().map_err(interno)?;
-    Ok(Json(match revisar(&conn, id).await {
+    let revision = revisar(&conn, id).await;
+    let devuelve_por = match &revision {
+        Ok(r) if r.metodo_pago == "MIXTO" && r.pago_otro_metodo.as_deref() != Some(crate::handlers::creditos::METODO_CREDITO) => Some(
+            super::devoluciones::medio_segunda_parte(&conn, r.venta_id).await.unwrap_or_else(|| "EFECTIVO".to_string()),
+        ),
+        _ => None,
+    };
+    Ok(Json(match revision {
         Ok(r) => InfoAnulacion {
             puede: true,
             motivo_no: None,
@@ -208,6 +218,7 @@ pub async fn preparar(Extension(tenant): Extension<Arc<TenantDb>>, Path(id): Pat
             monto_devolver: (r.por_devolver.iter().map(|p| p.monto).sum::<f64>() * 100.0).round() / 100.0,
             por_devolver: r.por_devolver,
             metodo_pago: Some(r.metodo_pago),
+            devuelve_por,
         },
         Err((codigo, motivo)) if codigo == StatusCode::BAD_REQUEST => InfoAnulacion {
             puede: false,
@@ -218,6 +229,7 @@ pub async fn preparar(Extension(tenant): Extension<Arc<TenantDb>>, Path(id): Pat
             por_devolver: Vec::new(),
             monto_devolver: 0.0,
             metodo_pago: None,
+            devuelve_por: None,
         },
         Err(e) => return Err(e),
     }))

@@ -53,6 +53,15 @@ async fn main() {
         .expect("La base central no respondió");
     println!("Conectado a la base central correctamente");
 
+    // Dirección propia de cada negocio (monspeet.pages.dev/verane): crea la
+    // columna si falta y da dirección a quien no tenga. Si falla, el sistema
+    // sigue igual (solo sin direcciones nuevas) y se avisa en el registro.
+    match handlers::direcciones::preparar_central(&conn_central).await {
+        Ok(0) => {}
+        Ok(n) => println!("🔗 Direcciones asignadas a {} negocio(s).", n),
+        Err(e) => eprintln!("⚠️  No se pudieron preparar las direcciones de los negocios: {}", e),
+    }
+
     let state = Arc::new(AppState {
         db,
         tiendas: tenants::RegistroTiendas::nuevo(central_db, clave_cifrado),
@@ -189,6 +198,7 @@ async fn main() {
         .route("/", get(health))
         .route("/agente-impresion/ws", get(handlers::agente_impresion::agente_websocket))
         .route("/publico/comprobante/:identificador/:id", get(handlers::publico::ver_comprobante_publico))
+        .route("/publico/negocio/:direccion", get(handlers::direcciones::negocio_publico))
         .nest_service("/uploads", ServeDir::new("uploads"))
         .merge(rutas_autenticacion);
 
@@ -359,6 +369,7 @@ async fn main() {
         .route("/panel/negocios/:id/renovar", post(handlers::panel::renovar))
         .route("/panel/negocios/:id/estado", post(handlers::panel::cambiar_estado))
         .route("/panel/negocios/:id/vencimiento", axum::routing::put(handlers::panel::fijar_vencimiento))
+        .route("/panel/negocios/:id/direccion", axum::routing::put(handlers::panel::cambiar_direccion))
         .route("/panel/negocios/:id/facturacion", get(handlers::panel::detalle_facturacion))
         .route("/panel/negocios/:id/facturacion/datos", axum::routing::put(handlers::panel::guardar_datos))
         .route(

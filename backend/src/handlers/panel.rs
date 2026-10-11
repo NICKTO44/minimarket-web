@@ -151,6 +151,8 @@ pub struct NegocioPanel {
     pub id: i64,
     pub nombre: String,
     pub identificador: String,
+    /// Dirección propia: monspeet.pages.dev/<slug>. None si aún no tiene.
+    pub slug: Option<String>,
     pub estado: String,
     pub fecha_vencimiento: Option<String>,
     pub fecha_creacion: Option<String>,
@@ -230,6 +232,15 @@ pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<
             creacion.insert(id, fecha);
         }
     }
+    // Direcciones (columna que crea el servidor al arrancar; si faltara, sin ellas).
+    let mut direcciones: HashMap<i64, String> = HashMap::new();
+    if let Ok(mut filas) = central.query("SELECT id, slug FROM tiendas WHERE slug IS NOT NULL AND slug <> ''", ()).await {
+        while let Ok(Some(f)) = filas.next().await {
+            if let (Ok(id), Ok(slug)) = (f.get::<i64>(0), f.get::<String>(1)) {
+                direcciones.insert(id, slug);
+            }
+        }
+    }
     let mut usuarios: HashMap<i64, Vec<String>> = HashMap::new();
     let mut filas = central.query("SELECT tienda_id, usuario FROM usuarios_indice ORDER BY usuario", ()).await.map_err(interno)?;
     while let Some(f) = filas.next().await.map_err(interno)? {
@@ -254,6 +265,7 @@ pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<
                 id: t.id,
                 nombre: t.nombre_negocio.clone(),
                 identificador: t.identificador.clone(),
+                slug: direcciones.remove(&t.id),
                 estado: t.estado.clone(),
                 fecha_vencimiento: t.fecha_vencimiento.clone(),
                 fecha_creacion: creacion.get(&t.id).cloned(),
@@ -370,6 +382,48 @@ pub async fn fijar_vencimiento(State(state): State<Arc<AppState>>, Path(id): Pat
         None => format!("{} queda sin fecha de vencimiento.", nombre),
     };
     Ok(Json(SuscripcionCambiada { estado, fecha_vencimiento: fecha, mensaje }))
+}
+
+#[derive(Deserialize)]
+pub struct CambiarDireccion {
+    pub direccion: String,
+}
+
+/// PUT /panel/negocios/:id/direccion — cambia la dirección propia del
+/// negocio (monspeet.pages.dev/<direccion>). Los que ya la tenían guardada
+/// la dejan de usar: su navegador toma la nueva al volver a entrar.
+pub async fn cambiar_direccion(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Json(datos): Json<CambiarDireccion>,
+) -> Result<Json<Value>, Fallo> {
+    use crate::handlers::direcciones::{normalizar, validar};
+    let direccion = normalizar(&datos.direccion);
+    validar(&direccion).map_err(malo)?;
+    let conn = state.tiendas.conexion_central().map_err(interno)?;
+    let mut filas = conn
+        .query(
+            "SELECT (SELECT nombre_negocio FROM tiendas WHERE id = ?2),
+                    EXISTS(SELECT 1 FROM tiendas WHERE (slug = ?1 OR identificador = ?1) AND id <> ?2)",
+            libsql::params![direccion.clone(), id],
+        )
+        .await
+        .map_err(interno)?;
+    let f = filas.next().await.map_err(interno)?.ok_or_else(|| interno("sin respuesta"))?;
+    let nombre: Option<String> = f.get(0).ok();
+    let ocupada: i64 = f.get(1).unwrap_or(0);
+    drop(filas);
+    let nombre = nombre.ok_or((StatusCode::NOT_FOUND, "Negocio no encontrado.".to_string()))?;
+    if ocupada == 1 {
+        return Err((StatusCode::CONFLICT, format!("La dirección \"{}\" ya la usa otro negocio.", direccion)));
+    }
+    conn.execute("UPDATE tiendas SET slug = ?1 WHERE id = ?2", libsql::params![direccion.clone(), id])
+        .await
+        .map_err(interno)?;
+    Ok(Json(serde_json::json!({
+        "slug": direccion,
+        "mensaje": format!("{} ahora entra por /{}.", nombre, direccion),
+    })))
 }
 
 // ---------------------------------------------------------------------

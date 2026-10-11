@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod direcciones;
 pub mod productos;
 pub mod clientes;
 pub mod ventas;

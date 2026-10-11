@@ -430,5 +430,11 @@ async fn registrar_negocio_interno(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Su dirección propia (monspeet.pages.dev/<nombre>). No puede hacer
+    // fallar el registro: si no sale, se le da al siguiente arranque.
+    if let Err(e) = crate::handlers::direcciones::asignar(&conn_central, tienda_id, identificador).await {
+        eprintln!("⚠️  {}: no se pudo asignar su dirección: {}", identificador, e);
+    }
+
     Ok(RegistroResponse { ok: true, identificador: identificador.to_string() })
 }

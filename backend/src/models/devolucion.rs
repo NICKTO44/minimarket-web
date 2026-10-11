@@ -28,6 +28,8 @@ pub struct VentaParaDevolucion {
     pub pago_efectivo: Option<f64>,
     pub pago_otro: Option<f64>,
     pub pago_otro_metodo: Option<String>,
+    /// Medio de `pago_efectivo` (migración 0028). None = efectivo.
+    pub pago_efectivo_metodo: Option<String>,
     pub productos: Vec<ProductoVentaDetalle>,
     pub comprobante: Option<ComprobanteInfo>,
 }
@@ -45,8 +47,9 @@ pub struct NuevaDevolucion {
     pub productos: Vec<ProductoDevolver>,
     pub motivo: String,
     pub usuario_id: i64,
-    // Solo se usa si la venta original fue MIXTO: "EFECTIVO" o el medio
-    // digital con el que se pagó la otra parte. Si no llega, EFECTIVO.
+    // Solo se usa si la venta original fue MIXTO: "EFECTIVO" o uno de los
+    // medios con que se pagó. Si no llega, el medio de la parte de
+    // `pago_efectivo` (efectivo en un mixto de siempre).
     #[serde(default)]
     pub metodo_reembolso: Option<String>,
 }

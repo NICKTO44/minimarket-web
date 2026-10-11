@@ -115,11 +115,24 @@ pub async fn buscar_venta_para_devolucion(
         None => None,
     };
 
+    let pago_efectivo_metodo = if metodo_pago == "MIXTO" { medio_segunda_parte(&conn, venta_id).await } else { None };
+
     Ok(Json(VentaParaDevolucion {
         venta_id, folio: folio_venta, fecha_hora, total, metodo_pago,
-        pago_efectivo, pago_otro, pago_otro_metodo,
+        pago_efectivo, pago_otro, pago_otro_metodo, pago_efectivo_metodo,
         productos, comprobante,
     }))
+}
+
+/// Medio de la parte `pago_efectivo` de una venta mixta (migración 0028):
+/// None = efectivo, o si la base aún no tiene la columna.
+pub async fn medio_segunda_parte(conn: &libsql::Connection, venta_id: i64) -> Option<String> {
+    let mut filas = conn
+        .query("SELECT pago_efectivo_metodo FROM ventas WHERE id = ?1", libsql::params![venta_id])
+        .await
+        .ok()?;
+    let fila = filas.next().await.ok()??;
+    fila.get::<String>(0).ok().filter(|m| !m.is_empty() && m != "EFECTIVO")
 }
 
 pub async fn procesar_devolucion(
@@ -210,12 +223,26 @@ pub async fn registrar_devolucion(
     // En una venta MIXTO el cajero elige cómo devuelve el dinero: en
     // efectivo o por el mismo medio digital con el que se pagó la otra
     // parte. En el resto, se devuelve por el mismo método de la venta.
+    // Mixto entre dos medios (migración 0028): la parte de `pago_efectivo`
+    // pudo ser Yape, Plin, tarjeta o transferencia; también se puede
+    // devolver por ese medio. Su billetera, si fue Yape o Plin, va aparte.
+    let mut billetera_elegida: Option<String> = None;
     let metodo_para_caja = if metodo_original == "MIXTO" {
+        let segundo = medio_segunda_parte(conn, payload.venta_id).await;
+        // Sin elección, por el medio de esa parte (efectivo en un mixto de siempre).
+        let elegido_crudo = payload
+            .metodo_reembolso
+            .clone()
+            .unwrap_or_else(|| segundo.clone().unwrap_or_else(|| "EFECTIVO".to_string()));
         // "YAPE" o "PLIN" es el mismo medio que se guardó como 'YAPE_PLIN'.
-        let elegido = payload.metodo_reembolso.clone().unwrap_or_else(|| "EFECTIVO".to_string());
-        let elegido = crate::handlers::billeteras::separar(&elegido).0.to_string();
+        let elegido = crate::handlers::billeteras::separar(&elegido_crudo).0.to_string();
         let otro = otro_metodo_original.clone().unwrap_or_default();
-        if elegido == "EFECTIVO" {
+        if segundo.as_deref() == Some(elegido_crudo.as_str()) {
+            if elegido_crudo == "YAPE" || elegido_crudo == "PLIN" {
+                billetera_elegida = Some(elegido_crudo.clone());
+            }
+            elegido
+        } else if elegido == "EFECTIVO" {
             "EFECTIVO".to_string()
         } else if !otro.is_empty() && elegido == otro {
             // Venta al crédito: lo devuelto se descuenta de la deuda (si la
@@ -225,9 +252,14 @@ pub async fn registrar_devolucion(
             }
             otro
         } else {
+            let segunda = match segundo.as_deref() {
+                Some(s) => format!(", por {}", s.replace('_', "/")),
+                None => String::new(),
+            };
             return Err((StatusCode::BAD_REQUEST, format!(
-                "En esta venta mixta solo se puede devolver en efectivo o por {}",
-                otro.replace('_', "/")
+                "En esta venta mixta solo se puede devolver en efectivo, por {}{}",
+                otro.replace('_', "/"),
+                segunda
             )));
         }
     } else {
@@ -247,7 +279,10 @@ pub async fn registrar_devolucion(
     // Devuelto por Yape o Plin: sale también de su línea en la caja (el
     // trigger ya lo restó del total de transferencias). No puede fallar.
     if metodo_para_caja == crate::handlers::billeteras::YAPE_PLIN {
-        let billetera = crate::handlers::billeteras::de_venta(conn, payload.venta_id).await;
+        let billetera = match billetera_elegida {
+            Some(b) => Some(b),
+            None => crate::handlers::billeteras::de_venta(conn, payload.venta_id).await,
+        };
         crate::handlers::billeteras::descontar(conn, usuario_id, billetera.as_deref(), monto_total).await;
     }
 

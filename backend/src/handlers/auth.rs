@@ -37,6 +37,9 @@ pub struct TiendaSesion {
     /// Rubro y módulos encendidos (ver handlers/rubros.rs).
     pub rubro: String,
     pub modulos: Vec<String>,
+    /// Dirección propia del negocio ("verane" -> monspeet.pages.dev/verane).
+    /// None si todavía no tiene (ver handlers/direcciones.rs).
+    pub slug: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -49,7 +52,7 @@ pub struct LoginResponse {
     pub aviso: Option<String>,
 }
 
-async fn leer_identidad_visual(conn: &libsql::Connection) -> (Option<String>, Option<String>) {
+pub async fn leer_identidad_visual(conn: &libsql::Connection) -> (Option<String>, Option<String>) {
     let resultado = conn
         .query("SELECT logo_path, color_acento FROM configuracion_tienda LIMIT 1", ())
         .await;
@@ -63,6 +66,12 @@ async fn leer_identidad_visual(conn: &libsql::Connection) -> (Option<String>, Op
         Ok(Some(row)) => (row.get(0).ok(), row.get(1).ok()),
         _ => (None, None),
     }
+}
+
+/// Dirección del negocio para la sesión; no puede hacer fallar el login.
+async fn direccion_de(state: &AppState, identificador: &str) -> Option<String> {
+    let central = state.tiendas.conexion_central().ok()?;
+    crate::handlers::direcciones::de_identificador(&central, identificador).await
 }
 
 pub async fn login(
@@ -163,6 +172,7 @@ pub async fn login(
             rol_nombre,
         },
         tienda: TiendaSesion {
+            slug: direccion_de(&state, &tienda.identificador).await,
             identificador: tienda.identificador,
             nombre_negocio: tienda.nombre_negocio,
             logo_url,
@@ -222,6 +232,7 @@ pub async fn identificar_usuario(
     Ok(Json(IdentificarUsuarioResponse {
         ok: true,
         tienda: TiendaSesion {
+            slug: direccion_de(&state, &tienda.identificador).await,
             identificador: tienda.identificador,
             nombre_negocio: tienda.nombre_negocio,
             logo_url,
