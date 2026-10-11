@@ -79,7 +79,7 @@ function iniciales(nombre) {
 
 /**
  * datos = {
- *   emisor: { nombreComercial, razonSocial, ruc, direccion, telefono, email, logo, color },
+ *   emisor: { nombreComercial, razonSocial, ruc, direccion, ubicacion?, telefono, email, logo, color },
  *   comprobante: { tipo: 'FACTURA'|'BOLETA'|'NOTA_CREDITO', serie, numero, fechaEmision, horaEmision, hash },
  *   referencia: { documento: 'BM01-15', tipo: 'Boleta'|'Factura', motivo } | null (solo notas),
  *   cliente: { tipoDocumento: 'RUC'|'DNI'|..., numeroDocumento, nombre, direccion } | null,
@@ -286,6 +286,7 @@ export function htmlComprobanteA4(datos) {
         <p class="nombre-comercial">${escapar(nombreComercial)}</p>
         ${mostrarRazon ? `<p class="razon">${escapar(emisor.razonSocial)}</p>` : ''}
         ${emisor.direccion ? `<p class="linea">${escapar(emisor.direccion)}</p>` : ''}
+        ${emisor.ubicacion ? `<p class="linea">${escapar(emisor.ubicacion)}</p>` : ''}
         ${contacto ? `<p class="linea">${contacto}</p>` : ''}
       </div>
     </div>
@@ -424,7 +425,10 @@ export async function datosA4DeDocumento(doc, extra = {}) {
       nombreComercial: empresa.nombreComercial,
       razonSocial: empresa.razonSocial,
       ruc: empresa.ruc,
-      direccion: [dir.direccion, ubicacion].filter(Boolean).join(', '),
+      // Distrito - provincia - departamento en su propia línea: si la
+      // dirección ya termina en LIMA no salen cuatro "LIMA" seguidos.
+      direccion: dir.direccion || ubicacion,
+      ubicacion: dir.direccion ? ubicacion : '',
       telefono: extra.telefono,
       email: extra.email,
       logo: extra.logo,
@@ -530,6 +534,7 @@ export function htmlComprobanteTicket(datos) {
     <div class="nombre">${escapar(nombreComercial)}</div>
     ${mostrarRazon ? `<p class="razon">${escapar(emisor.razonSocial)}</p>` : ''}
     ${emisor.direccion ? `<p>${escapar(emisor.direccion)}</p>` : ''}
+    ${emisor.ubicacion ? `<p>${escapar(emisor.ubicacion)}</p>` : ''}
     ${emisor.telefono ? `<p>Tel. ${escapar(emisor.telefono)}</p>` : ''}
     <div class="tipo">
       <div class="ruc">R.U.C. ${escapar(emisor.ruc)}</div>
