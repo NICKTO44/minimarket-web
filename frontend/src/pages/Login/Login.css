@@ -11,8 +11,16 @@
 }
 
 /* =========================================================
-   LOGIN GENERAL — imagen a pantalla completa en desktop,
-   login flotante centrado y semi-transparente encima
+   Textos que cambian según la pantalla (ver Login.jsx)
+   ========================================================= */
+.solo-movil {
+  display: none;
+}
+
+/* =========================================================
+   LOGIN GENERAL — escritorio: fondo blanco con puntos, el
+   sistema en un celular a la izquierda y el formulario a la
+   derecha. En el celular se ve como siempre (más abajo).
    ========================================================= */
 
 .login-general-container {
@@ -21,25 +29,23 @@
   min-height: 100dvh;
   display: flex;
   align-items: center;
+  justify-content: center;
+  gap: clamp(32px, 6vw, 96px);
   box-sizing: border-box;
-  padding: 48px 5%;
+  padding: 88px 6% 72px;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color: var(--mp-blanco);
-  background-color: var(--mp-negro);
-  background-image:
-    linear-gradient(90deg, rgba(10, 18, 15, 0.95) 0%, rgba(10, 18, 15, 0.65) 42%, rgba(10, 18, 15, 0.3) 68%, rgba(10, 18, 15, 0.15) 100%),
-    linear-gradient(0deg, rgba(10, 18, 15, 0.55) 0%, rgba(10, 18, 15, 0) 35%),
-    url('/images/login-devices.jpg');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  color: #16181d;
+  background-color: var(--mp-blanco);
+  background-image: radial-gradient(#e6ebe8 1.2px, transparent 1.2px);
+  background-size: 26px 26px;
 }
 
+/* La marca con funciones y WhatsApp grande: solo en el celular. */
 .login-general-marca-contenido {
   position: relative;
   z-index: 1;
-  display: flex;
+  display: none;
   flex-direction: column;
   width: 100%;
   max-width: 460px;
@@ -152,83 +158,185 @@
   color: var(--mp-gris-oscuro);
 }
 
-/* Tarjeta de login flotando centrada sobre la imagen, con
-   fondo semi-transparente y desenfoque -- efecto "vidrio". */
-.login-general-flotante {
-  position: absolute;
-  z-index: 2;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(340px, 90vw);
+/* =========================================================
+   ESCENA (solo escritorio): celular, anillos e íconos.
+   --escena-color: verde de Monspeet o el color del negocio.
+   ========================================================= */
+.login-escena {
+  --escena-color: #15803d;
+  position: relative;
+  flex: none;
+  width: min(560px, 44vw, calc(100vh - 160px));
+  aspect-ratio: 1;
 }
-.login-general-arrastre {
+
+.login-escena-anillo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.5px solid rgba(21, 128, 61, 0.35);
+  border-color: color-mix(in srgb, var(--escena-color) 35%, transparent);
+}
+
+.login-escena-celular {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: 78.75%;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 24px 40px rgba(16, 24, 20, 0.22));
+  user-select: none;
+  pointer-events: none;
+}
+
+.login-escena-nodo {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--mp-blanco);
+  border: 1.5px solid var(--escena-color);
+  color: var(--escena-color);
+  box-shadow: 0 4px 12px rgba(16, 24, 20, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 20px;
-  margin: 0 auto 4px;
-  border-radius: 6px;
-  color: rgba(11, 15, 13, 0.35);
-  cursor: grab;
 }
 
-.login-general-arrastre:active {
-  cursor: grabbing;
+.login-escena-nodo svg {
+  width: 18px;
+  height: 18px;
 }
+
+/* Marca pequeña arriba a la izquierda y WhatsApp abajo a la derecha. */
+.login-marca-escritorio {
+  position: absolute;
+  top: 32px;
+  left: 40px;
+}
+
+.login-marca-chica {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Space Grotesk', -apple-system, sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  color: #16181d;
+}
+
+.login-marca-chica svg {
+  width: 24px;
+  height: 24px;
+  color: #15803d;
+}
+
+.login-marca-texto span {
+  color: #15803d;
+}
+
+.login-whatsapp-chico {
+  position: absolute;
+  right: 32px;
+  bottom: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 22px;
+  border: 1px solid #e2e5e9;
+  background: var(--mp-blanco);
+  color: #15803d;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-whatsapp-chico:hover {
+  border-color: #15803d;
+}
+
+/* Formulario del paso 1 en escritorio: sin tarjeta, centrado. */
+.login-general-flotante {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  width: min(380px, 90vw);
+}
+
 .login-general-form {
   width: 100%;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 16px;
-  padding: 28px 24px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
 .login-general-form h1 {
-  margin: 0 0 8px;
-  font-size: 19px;
+  margin: 0;
+  text-align: center;
+  font-family: 'Space Grotesk', -apple-system, sans-serif;
+  font-size: 34px;
   font-weight: 700;
-  color: var(--mp-negro);
+  letter-spacing: -0.01em;
+  color: #16181d;
+}
+
+.login-general-subtitulo {
+  margin: 8px 0 32px;
+  text-align: center;
+  font-size: 14px;
+  color: #5b636d;
+}
+
+.login-etiqueta {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3a4048;
 }
 
 .login-general-form input {
-  padding: 12px 14px;
-  border: 1.5px solid #e4e6eb;
+  height: 48px;
+  padding: 0 14px;
+  border: 1.5px solid #e2e5e9;
   border-radius: 10px;
   font-size: 15px;
   outline: none;
   width: 100%;
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--mp-blanco);
+  color: #16181d;
 }
 
 .login-general-form input:focus {
-  border-color: var(--mp-verde);
+  border-color: #15803d;
 }
 
 .login-general-form button[type='submit'] {
-  padding: 13px;
+  height: 48px;
+  margin-top: 28px;
   border: none;
   border-radius: 10px;
-  background: var(--mp-verde);
-  color: var(--mp-negro);
+  background: #15803d;
+  color: var(--mp-blanco);
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
-  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   transition: background 0.15s ease;
 }
 
 .login-general-form button[type='submit']:hover:not(:disabled) {
-  background: var(--mp-verde-oscuro);
-  color: var(--mp-blanco);
+  background: #0f5f2e;
 }
 
 .login-general-form button[type='submit']:disabled {
@@ -237,21 +345,29 @@
   cursor: not-allowed;
 }
 
+.login-general-form .login-mensaje-error {
+  margin-top: 16px;
+}
+
 .login-enlace {
   align-self: center;
   border: none;
   background: none;
-  color: var(--mp-gris-claro);
+  color: #5b636d;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 400;
   cursor: pointer;
-  margin-top: 6px;
-  padding: 4px;
+  margin-top: 20px;
+  padding: 8px;
   text-align: center;
 }
 
-.login-enlace:hover {
-  color: var(--mp-verde-oscuro);
+.login-enlace strong {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.login-enlace:hover strong {
   text-decoration: underline;
 }
 
@@ -271,12 +387,33 @@
    normal, sin superposición ni transparencia.
    ========================================================= */
 @media (max-width: 900px) {
+  .solo-escritorio {
+    display: none !important;
+  }
+
+  .solo-movil {
+    display: inline;
+  }
+
+  /* Solo de escritorio: la escena, la marca chica, WhatsApp
+     chico y las etiquetas de los campos. */
+  .login-escena,
+  .login-marca-escritorio,
+  .login-whatsapp-chico,
+  .login-con-monspeet,
+  .login-etiqueta {
+    display: none;
+  }
+
   .login-general-container {
     position: static;
     display: flex;
     flex-direction: column;
     align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
     padding: 0;
+    color: var(--mp-blanco);
     min-height: 100vh;
     min-height: 100dvh;
     height: auto;
@@ -286,6 +423,7 @@
   }
 
   .login-general-marca-contenido {
+    display: flex;
     max-width: none;
     padding: 28px 20px;
     box-sizing: border-box;
@@ -334,23 +472,68 @@
 
   .login-general-flotante {
     position: static;
-    transform: none !important;
     width: 100%;
   }
-  .login-general-arrastre {
-    display: none;
-  }
+
   .login-general-form {
     background: var(--mp-blanco);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border: none;
     border-radius: 0;
     padding: 24px 20px 36px;
+    gap: 12px;
+  }
+
+  .login-general-form h1 {
+    margin: 0 0 8px;
+    text-align: left;
+    font-family: inherit;
+    font-size: 19px;
+    letter-spacing: 0;
+    color: var(--mp-negro);
   }
 
   .login-general-form input {
-    background: var(--mp-blanco);
+    height: auto;
+    padding: 12px 14px;
+    border-color: #e4e6eb;
+  }
+
+  .login-general-form input:focus {
+    border-color: var(--mp-verde);
+  }
+
+  .login-general-form button[type='submit'] {
+    height: auto;
+    padding: 13px;
+    margin-top: 4px;
+    background: var(--mp-verde);
+    color: var(--mp-negro);
+    font-weight: 700;
+  }
+
+  .login-general-form button[type='submit'] svg,
+  .login-tienda-submit svg {
+    display: none;
+  }
+
+  .login-general-form button[type='submit']:hover:not(:disabled) {
+    background: var(--mp-verde-oscuro);
+    color: var(--mp-blanco);
+  }
+
+  .login-general-form .login-mensaje-error {
+    margin-top: 0;
+  }
+
+  .login-enlace {
+    color: var(--mp-gris-claro);
+    font-weight: 600;
+    margin-top: 6px;
+    padding: 4px;
+  }
+
+  .login-enlace:hover {
+    color: var(--mp-verde-oscuro);
+    text-decoration: underline;
   }
 }
 /* =========================================================
@@ -467,6 +650,133 @@
 .login-tienda-cambiar:hover {
   color: var(--color-hover, var(--color-primario));
   text-decoration: underline;
+}
+
+.login-con-monspeet {
+  display: none;
+}
+
+/* Paso 2 en escritorio: la misma escena con el color del negocio y
+   el formulario sin tarjeta. En el celular queda la tarjeta de
+   siempre (las reglas de arriba). */
+@media (min-width: 901px) {
+  .login-tienda-container {
+    position: relative;
+    gap: clamp(32px, 6vw, 96px);
+    padding: 88px 6% 72px;
+    background-color: var(--mp-blanco);
+    background-image: radial-gradient(#e6ebe8 1.2px, transparent 1.2px);
+    background-size: 26px 26px;
+  }
+
+  .login-con-monspeet {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: absolute;
+    top: 32px;
+    left: 40px;
+    margin: 0;
+    font-size: 13px;
+    color: #5b636d;
+  }
+
+  .login-con-monspeet .login-marca-chica {
+    font-size: 15px;
+  }
+
+  .login-con-monspeet .login-marca-chica svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .login-tienda-form {
+    flex: none;
+    width: min(380px, 90vw);
+    max-width: none;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .login-tienda-badge {
+    align-self: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    font-size: 28px;
+    margin-bottom: 16px;
+  }
+
+  .login-tienda-logo {
+    align-self: center;
+    width: 88px;
+    height: 88px;
+    margin-bottom: 16px;
+  }
+
+  .login-tienda-nombre {
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    font-size: 30px;
+  }
+
+  .login-tienda-subtitulo {
+    margin: 6px 0 28px;
+    font-size: 14px;
+    color: #5b636d;
+  }
+
+  .login-tienda-form .login-etiqueta + input,
+  .login-tienda-form .login-campo-password {
+    margin-bottom: 18px;
+  }
+
+  .login-tienda-form input:focus {
+    border-color: var(--acento-negocio, var(--color-primario));
+  }
+
+  .login-tienda-form input {
+    height: 48px;
+    padding: 0 14px;
+    border-color: #e2e5e9;
+    background: var(--mp-blanco);
+  }
+
+  .login-tienda-form .login-campo-password input {
+    padding-right: 46px;
+  }
+
+  .login-tienda-submit {
+    height: 48px;
+    margin-top: 10px;
+    padding: 0;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .login-tienda-cambiar {
+    align-self: center;
+    margin-top: 20px;
+    padding: 8px;
+    font-weight: 400;
+    color: #5b636d;
+  }
+
+  .login-tienda-form .login-mensaje-error {
+    margin-top: 16px;
+  }
+
+  .login-tienda-cambiar span {
+    font-weight: 600;
+    color: var(--acento-negocio, var(--color-primario));
+  }
 }
 
 /* =========================================================

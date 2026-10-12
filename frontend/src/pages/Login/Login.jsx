@@ -1,5 +1,5 @@
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { api, API_URL } from '../../api/api';
 import { calcularTema } from '../../utils/tema';
 import './Login.css';
@@ -70,15 +70,38 @@ function IconoRayo() {
     </svg>
   );
 }
-function IconoArrastre() {
+function IconoGrafico() {
   return (
-    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-      <circle cx="8" cy="6" r="1.5" />
-      <circle cx="16" cy="6" r="1.5" />
-      <circle cx="8" cy="12" r="1.5" />
-      <circle cx="16" cy="12" r="1.5" />
-      <circle cx="8" cy="18" r="1.5" />
-      <circle cx="16" cy="18" r="1.5" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconoBilletera() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <rect x="3" y="6" width="18" height="13" rx="2.5" />
+      <path d="M16 12.5h2M3 9.5h18" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconoCodigo() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path
+        d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconoFlecha() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+      <path d="m9 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -187,6 +210,60 @@ function IconoOjoTachado() {
 }
 
 // ============================================================
+// ESCENA DE ESCRITORIO: el sistema en un celular, con anillos y
+// lo que hace alrededor. Solo en pantallas grandes (en el celular
+// se oculta y queda el login de siempre). `color`: verde de
+// Monspeet en el paso 1, el color del negocio en el paso 2.
+// ============================================================
+const ANILLOS = [260, 210, 160]; // radios sobre un lienzo de 560
+const NODOS_ESCENA = [
+  { Icono: IconoCarrito, radio: 260, angulo: -62 },
+  { Icono: IconoDocumento, radio: 260, angulo: 198 },
+  { Icono: IconoGrafico, radio: 260, angulo: 22 },
+  { Icono: IconoCaja, radio: 210, angulo: 138 },
+  { Icono: IconoBilletera, radio: 210, angulo: -24 },
+  { Icono: IconoCodigo, radio: 260, angulo: 102 },
+];
+const porcentaje = (px) => `${(px / 560) * 100}%`;
+
+function EscenaCelular({ color }) {
+  return (
+    <div className="login-escena" style={{ '--escena-color': color }} aria-hidden="true">
+      {ANILLOS.map((r) => (
+        <span key={r} className="login-escena-anillo" style={{ width: porcentaje(2 * r), height: porcentaje(2 * r) }} />
+      ))}
+      <img className="login-escena-celular" src="/images/login-celular.png" alt="" />
+      {NODOS_ESCENA.map(({ Icono, radio, angulo }) => {
+        const rad = (angulo * Math.PI) / 180;
+        return (
+          <span
+            key={angulo}
+            className="login-escena-nodo"
+            style={{
+              left: porcentaje(280 + radio * Math.cos(rad)),
+              top: porcentaje(280 + radio * Math.sin(rad)),
+            }}
+          >
+            <Icono />
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function MarcaMonspeet() {
+  return (
+    <span className="login-marca-chica">
+      <IconoCarrito />
+      <span className="login-marca-texto">
+        Monspeet<span>POS</span>
+      </span>
+    </span>
+  );
+}
+
+// ============================================================
 // COMPONENTE LOGIN
 // ============================================================
 export default function Login({
@@ -201,39 +278,6 @@ export default function Login({
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState('');
   const [mostrarPassword, setMostrarPassword] = useState(false);
-  // ============================================================
-  // ARRASTRAR EL MODAL DE LOGIN (solo desktop -- en mobile el
-  // CSS fuerza transform: none, así que esto no tiene efecto ahí)
-  // ============================================================
-  // ============================================================
-  // ARRASTRAR EL MODAL DE LOGIN (solo desktop -- en mobile el
-  // CSS fuerza transform: none, así que esto no tiene efecto ahí)
-  // ============================================================
-  const [posicion, setPosicion] = useState({ x: 0, y: 0 });
-  const arrastrando = useRef(false);
-  const offsetArrastre = useRef({ x: 0, y: 0 });
-
-  const handleArrastreDown = (e) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    arrastrando.current = true;
-    offsetArrastre.current = {
-      x: e.clientX - posicion.x,
-      y: e.clientY - posicion.y,
-    };
-  };
-
-  const handleArrastreMove = (e) => {
-    if (!arrastrando.current) return;
-    setPosicion({
-      x: e.clientX - offsetArrastre.current.x,
-      y: e.clientY - offsetArrastre.current.y,
-    });
-  };
-
-  const handleArrastreUp = (e) => {
-    arrastrando.current = false;
-    e.currentTarget.releasePointerCapture(e.pointerId);
-  };
   // ============================================================
   // LOGIN DE UN NEGOCIO YA IDENTIFICADO (PASO 2)
   // ============================================================
@@ -296,7 +340,13 @@ export default function Login({
     const colorAcento = calcularTema(tiendaRecordada.color_acento)['--color-primario'];
 
     return (
-      <div className="login-tienda-container">
+      <div className="login-tienda-container" style={{ '--acento-negocio': colorAcento }}>
+        <EscenaCelular color={colorAcento} />
+
+        <p className="login-con-monspeet">
+          con <MarcaMonspeet />
+        </p>
+
         <form
           className="login-tienda-form"
           onSubmit={handleSubmitLogin}
@@ -324,10 +374,13 @@ export default function Login({
           </h1>
 
           <p className="login-tienda-subtitulo">
-            Inicia sesión para continuar
+            <span className="solo-movil">Inicia sesión para continuar</span>
+            <span className="solo-escritorio">Ingresa con tu cuenta</span>
           </p>
 
+          <label className="login-etiqueta" htmlFor="login-tienda-usuario">Usuario</label>
           <input
+            id="login-tienda-usuario"
             type="text"
             placeholder="Usuario"
             value={usuario}
@@ -335,8 +388,10 @@ export default function Login({
             autoFocus
           />
 
+          <label className="login-etiqueta" htmlFor="login-tienda-clave">Contraseña</label>
           <div className="login-campo-password">
             <input
+              id="login-tienda-clave"
               type={mostrarPassword ? 'text' : 'password'}
               placeholder="Contraseña"
               value={password}
@@ -376,6 +431,7 @@ export default function Login({
             }}
           >
             {cargando ? 'Ingresando...' : 'Ingresar'}
+            {!cargando && <IconoFlecha />}
           </button>
 
           {mensaje && (
@@ -392,7 +448,7 @@ export default function Login({
               '--color-hover': colorAcento,
             }}
           >
-            ¿No es tu negocio? Cambiar
+            ¿No es tu negocio? <span>Cambiar</span>
           </button>
         </form>
       </div>
@@ -402,8 +458,10 @@ export default function Login({
   // ============================================================
   // LOGIN GENERAL DE LA PLATAFORMA
   // PASO 1: IDENTIFICAR EL NEGOCIO
-  // Imagen a pantalla completa, marca a la izquierda, login como
-  // tarjeta flotante superpuesta sobre la imagen.
+  // Escritorio: el sistema en un celular a la izquierda y solo el
+  // formulario a la derecha. Celular: el de siempre (marca arriba,
+  // formulario abajo); lo que es de una sola pantalla lo deciden las
+  // clases solo-movil / solo-escritorio en Login.css.
   // ============================================================
   return (
     <div className="login-general-container">
@@ -468,31 +526,38 @@ export default function Login({
           un producto de Monspeet Dev.
         </p>
       </div>
-      <div
-        className="login-general-flotante"
-        style={{
-          transform: `translate(calc(-50% + ${posicion.x}px), calc(-50% + ${posicion.y}px))`,
-        }}
-      >
-        <div
-          className="login-general-arrastre"
-          onPointerDown={handleArrastreDown}
-          onPointerMove={handleArrastreMove}
-          onPointerUp={handleArrastreUp}
-          aria-hidden="true"
-        >
-          <IconoArrastre />
-        </div>
+      <EscenaCelular color="#15803d" />
 
+      <div className="login-marca-escritorio">
+        <MarcaMonspeet />
+      </div>
+
+      <a
+        className="login-whatsapp-chico"
+        href={ENLACE_WHATSAPP}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <IconoWhatsapp />
+        ¿Dudas? Escríbenos
+      </a>
+
+      <div className="login-general-flotante">
         <form
           className="login-general-form"
           onSubmit={handleSubmitIdentificar}
         >
           <h1>
-            Ingresa a tu negocio
+            <span className="solo-movil">Ingresa a tu negocio</span>
+            <span className="solo-escritorio">Bienvenido</span>
           </h1>
+          <p className="login-general-subtitulo solo-escritorio">
+            Ingresa tu usuario para continuar
+          </p>
 
+          <label className="login-etiqueta" htmlFor="login-usuario">Usuario</label>
           <input
+            id="login-usuario"
             type="text"
             placeholder="Usuario"
             value={usuario}
@@ -505,6 +570,7 @@ export default function Login({
             disabled={cargando}
           >
             {cargando ? 'Buscando...' : 'Continuar'}
+            {!cargando && <IconoFlecha />}
           </button>
 
           {mensaje && (
@@ -518,8 +584,10 @@ export default function Login({
             className="login-enlace"
             onClick={onIrARegistro}
           >
-            ¿Tu negocio no está registrado todavía?
-            Regístrate
+            <span className="solo-movil">¿Tu negocio no está registrado todavía? Regístrate</span>
+            <span className="solo-escritorio">
+              ¿Aún no tienes cuenta? <strong>Regístrate</strong>
+            </span>
           </button>
         </form>
       </div>
