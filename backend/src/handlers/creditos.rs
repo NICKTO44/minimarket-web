@@ -164,17 +164,28 @@ pub async fn registrar_abono(
         }
     }
 
+    // El saldo se descuenta con la condición en la misma sentencia: si otro
+    // abono (doble clic, otra caja) entró mientras tanto y ya no alcanza, no
+    // se toca nada. Antes la revisión de arriba y la escritura iban por
+    // separado y dos abonos simultáneos podían pasar los dos.
+    let actualizados = conn
+        .execute(
+            "UPDATE creditos SET abonado = abonado + ?1,
+                    estado = CASE WHEN total - (abonado + ?1) - devuelto <= 0.005 THEN 'PAGADO' ELSE 'PENDIENTE' END
+             WHERE id = ?2 AND estado = 'PENDIENTE' AND total - abonado - devuelto >= ?1 - 0.005",
+            libsql::params![monto, credito_id],
+        )
+        .await
+        .map_err(e500)?;
+    if actualizados == 0 {
+        return Err((
+            StatusCode::CONFLICT,
+            "El saldo de este crédito cambió (¿se registró otro abono?). Vuelve a abrirlo para ver el saldo actual.".to_string(),
+        ));
+    }
     conn.execute(
         "INSERT INTO credito_abonos (credito_id, monto, metodo_pago, caja_id, nota, usuario_id, fecha) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         libsql::params![credito_id, monto, metodo, caja_id, nota.map(|n| n.chars().take(200).collect::<String>()), usuario_id, ahora_lima()],
-    )
-    .await
-    .map_err(e500)?;
-    conn.execute(
-        "UPDATE creditos SET abonado = abonado + ?1,
-                estado = CASE WHEN total - (abonado + ?1) - devuelto <= 0.005 THEN 'PAGADO' ELSE 'PENDIENTE' END
-         WHERE id = ?2",
-        libsql::params![monto, credito_id],
     )
     .await
     .map_err(e500)?;
@@ -458,7 +469,18 @@ pub async fn abonar(
 ) -> Resultado<Credito> {
     let conn = tenant.0.connect().map_err(e500)?;
     let nota = payload.nota.as_deref().map(str::trim).filter(|n| !n.is_empty());
-    registrar_abono(&conn, id, payload.monto, &payload.metodo_pago, nota, claims.sub).await?;
+    // El abono, su movimiento de caja y el saldo van juntos o no va nada.
+    let tx = conn
+        .transaction_with_behavior(libsql::TransactionBehavior::Immediate)
+        .await
+        .map_err(e500)?;
+    match registrar_abono(&tx, id, payload.monto, &payload.metodo_pago, nota, claims.sub).await {
+        Ok(()) => tx.commit().await.map_err(e500)?,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return Err(e);
+        }
+    }
     Ok(Json(detalle(&conn, id).await?))
 }
 

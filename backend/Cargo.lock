@@ -2166,6 +2166,7 @@ dependencies = [
  "p12-keystore",
  "rand 0.8.7",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
  "tokio",

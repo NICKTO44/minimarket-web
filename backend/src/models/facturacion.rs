@@ -46,4 +46,8 @@ pub struct ComprobanteResponse {
     pub detraccion_porcentaje: Option<f64>,
     pub detraccion_monto: Option<f64>,
     pub detraccion_cuenta: Option<String>,
+    /// Firma del enlace público (/boleta/<negocio>/<id>?k=...) que se manda
+    /// por WhatsApp. Ver logica/enlace_publico.rs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clave_publica: Option<String>,
 }

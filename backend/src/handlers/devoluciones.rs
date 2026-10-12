@@ -160,65 +160,164 @@ pub async fn procesar_devolucion(
 /// medio que corresponde (la caja y Yape/Plin) y el stock (trigger de
 /// detalles_devolucion). La usan Devoluciones y la anulación de un
 /// comprobante. Devuelve (id, folio) de la devolución.
+///
+/// Todo va en UNA transacción: la revisión de lo ya devuelto y lo que se
+/// escribe. Antes un doble clic podía devolver el dinero dos veces, y un
+/// corte a mitad dejaba la caja movida sin el stock (o al revés).
 pub async fn registrar_devolucion(
     conn: &libsql::Connection,
     usuario_id: i64,
     payload: &NuevaDevolucion,
 ) -> Result<(i64, String), (StatusCode, String)> {
+    if payload.productos.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Elige qué productos se devuelven.".into()));
+    }
+    let tx = conn
+        .transaction_with_behavior(libsql::TransactionBehavior::Immediate)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo iniciar la devolución: {}", e)))?;
+    let resultado = registrar_en(&tx, usuario_id, payload).await;
+    match resultado {
+        Ok(hecho) => {
+            tx.commit().await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("No se pudo confirmar la devolución (revisa en el historial si quedó registrada): {}", e),
+                )
+            })?;
+            Ok(hecho)
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            Err(e)
+        }
+    }
+}
+
+/// Una línea de la venta con lo que aún se puede devolver.
+struct LineaVendida {
+    detalle_id: i64,
+    producto_id: i64,
+    nombre: String,
+    cantidad: f64,
+    devuelto: f64,
+    /// Lo que el cliente pagó por cada unidad (con su descuento).
+    valor_unitario: f64,
+}
+
+/// Lo que se devuelve, ya revisado: (detalle_id, producto_id, cantidad,
+/// valor unitario, subtotal) y el monto total.
+fn revisar_lineas(
+    lineas: &[LineaVendida],
+    pedido: &[ProductoDevolver],
+) -> Result<(Vec<(i64, i64, f64, f64, f64)>, f64), String> {
+    let mut revisadas: Vec<(i64, i64, f64, f64, f64)> = Vec::with_capacity(pedido.len());
+    let mut monto = 0.0f64;
+    for p in pedido {
+        if !(p.cantidad > 0.0) || !p.cantidad.is_finite() {
+            return Err("La cantidad a devolver debe ser mayor a 0.".into());
+        }
+        if revisadas.iter().any(|r| r.0 == p.detalle_id) {
+            return Err("Un producto está repetido en la devolución.".into());
+        }
+        // El producto y el precio salen de la venta, no del navegador.
+        let linea = lineas
+            .iter()
+            .find(|l| l.detalle_id == p.detalle_id)
+            .ok_or_else(|| "Uno de los productos no es de esa venta.".to_string())?;
+        let disponible = linea.cantidad - linea.devuelto;
+        if p.cantidad > disponible + 1e-6 {
+            return Err(format!(
+                "De \"{}\" no puedes devolver {}. Disponibles: {}",
+                linea.nombre,
+                p.cantidad,
+                redondear(disponible.max(0.0))
+            ));
+        }
+        let subtotal = redondear(linea.valor_unitario * p.cantidad);
+        monto += subtotal;
+        revisadas.push((linea.detalle_id, linea.producto_id, p.cantidad, linea.valor_unitario, subtotal));
+    }
+    Ok((revisadas, redondear(monto)))
+}
+
+fn redondear(valor: f64) -> f64 {
+    (valor * 100.0).round() / 100.0
+}
+
+async fn registrar_en(
+    conn: &libsql::Connection,
+    usuario_id: i64,
+    payload: &NuevaDevolucion,
+) -> Result<(i64, String), (StatusCode, String)> {
+    let e500 = |e: libsql::Error| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+
+    // La venta: tiene que existir y estar vigente.
+    let mut r_venta = conn
+        .query("SELECT estado, metodo_pago, pago_otro_metodo FROM ventas WHERE id = ?1", libsql::params![payload.venta_id])
+        .await
+        .map_err(e500)?;
+    let (estado, metodo_original, otro_metodo_original): (String, String, Option<String>) =
+        match r_venta.next().await.map_err(e500)? {
+            Some(row) => (
+                row.get(0).unwrap_or_else(|_| "COMPLETADA".to_string()),
+                row.get(1).unwrap_or_else(|_| "EFECTIVO".to_string()),
+                row.get::<Option<String>>(2).ok().flatten(),
+            ),
+            None => return Err((StatusCode::NOT_FOUND, "Venta no encontrada".into())),
+        };
+    drop(r_venta);
+    if estado != "COMPLETADA" {
+        return Err((StatusCode::BAD_REQUEST, "Esa venta no está vigente: no se puede devolver nada de ella.".into()));
+    }
+
+    // Sus líneas, con lo ya devuelto de cada una.
+    let mut r_lineas = conn
+        .query(
+            "SELECT dv.id, dv.producto_id, COALESCE(dv.nombre_producto, p.nombre, ''),
+                    CAST(dv.cantidad AS REAL),
+                    CAST(COALESCE(dv.total_linea, dv.cantidad * dv.precio_unitario) AS REAL),
+                    CAST(COALESCE((SELECT SUM(dd.cantidad_devuelta) FROM detalles_devolucion dd
+                                     JOIN devoluciones d ON d.id = dd.devolucion_id
+                                    WHERE dd.detalle_venta_id = dv.id AND d.estado = 'PROCESADA'), 0) AS REAL)
+             FROM detalles_venta dv LEFT JOIN productos p ON p.id = dv.producto_id
+             WHERE dv.venta_id = ?1",
+            libsql::params![payload.venta_id],
+        )
+        .await
+        .map_err(e500)?;
+    let mut lineas: Vec<LineaVendida> = Vec::new();
+    while let Some(f) = r_lineas.next().await.map_err(e500)? {
+        let cantidad: f64 = f.get(3).unwrap_or(0.0);
+        let total_linea: f64 = f.get(4).unwrap_or(0.0);
+        lineas.push(LineaVendida {
+            detalle_id: f.get(0).unwrap_or_default(),
+            producto_id: f.get(1).unwrap_or_default(),
+            nombre: f.get(2).unwrap_or_default(),
+            cantidad,
+            devuelto: f.get(5).unwrap_or(0.0),
+            valor_unitario: if cantidad > 0.0 { total_linea / cantidad } else { 0.0 },
+        });
+    }
+    drop(r_lineas);
+    let (devueltas, monto_total) =
+        revisar_lineas(&lineas, &payload.productos).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+
     let fecha_actual = crate::logica::tiempo::hoy_lima_compacto();
-    let query_folio = format!(
-        "SELECT COALESCE(MAX(CAST(substr(folio_devolucion,-4) AS INTEGER)),0)+1
-         FROM devoluciones WHERE folio_devolucion LIKE 'DEV-{}%'", fecha_actual
-    );
-    let mut rows_folio = conn.query(&query_folio, ()).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let siguiente: i64 = match rows_folio.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+    let mut rows_folio = conn
+        .query(
+            "SELECT COALESCE(MAX(CAST(substr(folio_devolucion,-4) AS INTEGER)),0)+1
+             FROM devoluciones WHERE folio_devolucion LIKE 'DEV-' || ?1 || '%'",
+            libsql::params![fecha_actual.clone()],
+        )
+        .await
+        .map_err(e500)?;
+    let siguiente: i64 = match rows_folio.next().await.map_err(e500)? {
         Some(r) => r.get(0).unwrap_or(1),
         None => 1,
     };
+    drop(rows_folio);
     let folio_devolucion = format!("DEV-{}-{:04}", fecha_actual, siguiente);
-
-    let mut monto_total = 0.0f64;
-
-    for p in &payload.productos {
-        let mut r1 = conn.query(
-            "SELECT COALESCE(SUM(dd.cantidad_devuelta),0.0) FROM detalles_devolucion dd
-             JOIN devoluciones d ON dd.devolucion_id = d.id
-             WHERE dd.detalle_venta_id = ?1 AND d.estado = 'PROCESADA'",
-            libsql::params![p.detalle_id],
-        ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        let ya_devuelto: f64 = match r1.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-            Some(r) => r.get(0).unwrap_or(0.0), None => 0.0,
-        };
-
-        let mut r2 = conn.query(
-            "SELECT cantidad, precio_unitario FROM detalles_venta WHERE id = ?1",
-            libsql::params![p.detalle_id],
-        ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        let row = match r2.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-            Some(r) => r,
-            None => return Err((StatusCode::BAD_REQUEST, "Detalle de venta no encontrado".into())),
-        };
-        let cantidad_original: f64 = row.get(0).unwrap_or_default();
-        let precio: f64 = row.get(1).unwrap_or_default();
-
-        if ya_devuelto + p.cantidad > cantidad_original {
-            return Err((StatusCode::BAD_REQUEST, format!(
-                "No puedes devolver {} unidades. Disponibles: {}", p.cantidad, cantidad_original - ya_devuelto
-            )));
-        }
-        monto_total += precio * p.cantidad;
-    }
-
-    let mut r_metodo = conn.query("SELECT metodo_pago, pago_otro_metodo FROM ventas WHERE id = ?1", libsql::params![payload.venta_id])
-        .await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let (metodo_original, otro_metodo_original): (String, Option<String>) =
-        match r_metodo.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-            Some(row) => (
-                row.get(0).unwrap_or_else(|_| "EFECTIVO".to_string()),
-                row.get::<Option<String>>(1).ok().flatten(),
-            ),
-            None => ("EFECTIVO".to_string(), None),
-        };
 
     // En una venta MIXTO el cajero elige cómo devuelve el dinero: en
     // efectivo o por el mismo medio digital con el que se pagó la otra
@@ -286,22 +385,56 @@ pub async fn registrar_devolucion(
         crate::handlers::billeteras::descontar(conn, usuario_id, billetera.as_deref(), monto_total).await;
     }
 
-    for p in &payload.productos {
-        let mut r = conn.query(
-            "SELECT precio_unitario FROM detalles_venta WHERE id = ?1",
-            libsql::params![p.detalle_id],
-        ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        let precio: f64 = match r.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-            Some(row) => row.get(0).unwrap_or_default(), None => 0.0,
-        };
-        let subtotal = precio * p.cantidad;
-
+    for (detalle_id, producto_id, cantidad, valor_unitario, subtotal) in &devueltas {
         conn.execute(
             "INSERT INTO detalles_devolucion (devolucion_id, producto_id, detalle_venta_id, venta_id, cantidad_devuelta, precio_unitario, subtotal, condicion)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'REVENTA')",
-            libsql::params![devolucion_id, p.producto_id, p.detalle_id, payload.venta_id, p.cantidad, precio, subtotal],
+            libsql::params![devolucion_id, *producto_id, *detalle_id, payload.venta_id, *cantidad, *valor_unitario, *subtotal],
         ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar detalle: {}", e)))?;
     }
 
     Ok((devolucion_id, folio_devolucion))
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    fn linea(detalle_id: i64, cantidad: f64, total_linea: f64, devuelto: f64) -> LineaVendida {
+        LineaVendida {
+            detalle_id,
+            producto_id: detalle_id * 10,
+            nombre: format!("Producto {}", detalle_id),
+            cantidad,
+            devuelto,
+            valor_unitario: total_linea / cantidad,
+        }
+    }
+
+    fn pedir(detalle_id: i64, producto_id: i64, cantidad: f64) -> ProductoDevolver {
+        ProductoDevolver { detalle_id, producto_id, cantidad }
+    }
+
+    #[test]
+    fn producto_y_precio_salen_de_la_venta() {
+        // Línea con descuento: 2 × 50 = 100, se cobró 90 -> cada uno 45.
+        let lineas = [linea(1, 2.0, 90.0, 0.0), linea(2, 3.0, 80.0, 0.0)];
+        // El navegador manda otro producto_id: se usa el de la venta.
+        let (r, monto) = revisar_lineas(&lineas, &[pedir(1, 999, 1.0), pedir(2, 20, 1.0)]).unwrap();
+        assert_eq!(r[0], (1, 10, 1.0, 45.0, 45.0));
+        assert_eq!(r[1].4, 26.67);
+        assert_eq!(monto, 71.67);
+    }
+
+    #[test]
+    fn rechaza_lo_que_no_corresponde() {
+        let lineas = [linea(1, 2.0, 100.0, 1.0)];
+        assert!(revisar_lineas(&lineas, &[pedir(7, 10, 1.0)]).unwrap_err().contains("no es de esa venta"));
+        assert!(revisar_lineas(&lineas, &[pedir(1, 10, 0.0)]).is_err());
+        assert!(revisar_lineas(&lineas, &[pedir(1, 10, -1.0)]).is_err());
+        assert!(revisar_lineas(&lineas, &[pedir(1, 10, f64::NAN)]).is_err());
+        assert!(revisar_lineas(&lineas, &[pedir(1, 10, 2.0)]).unwrap_err().contains("Disponibles: 1"));
+        assert!(revisar_lineas(&lineas, &[pedir(1, 10, 0.5), pedir(1, 10, 0.5)]).unwrap_err().contains("repetido"));
+        assert!(revisar_lineas(&lineas, &[pedir(1, 10, 1.0)]).is_ok());
+    }
 }

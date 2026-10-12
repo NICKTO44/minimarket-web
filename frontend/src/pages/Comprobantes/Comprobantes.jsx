@@ -10,6 +10,7 @@ import { imprimirNotaCredito } from '../../utils/notaCredito';
 import '../../components/Recibo.css';
 import { fechaHoraLima, hoyLima } from '../../utils/formato';
 import { descargarArchivo, pdfDeVenta } from '../../utils/pdfTicket';
+import { enlaceComprobantePublico } from '../../utils/enlacePublico';
 import './Comprobantes.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -277,7 +278,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
       // Factura: la página pública en formato ticket (80 mm), como la
       // boleta, y debajo el A4 oficial de FacturaLibre si existe.
       const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
-      const urlPublica = `${window.location.origin}/boleta/${identificadorNegocio}/${comp.id}`;
+      const urlPublica = enlaceComprobantePublico(identificadorNegocio, comp.id, comp.clave_publica);
       const lineaA4 = comp.enlace_pdf ? `\n\nVersión A4 (PDF): ${comp.enlace_pdf}` : '';
       texto = `Hola! Aquí tienes tu factura ${numeroDoc} por S/ ${comp.monto.toFixed(2)}.\n\nPuedes verla aquí: ${urlPublica}${lineaA4}\n\n¡Gracias por tu compra!`;
     } else if (comp.tipo === 'FACTURA' && comp.enlace_pdf) {
@@ -285,7 +286,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
       texto = `Hola! Aquí tienes tu factura ${numeroDoc} por S/ ${comp.monto.toFixed(2)}.\n\nPuedes verla aquí: ${comp.enlace_pdf}\n\n¡Gracias por tu compra!`;
     } else if (comp.tipo === 'BOLETA' && comp.id && identificadorNegocio) {
       const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
-      const urlPublica = `${window.location.origin}/boleta/${identificadorNegocio}/${comp.id}`;
+      const urlPublica = enlaceComprobantePublico(identificadorNegocio, comp.id, comp.clave_publica);
       texto = `Hola! Aquí tienes tu boleta ${numeroDoc} por S/ ${comp.monto.toFixed(2)}.\n\nPuedes verla aquí: ${urlPublica}\n\n¡Gracias por tu compra!`;
     } else {
       texto = `Hola! Gracias por tu compra. Total: S/ ${comp.monto.toFixed(2)} — Venta ${comp.folio_venta}.`;

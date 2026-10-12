@@ -17,6 +17,8 @@ pub struct AppState {
     pub estado_impresion: Arc<estado_impresion::EstadoImpresion>,
     pub limitador_login: Arc<rate_limit::LimitadorIntentos>,
     pub limitador_verificar: Arc<rate_limit::LimitadorIntentos>,
+    /// Tope de negocios nuevos por IP y por día (POST /registro).
+    pub limitador_registro: Arc<rate_limit::LimitadorRegistro>,
     /// Leído del .env una sola vez al arrancar, en vez de en cada
     /// petición autenticada (como hacía antes middleware_auth.rs).
     pub jwt_secret: String,

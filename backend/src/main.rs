@@ -68,6 +68,7 @@ async fn main() {
         estado_impresion: estado_impresion::EstadoImpresion::nuevo(),
         limitador_login: rate_limit::LimitadorIntentos::estricto(),
         limitador_verificar: rate_limit::LimitadorIntentos::laxo(),
+        limitador_registro: rate_limit::LimitadorRegistro::nuevo(),
         jwt_secret,
     });
 
@@ -184,15 +185,20 @@ async fn main() {
     let rutas_sensibles = Router::new()
         .route("/login", post(handlers::auth::login))
         .route("/login/identificar", post(handlers::auth::identificar_usuario))
-        .route("/registro", post(handlers::registro::registrar_negocio))
         .route("/panel/login", post(handlers::panel::login))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_login));
+
+    // Registro de negocios: tope por IP y por día (cada registro crea una
+    // base en Turso). El de login no servía aquí: el registro nunca da 401.
+    let rutas_registro = Router::new()
+        .route("/registro", post(handlers::registro::registrar_negocio))
+        .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_registro));
 
     let rutas_verificacion = Router::new()
         .route("/registro/verificar-usuario", get(handlers::registro::verificar_usuario))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_verificar));
 
-    let rutas_autenticacion = rutas_sensibles.merge(rutas_verificacion);
+    let rutas_autenticacion = rutas_sensibles.merge(rutas_registro).merge(rutas_verificacion);
 
     let rutas_publicas = Router::new()
         .route("/", get(health))
@@ -268,7 +274,7 @@ async fn main() {
         .route("/reportes/estadisticas", get(handlers::reportes::estadisticas_completas))
         .route("/reportes/ganancias", get(handlers::ganancias::reporte))
         .route("/ganancias/costos", get(handlers::ganancias::costos))
-        .route("/comprobantes", post(handlers::facturacion::emitir_comprobante))
+        .route("/comprobantes", post(handlers::facturacion::emitir_comprobante_con_enlace))
         .route("/comprobantes", get(handlers::comprobantes::listar_comprobantes))
         .route("/comprobantes/:id/pdf", get(handlers::comprobantes::descargar_pdf))
         .route("/comprobantes/:id/xml", get(handlers::comprobantes::descargar_xml))

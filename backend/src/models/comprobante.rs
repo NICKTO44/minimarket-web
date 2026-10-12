@@ -35,4 +35,8 @@ pub struct ComprobanteResumen {
     /// Anulación ante SUNAT: EN_PROCESO, ANULADO o RECHAZADA (None = vigente).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub anulacion: Option<String>,
+    /// Firma del enlace público (/boleta/<negocio>/<id>?k=...) que se manda
+    /// por WhatsApp. Ver logica/enlace_publico.rs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clave_publica: Option<String>,
 }

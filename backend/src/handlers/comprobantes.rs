@@ -13,6 +13,7 @@ pub struct FiltrosComprobante {
 
 pub async fn listar_comprobantes(
     Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<crate::models::auth::Claims>,
     Query(filtros): Query<FiltrosComprobante>,
 ) -> Result<Json<Vec<ComprobanteResumen>>, StatusCode> {
     let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -91,8 +92,11 @@ pub async fn listar_comprobantes(
         let enlace_xml = enlace_xml_de(row.get(15).ok(), enlace_cdr.as_deref(), enlace_pdf.as_deref());
         let xml_guardado = row.get::<i64>(17).unwrap_or(0) == 1;
         let cdr_guardado = row.get::<i64>(18).unwrap_or(0) == 1;
+        let id: Option<i64> = row.get(0).ok();
         comprobantes.push(ComprobanteResumen {
-            id: row.get(0).ok(),
+            // Firma del enlace público, solo para comprobantes emitidos.
+            clave_publica: id.and_then(|id| crate::logica::enlace_publico::clave(claims.tienda_id, id)),
+            id,
             venta_id: row.get(1).unwrap_or_default(),
             folio_venta: row.get(2).unwrap_or_default(),
             tipo: row.get(3).unwrap_or_default(),

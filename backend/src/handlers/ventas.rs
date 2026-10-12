@@ -90,6 +90,52 @@ fn validar_pago(payload: &NuevaVenta, billetera: Option<&str>) -> Result<Reparto
     })
 }
 
+/// Revisa las líneas de la venta y calcula el total EN EL SERVIDOR, igual que
+/// el punto de venta: cada línea al céntimo (precio × cantidad) menos su
+/// descuento. Antes se guardaba el total que mandaba el navegador sin
+/// compararlo, y ese total es el que usan la caja y el comprobante.
+/// Devuelve (subtotal, descuento, total).
+fn calcular_total(productos: &[crate::models::venta::ProductoVenta], total_enviado: f64) -> Result<(f64, f64, f64), String> {
+    if productos.is_empty() {
+        return Err("La venta no tiene productos.".into());
+    }
+    let mut subtotal = 0.0f64;
+    let mut descuento = 0.0f64;
+    for p in productos {
+        if !(p.cantidad > 0.0) || !p.cantidad.is_finite() {
+            return Err(format!("La cantidad de {} debe ser mayor a 0", p.nombre));
+        }
+        if !(p.precio >= 0.0) || !p.precio.is_finite() {
+            return Err(format!("El precio de {} no es válido.", p.nombre));
+        }
+        if let Some(d) = p.descuento_monto {
+            if !d.is_finite() || d < 0.0 {
+                return Err(format!("El descuento de {} no es válido.", p.nombre));
+            }
+        }
+        let sub = redondear_2(p.precio * p.cantidad);
+        subtotal += sub;
+        descuento += p.descuento_monto.unwrap_or(0.0).min(sub);
+    }
+    let total = redondear_2(subtotal - descuento);
+    // Tolera 1 céntimo de redondeo, nada más.
+    if !total_enviado.is_finite() || ((total_enviado - total) * 100.0).round().abs() > 1.0 {
+        return Err(format!(
+            "El total de la venta (S/ {:.2}) no coincide con la suma de los productos (S/ {:.2}). Vuelve a cargar la página e inténtalo de nuevo.",
+            total_enviado, total
+        ));
+    }
+    Ok((subtotal, descuento, total))
+}
+
+/// ¿Ese precio de línea está permitido? Sin el módulo "Cambiar precio al
+/// vender", el precio es el del producto; si la venta sale de una
+/// cotización, también vale el precio que se le cotizó al cliente.
+fn precio_permitido(precio: f64, precio_producto: f64, precios_cotizados: &[f64]) -> bool {
+    let igual = |a: f64, b: f64| (a - b).abs() < 1e-6;
+    igual(precio, precio_producto) || precios_cotizados.iter().any(|c| igual(precio, *c))
+}
+
 /// true si el error es que la base (Turso) perdió la sesión abierta entre
 /// un paso y otro ("stream not found"): no es un error de datos, se puede
 /// volver a intentar.
@@ -170,14 +216,14 @@ async fn descontar_stock_fefo(conn: &libsql::Connection, pedidos: &[(i64, f64)])
 }
 
 /// Datos reales de los productos al momento de vender, todos en una sola
-/// consulta: id -> (stock, lleva_vencimiento, nombre, unidad, controla_stock).
+/// consulta: id -> (stock, lleva_vencimiento, nombre, unidad, controla_stock, precio).
 /// Si la migración 0007 todavía no llegó a esta base (columna controla_stock
 /// inexistente), se asume que controlan stock, como siempre -- así una
 /// venta nunca falla por eso.
 async fn datos_productos_para_venta(
     conn: &libsql::Connection,
     ids: &[i64],
-) -> Result<std::collections::HashMap<i64, (f64, bool, Option<String>, Option<String>, bool)>, String> {
+) -> Result<std::collections::HashMap<i64, (f64, bool, Option<String>, Option<String>, bool, f64)>, String> {
     let mut datos = std::collections::HashMap::new();
     if ids.is_empty() {
         return Ok(datos);
@@ -186,7 +232,7 @@ async fn datos_productos_para_venta(
     let lista = ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
     let consulta = conn
         .query(
-            &format!("SELECT id, stock, lleva_vencimiento, nombre, unidad_medida, controla_stock FROM productos WHERE id IN ({})", lista),
+            &format!("SELECT id, stock, lleva_vencimiento, nombre, unidad_medida, CAST(precio AS REAL), controla_stock FROM productos WHERE id IN ({})", lista),
             (),
         )
         .await;
@@ -194,7 +240,7 @@ async fn datos_productos_para_venta(
         Ok(rows) => (rows, true),
         Err(_) => (
             conn.query(
-                &format!("SELECT id, stock, lleva_vencimiento, nombre, unidad_medida FROM productos WHERE id IN ({})", lista),
+                &format!("SELECT id, stock, lleva_vencimiento, nombre, unidad_medida, CAST(precio AS REAL) FROM productos WHERE id IN ({})", lista),
                 (),
             )
             .await
@@ -210,7 +256,8 @@ async fn datos_productos_para_venta(
                 row.get::<i64>(2).unwrap_or(0) == 1,
                 row.get(3).ok(),
                 row.get(4).ok(),
-                if con_columna { row.get::<i64>(5).unwrap_or(1) == 1 } else { true },
+                if con_columna { row.get::<i64>(6).unwrap_or(1) == 1 } else { true },
+                row.get::<f64>(5).unwrap_or(0.0),
             ),
         );
     }
@@ -271,7 +318,7 @@ pub async fn procesar_venta(
                         (SELECT id FROM cajas WHERE estado = 'ABIERTA'
                           ORDER BY (usuario_id = ?2) DESC, id DESC LIMIT 1),
                         (SELECT CAST(iva_porcentaje AS REAL) FROM configuracion_tienda LIMIT 1)";
-    let (rol, caja_abierta, tasa_igv, con_ganancias): (Option<String>, Option<i64>, Option<f64>, bool) = {
+    let (rol, caja_abierta, tasa_igv, modulos): (Option<String>, Option<i64>, Option<f64>, Option<String>) = {
         let con_modulos = format!("{}, (SELECT modulos FROM configuracion_tienda LIMIT 1)", PREVIO);
         let mut filas = match conn.query(&con_modulos, libsql::params![claims.rol_id, usuario_id]).await {
             Ok(filas) => filas,
@@ -285,11 +332,16 @@ pub async fn procesar_venta(
                 f.get::<String>(0).ok(),
                 f.get::<i64>(1).ok(),
                 f.get::<f64>(2).ok(),
-                f.get::<String>(3).map(|m| crate::handlers::ganancias::encendido_en(&m)).unwrap_or(false),
+                f.get::<String>(3).ok(),
             ),
-            None => (None, None, None, false),
+            None => (None, None, None, None),
         }
     };
+    let con_ganancias = modulos.as_deref().is_some_and(crate::handlers::ganancias::encendido_en);
+    // Módulo "Cambiar precio al vender": el cajero puede poner otro precio.
+    let precio_libre = modulos
+        .as_deref()
+        .is_some_and(|m| m.split(',').any(|x| x.trim() == crate::handlers::rubros::MODULO_PRECIO_VENTA));
 
     // Mesero y Preparación (barra/cocina) no cobran.
     if matches!(rol.as_deref(), Some("MESERO") | Some("PREPARACION")) {
@@ -300,6 +352,12 @@ pub async fn procesar_venta(
     if caja_abierta.is_none() {
         return Err((StatusCode::BAD_REQUEST, "Debes abrir una caja antes de procesar ventas".into()));
     }
+
+    // 1a. Total calculado aquí, no el del navegador. Todo lo que sigue
+    // (crédito, pago mixto, caja, comprobante) usa este total.
+    let (subtotal, descuento_total, total_servidor) =
+        calcular_total(&payload.productos, payload.total).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    payload.total = total_servidor;
 
     // 1b. Validar método de pago (y el reparto si es MIXTO) antes de
     // tocar stock o insertar nada.
@@ -366,13 +424,59 @@ pub async fn procesar_venta(
     let mut leidos = datos_productos_para_venta(&conn, &ids)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    // Precio de cada línea: el del producto, salvo con el módulo "Cambiar
+    // precio al vender" o al cobrar un pedido de mesa (sus precios los puso
+    // el servidor, con las opciones, y el total se compara con el pedido).
+    // Una venta que sale de una cotización pendiente puede llevar el precio
+    // cotizado. Antes el navegador podía mandar cualquier precio.
+    let revisar_precios = !precio_libre && payload.pedido_id.is_none();
+    let mut cotizados: std::collections::HashMap<i64, Vec<f64>> = std::collections::HashMap::new();
+    if revisar_precios {
+        if let Some(cotizacion_id) = payload.cotizacion_id {
+            let mut filas = conn
+                .query(
+                    "SELECT ci.producto_id, CAST(ci.precio_unitario AS REAL) FROM cotizacion_items ci
+                     JOIN cotizaciones c ON c.id = ci.cotizacion_id
+                     WHERE c.id = ?1 AND c.estado = 'PENDIENTE'",
+                    libsql::params![cotizacion_id],
+                )
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            while let Some(f) = filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+                cotizados.entry(f.get::<i64>(0).unwrap_or_default()).or_default().push(f.get::<f64>(1).unwrap_or(-1.0));
+            }
+        }
+        for p in &payload.productos {
+            let Some(datos) = leidos.get(&p.id) else { continue };
+            let precio_producto = datos.5;
+            let de_cotizacion = cotizados.get(&p.id).map(Vec::as_slice).unwrap_or(&[]);
+            if !precio_permitido(p.precio, precio_producto, de_cotizacion) {
+                let nombre = datos.2.clone().unwrap_or_else(|| p.nombre.clone());
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!(
+                        "El precio de {} cambió: ahora es S/ {:.2}. Quítalo del carrito y vuelve a agregarlo.",
+                        nombre, precio_producto
+                    ),
+                ));
+            }
+        }
+    } else if precio_libre {
+        // Con precio libre, igual nada en cero (salvo que el producto valga 0).
+        for p in &payload.productos {
+            if p.precio <= 0.0 && leidos.get(&p.id).is_some_and(|d| d.5 > 0.0) {
+                return Err((StatusCode::BAD_REQUEST, format!("El precio de {} debe ser mayor a 0.", p.nombre)));
+            }
+        }
+    }
     for p in &payload.productos {
         // Se saca del mapa la primera vez; si el producto se repite en otra
         // línea ya quedó en `datos_producto` y pasó la validación de stock.
         if datos_producto.contains_key(&p.id) {
             continue;
         }
-        if let Some((stock, lleva_vencimiento, nombre, unidad, controla_stock)) = leidos.remove(&p.id) {
+        if let Some((stock, lleva_vencimiento, nombre, unidad, controla_stock, _precio)) = leidos.remove(&p.id) {
             let nombre_actual = nombre.unwrap_or_else(|| p.nombre.clone());
             let unidad_actual = unidad.unwrap_or_else(|| "UNIDAD".to_string());
             datos_producto.insert(p.id, (nombre_actual, unidad_actual, lleva_vencimiento, controla_stock));
@@ -422,18 +526,8 @@ pub async fn procesar_venta(
     // tomen el mismo número.
     let fecha_actual = crate::logica::tiempo::hoy_lima_compacto();
 
-    // 4. Calcular subtotal y descuento
-    let mut subtotal = 0.0f64;
-    let mut descuento_total = 0.0f64;
-    for p in &payload.productos {
-        // Al céntimo: con cantidades con decimales (37.5 pies a S/ 4.35),
-        // precio × cantidad trae más de dos decimales; cada línea se cobra
-        // redondeada, igual que la muestra el punto de venta.
-        let sub = redondear_2(p.precio * p.cantidad);
-        let desc = p.descuento_monto.unwrap_or(0.0).max(0.0).min(sub);
-        subtotal += sub;
-        descuento_total += desc;
-    }
+    // 4. Subtotal, descuento y total ya se calcularon en el paso 1a (cada
+    // línea al céntimo, igual que el punto de venta).
 
     // ------------------------------------------------------------------
     // Desde aquí se ESCRIBE, y todo va en una sola transacción: la venta,
@@ -778,5 +872,60 @@ mod pruebas_pago {
         assert!(validar_pago(&v, None).is_err());
         let v = venta(serde_json::json!({"pago_efectivo": 20.0, "pago_otro": 30.0, "pago_otro_metodo": "TARJETA", "pago_efectivo_metodo": "CREDITO"}));
         assert!(validar_pago(&v, None).is_err());
+    }
+}
+
+#[cfg(test)]
+mod pruebas_total {
+    use super::*;
+    use crate::models::venta::ProductoVenta;
+
+    fn linea(precio: f64, cantidad: f64) -> ProductoVenta {
+        ProductoVenta { id: 1, nombre: "Polo".into(), precio, cantidad, descuento_monto: None, detalle: None }
+    }
+
+    #[test]
+    fn calcula_igual_que_el_punto_de_venta() {
+        // 37.5 pies a S/ 4.35 = 163.125 -> 163.13 por línea; 3 × 26.666667 = 80.00.
+        let l = [linea(4.35, 37.5), linea(26.666667, 3.0), linea(59.0, 2.0)];
+        let (sub, desc, total) = calcular_total(&l, 361.13).unwrap();
+        assert_eq!((redondear_2(sub), desc, total), (361.13, 0.0, 361.13));
+        // Un céntimo de diferencia se tolera; el total que se guarda es el del servidor.
+        assert_eq!(calcular_total(&l, 361.12).unwrap().2, 361.13);
+    }
+
+    #[test]
+    fn rechaza_total_inventado_y_precios_raros() {
+        let l = [linea(100.0, 1.0)];
+        assert!(calcular_total(&l, 10.0).unwrap_err().contains("no coincide"));
+        assert!(calcular_total(&l, f64::NAN).is_err());
+        assert!(calcular_total(&[linea(-5.0, 1.0)], -5.0).is_err());
+        assert!(calcular_total(&[linea(f64::INFINITY, 1.0)], 0.0).is_err());
+        assert!(calcular_total(&[linea(10.0, 0.0)], 0.0).is_err());
+        assert!(calcular_total(&[], 0.0).is_err());
+        let mut con_desc = linea(10.0, 1.0);
+        con_desc.descuento_monto = Some(-3.0);
+        assert!(calcular_total(&[con_desc], 13.0).is_err());
+    }
+
+    #[test]
+    fn descuento_por_linea_como_antes() {
+        let mut l = linea(50.0, 2.0);
+        l.descuento_monto = Some(10.0);
+        assert_eq!(calcular_total(&[l], 90.0).unwrap(), (100.0, 10.0, 90.0));
+        // Un descuento mayor que la línea se limita a la línea.
+        let mut l = linea(5.0, 1.0);
+        l.descuento_monto = Some(8.0);
+        assert_eq!(calcular_total(&[l], 0.0).unwrap().2, 0.0);
+    }
+
+    #[test]
+    fn precio_del_producto_o_el_cotizado() {
+        assert!(precio_permitido(59.0, 59.0, &[]));
+        assert!(precio_permitido(26.666667, 26.666667, &[]));
+        assert!(!precio_permitido(1.0, 59.0, &[]));
+        assert!(!precio_permitido(65.0, 59.0, &[]));
+        assert!(precio_permitido(55.0, 59.0, &[55.0]));
+        assert!(!precio_permitido(50.0, 59.0, &[55.0]));
     }
 }

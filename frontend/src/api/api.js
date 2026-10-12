@@ -266,8 +266,10 @@ export const api = {
   canjearCodigo: (codigo) => request('/suscripcion/canjear-codigo', { method: 'POST', body: JSON.stringify({ codigo }) }),
   suscripcionEstado: () => request('/suscripcion/estado'),
   suscripcionUso: () => request('/suscripcion/uso'),
-  comprobantePublico: async (identificador, id) => {
-    const res = await fetch(`${API_URL}/publico/comprobante/${encodeURIComponent(identificador)}/${id}`);
+  // `clave`: la firma del enlace (?k=...); sin ella el servidor no lo muestra.
+  comprobantePublico: async (identificador, id, clave) => {
+    const k = clave ? `?k=${encodeURIComponent(clave)}` : '';
+    const res = await fetch(`${API_URL}/publico/comprobante/${encodeURIComponent(identificador)}/${id}${k}`);
     const data = await leerRespuesta(res);
     if (!res.ok) {
       const mensaje = typeof data === 'string' ? data : data?.message;

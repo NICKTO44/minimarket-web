@@ -20,6 +20,7 @@ import SelectorTalla from '../../components/SelectorTalla';
 import { datosA4DeDocumento, imprimirComprobanteA4 } from '../../utils/facturaA4';
 import { agruparPorModelo } from '../../utils/variantes';
 import AvisoNotaCredito from '../../components/AvisoNotaCredito';
+import { enlaceComprobantePublico } from '../../utils/enlacePublico';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -142,6 +143,10 @@ function carritoDeCotizacion(cotizacion) {
     unidad_medida: i.unidad_medida,
   }));
 }
+
+// El servidor rechazó la venta porque el precio de un producto ya no es el
+// que tiene el carrito (lo cambiaron mientras esta pantalla estaba abierta).
+const esPrecioCambiado = (e) => /^El precio de .* cambió/.test(e?.message || '');
 
 // Plazos que se ofrecen al vender al crédito (días).
 const PLAZOS_CREDITO = [7, 15, 30, 45, 60];
@@ -923,6 +928,7 @@ export default function POS({
     } catch (e) {
       setNuevaCotizacion(null);
       setMensaje({ tipo: 'error', texto: e.message });
+      if (esPrecioCambiado(e)) api.productos().then(setProductos).catch(() => {});
     } finally {
       setGuardandoCotizacion(false);
     }
@@ -1085,6 +1091,10 @@ export default function POS({
       api.productos().then(setProductos);
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
+      // El servidor cobra el precio actual del producto: si cambió mientras
+      // esta pantalla estaba abierta, se vuelve a leer la lista para que al
+      // agregarlo de nuevo entre con el precio nuevo.
+      if (esPrecioCambiado(e)) api.productos().then(setProductos).catch(() => {});
     } finally {
       setProcesando(false);
     }
@@ -1214,7 +1224,7 @@ export default function POS({
       // Factura: nuestra página pública en formato ticket (80 mm), como la
       // boleta, y debajo el A4 oficial de FacturaLibre si existe.
       const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
-      const urlPublica = `${window.location.origin}/boleta/${identificadorNegocio}/${comp.comprobante_id}`;
+      const urlPublica = enlaceComprobantePublico(identificadorNegocio, comp.comprobante_id, comp.clave_publica);
       const lineaA4 = comp.enlace_pdf ? `\n\nVersión A4 (PDF): ${comp.enlace_pdf}` : '';
       texto = `Hola! Aquí tienes tu factura ${numeroDoc} por S/ ${total}.\n\nPuedes verla aquí: ${urlPublica}${lineaA4}\n\n¡Gracias por tu compra!`;
     } else if (comp?.tipo === 'FACTURA' && comp?.enlace_pdf) {
@@ -1225,7 +1235,7 @@ export default function POS({
       // Boleta: nuestra propia página pública, en formato ticket (no el
       // A4 genérico de FacturaLibre) — mismo QR real, otro formato.
       const numeroDoc = `${comp.serie}-${String(comp.numero).padStart(6, '0')}`;
-      const urlPublica = `${window.location.origin}/boleta/${identificadorNegocio}/${comp.comprobante_id}`;
+      const urlPublica = enlaceComprobantePublico(identificadorNegocio, comp.comprobante_id, comp.clave_publica);
       texto = `Hola! Aquí tienes tu boleta ${numeroDoc} por S/ ${total}.\n\nPuedes verla aquí: ${urlPublica}\n\n¡Gracias por tu compra!`;
     } else {
       texto = `Hola! Gracias por tu compra. Total: S/ ${total} — Venta ${ultimaVentaParaImprimir.venta.folio}.`;

@@ -4,6 +4,7 @@ import { api } from '../../api/api';
 import { montoEnLetras } from '../../utils/numeroALetras';
 import { construirCadenaQrSunat } from '../../utils/qrSunat';
 import { desgloseDeComprobante, etiquetaTasa } from '../../utils/igv';
+import { claveDeLaDireccion } from '../../utils/enlacePublico';
 import './BoletaPublica.css';
 
 export default function BoletaPublica({ identificador, comprobanteId }) {
@@ -14,7 +15,7 @@ export default function BoletaPublica({ identificador, comprobanteId }) {
 
   useEffect(() => {
     api
-      .comprobantePublico(identificador, comprobanteId)
+      .comprobantePublico(identificador, comprobanteId, claveDeLaDireccion())
       .then(setDatos)
       .catch((e) => setError(e.message))
       .finally(() => setCargando(false));

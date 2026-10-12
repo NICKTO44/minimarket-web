@@ -105,21 +105,31 @@ async fn comprobante_existente(conn: &libsql::Connection, venta_id: i64) -> Resu
 /// Reserva el siguiente número de la serie con una fila PENDIENTE.
 /// El índice único (serie, numero) impide que dos emisiones simultáneas se
 /// lleven el mismo: la que choca vuelve a intentar con el siguiente.
+///
+/// La misma sentencia revisa que la venta no tenga ya una boleta o factura
+/// aceptada o en curso (de cualquier proveedor). Antes eso se revisaba en
+/// una consulta aparte: dos pedidos casi al mismo tiempo (doble toque, o el
+/// botón mientras se emitía en segundo plano) pasaban los dos y salían DOS
+/// comprobantes con números distintos para la misma venta.
+/// Ok(None) = la venta ya tiene uno (no se reservó nada).
 async fn reservar_numero(
     conn: &libsql::Connection,
     venta_id: i64,
     datos: &DatosParaEmitir,
     serie: &str,
     fecha_hora: &str,
-) -> Result<(i64, i64), Fallo> {
+) -> Result<Option<(i64, i64)>, Fallo> {
     let mut ultimo_error = String::new();
     for _ in 0..5 {
         let insertado = conn
             .execute(
                 "INSERT INTO comprobantes_electronicos
                     (venta_id, tipo, proveedor, serie, numero, cliente_documento, cliente_nombre, estado, mensaje_sunat, fecha_emision)
-                 SELECT ?1, ?2, 'SUNAT_DIRECTO', ?3, COALESCE(MAX(numero), 0) + 1, ?4, ?5, 'PENDIENTE', 'Enviando a SUNAT...', ?6
-                 FROM comprobantes_electronicos WHERE serie = ?3",
+                 SELECT ?1, ?2, 'SUNAT_DIRECTO', ?3,
+                        (SELECT COALESCE(MAX(numero), 0) + 1 FROM comprobantes_electronicos WHERE serie = ?3),
+                        ?4, ?5, 'PENDIENTE', 'Enviando a SUNAT...', ?6
+                 WHERE NOT EXISTS (SELECT 1 FROM comprobantes_electronicos
+                                    WHERE venta_id = ?1 AND estado IN ('ACEPTADO', 'PENDIENTE'))",
                 libsql::params![
                     venta_id,
                     datos.tipo.clone(),
@@ -131,6 +141,7 @@ async fn reservar_numero(
             )
             .await;
         match insertado {
+            Ok(0) => return Ok(None),
             Ok(_) => {
                 let id = conn.last_insert_rowid();
                 let mut filas = conn
@@ -141,7 +152,7 @@ async fn reservar_numero(
                     Some(f) => f.get(0).map_err(interno)?,
                     None => return Err(interno("No se pudo leer el número reservado")),
                 };
-                return Ok((id, numero));
+                return Ok(Some((id, numero)));
             }
             Err(e) => {
                 ultimo_error = e.to_string();
@@ -178,16 +189,27 @@ pub async fn emitir(
             ));
         }
         Some((id, serie, numero, _pendiente)) => {
-            // Reenvío: el mismo documento que se guardó la primera vez.
-            let documento: Value = super::envios_sunat::documento_guardado(conn, id)
-                .await?
-                .ok_or_else(|| interno(format!("El comprobante pendiente {}-{} no tiene su documento guardado.", serie, numero)))?;
+            // Reenvío: el mismo documento que se guardó la primera vez. Sin
+            // documento todavía = otro pedido lo acaba de reservar y lo está
+            // armando en este momento.
+            let documento: Value = super::envios_sunat::documento_guardado(conn, id).await?.ok_or_else(|| {
+                (
+                    StatusCode::CONFLICT,
+                    format!(
+                        "El comprobante {}-{} de esta venta se está emitiendo en este momento. Revisa en Comprobantes en unos segundos.",
+                        serie, numero
+                    ),
+                )
+            })?;
             (id, serie, numero, documento, false)
         }
         None => {
             let ahora = crate::logica::tiempo::ahora_lima(); // "AAAA-MM-DD HH:MM:SS"
             let (fecha, hora) = ahora.split_once(' ').unwrap_or((ahora.as_str(), "00:00:00"));
-            let (id, numero) = reservar_numero(conn, pedido.venta_id, &datos, &pedido.serie, &ahora).await?;
+            let (id, numero) = reservar_numero(conn, pedido.venta_id, &datos, &pedido.serie, &ahora).await?.ok_or((
+                StatusCode::CONFLICT,
+                "Esta venta ya tiene una boleta o factura (aceptada o enviándose). Revisa en Comprobantes.".to_string(),
+            ))?;
             let documento = sunat_directo::armar_documento(
                 &datos,
                 &emisor,
@@ -257,5 +279,6 @@ pub async fn emitir(
         detraccion_porcentaje: pedido.detraccion.as_ref().map(|x| x.porcentaje),
         detraccion_monto: pedido.detraccion.as_ref().map(|x| x.monto),
         detraccion_cuenta: pedido.detraccion.as_ref().map(|x| x.cuenta.clone()),
+        clave_publica: None,
     }))
 }

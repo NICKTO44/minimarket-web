@@ -1,5 +1,5 @@
-use axum::{extract::{State, Path}, http::StatusCode, Json};
-use serde::Serialize;
+use axum::{extract::{State, Path, Query}, http::StatusCode, Json};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::AppState;
@@ -35,10 +35,22 @@ pub struct ComprobantePublicoResponse {
     pub items: Vec<ItemPublico>,
 }
 
+#[derive(Deserialize)]
+pub struct ClaveEnlace {
+    /// Firma del enlace (ver logica/enlace_publico.rs).
+    pub k: Option<String>,
+}
+
+/// Mismo mensaje si falta la clave, si es incorrecta o si el comprobante no
+/// existe: así no se puede averiguar qué números existen.
+const ENLACE_NO_VALIDO: &str =
+    "Este enlace no es válido o ya no está disponible. Pide al negocio que te reenvíe tu comprobante.";
+
 /// Ruta PÚBLICA (sin login) para que un cliente final vea su comprobante
 /// desde un link de WhatsApp. Deliberadamente restringida:
 ///   - Solo devuelve los datos de ESE comprobante puntual, identificado
-///     por su id — nunca lista ni permite explorar otros.
+///     por su id y la firma del enlace (?k=...) — nunca lista ni permite
+///     explorar otros cambiando el número.
 ///   - No expone la dirección del cliente (solo nombre y documento, que
 ///     de todas formas ya aparecen impresos en cualquier boleta física).
 ///   - No incluye nada de configuración interna del negocio (token de
@@ -48,12 +60,23 @@ pub struct ComprobantePublicoResponse {
 pub async fn ver_comprobante_publico(
     State(state): State<Arc<AppState>>,
     Path((identificador, comprobante_id)): Path<(String, i64)>,
+    Query(clave): Query<ClaveEnlace>,
 ) -> Result<Json<ComprobantePublicoResponse>, (StatusCode, String)> {
     let tienda = state
         .tiendas
         .buscar_por_identificador(&identificador)
         .await
-        .map_err(|_| (StatusCode::NOT_FOUND, "Negocio no encontrado".to_string()))?;
+        .map_err(|_| (StatusCode::NOT_FOUND, ENLACE_NO_VALIDO.to_string()))?;
+
+    // El enlace tiene que traer la firma de ESTE comprobante de ESTE negocio.
+    // Sin ella no se muestra nada (antes bastaba cambiar el número).
+    let firma_ok = clave
+        .k
+        .as_deref()
+        .is_some_and(|k| crate::logica::enlace_publico::es_valida(tienda.id, comprobante_id, k));
+    if !firma_ok {
+        return Err((StatusCode::NOT_FOUND, ENLACE_NO_VALIDO.to_string()));
+    }
 
     let db = state
         .tiendas
@@ -77,7 +100,7 @@ pub async fn ver_comprobante_publico(
 
     let row = match r.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
         Some(row) => row,
-        None => return Err((StatusCode::NOT_FOUND, "Comprobante no encontrado".to_string())),
+        None => return Err((StatusCode::NOT_FOUND, ENLACE_NO_VALIDO.to_string())),
     };
 
     let tipo: String = row.get(0).unwrap_or_default();

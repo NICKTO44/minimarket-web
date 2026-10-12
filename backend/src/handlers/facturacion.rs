@@ -5,6 +5,21 @@ use crate::tenants::TenantDb;
 use crate::models::facturacion::*;
 use crate::logica::facturacion::{emitir_facturalibre, codigo_tipo_documento_identidad, DatosParaEmitir, ItemFactura};
 
+/// POST /comprobantes (la ruta usa esta). Igual que `emitir_comprobante`, y
+/// la respuesta lleva además la firma del enlace público del comprobante
+/// (para el mensaje de WhatsApp; ver logica/enlace_publico.rs).
+pub async fn emitir_comprobante_con_enlace(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<crate::models::auth::Claims>,
+    Json(payload): Json<EmitirComprobanteRequest>,
+) -> Result<Json<ComprobanteResponse>, (StatusCode, String)> {
+    let Json(mut respuesta) = emitir_comprobante(Extension(tenant), Json(payload)).await?;
+    respuesta.clave_publica = respuesta
+        .comprobante_id
+        .and_then(|id| crate::logica::enlace_publico::clave(claims.tienda_id, id));
+    Ok(Json(respuesta))
+}
+
 pub async fn emitir_comprobante(
     Extension(tenant): Extension<Arc<TenantDb>>,
     Json(payload): Json<EmitirComprobanteRequest>,
@@ -21,6 +36,20 @@ pub async fn emitir_comprobante(
     let total = desglose.total;
     let igv = desglose.igv;
     let base_sin_igv = desglose.gravadas;
+
+    // La venta tiene que seguir vigente: no se emite boleta o factura de una
+    // venta cancelada ni de una que ya se devolvió completa (para eso está la
+    // nota de crédito).
+    let (vigente, por_devolver, ya_tiene) = estado_para_emitir(&conn, payload.venta_id).await?;
+    if !vigente {
+        return Err((StatusCode::BAD_REQUEST, "Esa venta no está vigente: no se le puede emitir comprobante.".into()));
+    }
+    if por_devolver == 0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Esa venta ya se devolvió completa: no se le puede emitir comprobante.".into(),
+        ));
+    }
 
     let items: Vec<ItemFactura> = lineas
         .into_iter()
@@ -203,6 +232,12 @@ pub async fn emitir_comprobante(
         return crate::handlers::facturacion_directa::emitir(&conn, pedido, datos).await;
     }
 
+    // FacturaLibre pone el número: no se puede reservar antes como en la
+    // emisión directa, pero al menos no se emite otro si ya hay uno aceptado.
+    if let Some(documento) = ya_tiene {
+        return Err((StatusCode::CONFLICT, format!("Esta venta ya tiene el comprobante {} aceptado.", documento)));
+    }
+
     let resultado = emitir_facturalibre(&datos, &token, &ruta, &codigo_sunat, &serie_boleta, &serie_factura).await;
 
     let numero = if resultado.numero > 0 {
@@ -293,5 +328,37 @@ pub async fn emitir_comprobante(
         detraccion_porcentaje: detraccion.as_ref().map(|d| d.porcentaje),
         detraccion_monto: detraccion.as_ref().map(|d| d.monto),
         detraccion_cuenta: detraccion.as_ref().map(|d| d.cuenta.clone()),
+        clave_publica: None,
     }))
+}
+/// Para emitir: (venta vigente, líneas con algo sin devolver, comprobante ya
+/// aceptado "SERIE-NUMERO" si lo hay). Una sola consulta.
+async fn estado_para_emitir(
+    conn: &libsql::Connection,
+    venta_id: i64,
+) -> Result<(bool, i64, Option<String>), (StatusCode, String)> {
+    let e500 = |e: libsql::Error| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    let mut filas = conn
+        .query(
+            "SELECT COALESCE(v.estado, 'COMPLETADA'),
+                    (SELECT COUNT(*) FROM detalles_venta dv
+                      WHERE dv.venta_id = v.id
+                        AND dv.cantidad - COALESCE((SELECT SUM(dd.cantidad_devuelta) FROM detalles_devolucion dd
+                                                      JOIN devoluciones d ON d.id = dd.devolucion_id
+                                                     WHERE dd.detalle_venta_id = dv.id AND d.estado = 'PROCESADA'), 0) > 0.000001),
+                    (SELECT ce.serie || '-' || ce.numero FROM comprobantes_electronicos ce
+                      WHERE ce.venta_id = v.id AND ce.estado = 'ACEPTADO' ORDER BY ce.id DESC LIMIT 1)
+             FROM ventas v WHERE v.id = ?1",
+            libsql::params![venta_id],
+        )
+        .await
+        .map_err(e500)?;
+    match filas.next().await.map_err(e500)? {
+        Some(f) => Ok((
+            f.get::<String>(0).unwrap_or_default() == "COMPLETADA",
+            f.get::<i64>(1).unwrap_or(1),
+            f.get::<String>(2).ok().filter(|d| !d.is_empty()),
+        )),
+        None => Err((StatusCode::NOT_FOUND, "Venta no encontrada".to_string())),
+    }
 }

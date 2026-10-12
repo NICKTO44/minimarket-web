@@ -40,13 +40,19 @@ pub async fn abrir_caja(
         return Err((StatusCode::BAD_REQUEST, "El monto inicial no puede ser negativo".into()));
     }
 
-    conn.execute(
+    // La misma sentencia revisa que no haya otra abierta: con un doble clic
+    // (o dos cajeros a la vez) antes podían quedar DOS cajas abiertas.
+    let abiertas = conn.execute(
         "INSERT INTO cajas (usuario_id, numero_caja, turno, monto_inicial, observaciones_apertura, fecha_apertura, hora_apertura)
-         VALUES (?1, ?2, 'GENERAL', ?3, ?4, datetime('now','localtime'), strftime('%H:%M:%S','now','localtime'))",
+         SELECT ?1, ?2, 'GENERAL', ?3, ?4, datetime('now','localtime'), strftime('%H:%M:%S','now','localtime')
+         WHERE NOT EXISTS (SELECT 1 FROM cajas WHERE estado = 'ABIERTA')",
         libsql::params![claims.sub, payload.numero_caja.unwrap_or(1), payload.monto_inicial, payload.observaciones.clone()],
     )
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al abrir caja: {}", e)))?;
+    if abiertas == 0 {
+        return Err((StatusCode::BAD_REQUEST, "Ya hay una caja abierta en el sistema. Debe cerrarse primero.".into()));
+    }
 
     let caja_id = conn.last_insert_rowid();
 
@@ -105,7 +111,8 @@ pub async fn cerrar_caja(
         "SIGNIFICATIVA"
     };
 
-    conn.execute(
+    // Solo si sigue abierta: un doble clic ya no vuelve a escribir el cierre.
+    let cerradas = conn.execute(
         "UPDATE cajas SET
             fecha_cierre = datetime('now','localtime'),
             hora_cierre = strftime('%H:%M:%S','now','localtime'),
@@ -116,7 +123,7 @@ pub async fn cerrar_caja(
             estado_diferencia = ?5,
             justificacion_diferencia = ?6,
             estado = 'CERRADA'
-         WHERE id = ?7",
+         WHERE id = ?7 AND estado = 'ABIERTA'",
         libsql::params![
             payload.monto_contado, payload.observaciones.clone(), efectivo_esperado,
             diferencia, estado_diferencia, payload.justificacion_diferencia.clone(), payload.caja_id
@@ -124,6 +131,9 @@ pub async fn cerrar_caja(
     )
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al cerrar caja: {}", e)))?;
+    if cerradas == 0 {
+        return Err((StatusCode::BAD_REQUEST, "Caja no encontrada o ya está cerrada".into()));
+    }
 
     Ok(Json(CajaResponse {
         success: true,

@@ -10,3 +10,4 @@ pub mod alta_sunat;
 pub mod notas_credito;
 pub mod anulaciones;
 pub mod plan;
+pub mod enlace_publico;

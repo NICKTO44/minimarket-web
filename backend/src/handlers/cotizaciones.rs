@@ -214,6 +214,15 @@ pub async fn crear(
     }
     conn.query("SELECT 1 FROM cotizaciones LIMIT 1", ()).await.map_err(actualizando)?;
 
+    // Sin el módulo "Cambiar precio al vender", el precio cotizado es el del
+    // producto (como al vender): una cotización con otro precio se podía
+    // cobrar después a ese precio.
+    let precio_libre = crate::handlers::rubros::negocio(&conn)
+        .await
+        .modulos
+        .iter()
+        .any(|m| m == crate::handlers::rubros::MODULO_PRECIO_VENTA);
+
     // Nombre y unidad reales de cada producto (no los que mande el navegador).
     let mut lineas: Vec<ItemCotizacion> = Vec::new();
     for it in &payload.items {
@@ -224,13 +233,23 @@ pub async fn crear(
             return Err(malo("Hay un precio que no es válido."));
         }
         let mut filas = conn
-            .query("SELECT nombre, unidad_medida FROM productos WHERE id = ?1", libsql::params![it.id])
+            .query("SELECT nombre, unidad_medida, CAST(precio AS REAL) FROM productos WHERE id = ?1", libsql::params![it.id])
             .await
             .map_err(e500)?;
-        let (nombre, unidad): (String, String) = match filas.next().await.map_err(e500)? {
-            Some(f) => (f.get(0).unwrap_or_default(), f.get(1).unwrap_or_else(|_| "UNIDAD".to_string())),
+        let (nombre, unidad, precio_producto): (String, String, f64) = match filas.next().await.map_err(e500)? {
+            Some(f) => (
+                f.get(0).unwrap_or_default(),
+                f.get(1).unwrap_or_else(|_| "UNIDAD".to_string()),
+                f.get(2).unwrap_or(0.0),
+            ),
             None => return Err(malo("Uno de los productos ya no existe.")),
         };
+        if !precio_libre && (it.precio - precio_producto).abs() >= 1e-6 {
+            return Err((
+                StatusCode::CONFLICT,
+                format!("El precio de {} cambió: ahora es S/ {:.2}. Quítalo del carrito y vuelve a agregarlo.", nombre, precio_producto),
+            ));
+        }
         lineas.push(ItemCotizacion {
             producto_id: it.id,
             nombre,
