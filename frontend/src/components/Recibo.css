@@ -13,6 +13,12 @@
      todo va en negro puro (#000), en letra de trazo firme y no menor de 11px;
      lo que antes se distinguía con gris ahora se distingue con el grosor. */
 @media print {
+  /* Al imprimir el ticket (utils/imprimirTicket.js) el sistema no entra en
+     la impresión: ni ocupa lugar ni puede hacer que Chrome achique la hoja. */
+  html.imprimiendo-ticket #root {
+    display: none !important;
+  }
+
   body * {
     visibility: hidden;
   }

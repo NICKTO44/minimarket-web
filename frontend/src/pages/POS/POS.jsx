@@ -21,6 +21,7 @@ import { datosA4DeDocumento, imprimirComprobanteA4 } from '../../utils/facturaA4
 import { agruparPorModelo } from '../../utils/variantes';
 import AvisoNotaCredito from '../../components/AvisoNotaCredito';
 import { enlaceComprobantePublico } from '../../utils/enlacePublico';
+import { imprimirTicket } from '../../utils/imprimirTicket';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -1143,7 +1144,7 @@ export default function POS({
     } else if (formato === 'A4' && facturaConA4) {
       imprimirA4Propio(comp);
     } else {
-      window.print();
+      imprimirTicket();
     }
   };
 

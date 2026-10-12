@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import QRCode from 'qrcode';
 import { montoEnLetras } from '../utils/numeroALetras';
 import { construirCadenaQrSunat } from '../utils/qrSunat';
@@ -113,7 +114,10 @@ export default function Recibo({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [puedeGenerarQr, comprobante?.hash, comprobante?.serie, comprobante?.numero]);
 
-  return (
+  // El ticket va directo en <body>, fuera del sistema: al imprimir queda
+  // arriba a la izquierda del papel sin importar dónde esté el POS en la
+  // pantalla (ver utils/imprimirTicket.js).
+  return createPortal(
     <div className="recibo-imprimible">
       {logo ? (
         <img className="recibo-logo" src={logo} alt="" />
@@ -356,6 +360,7 @@ export default function Recibo({
       )}
 
       <div className="recibo-centro recibo-gracias">¡Gracias por su compra!</div>
-    </div>
+    </div>,
+    document.body
   );
 }

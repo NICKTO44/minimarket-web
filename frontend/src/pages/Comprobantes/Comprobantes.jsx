@@ -11,6 +11,7 @@ import '../../components/Recibo.css';
 import { fechaHoraLima, hoyLima } from '../../utils/formato';
 import { descargarArchivo, pdfDeVenta } from '../../utils/pdfTicket';
 import { enlaceComprobantePublico } from '../../utils/enlacePublico';
+import { imprimirTicket as imprimirSoloTicket } from '../../utils/imprimirTicket';
 import './Comprobantes.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -391,7 +392,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   const imprimirTicket = async (comp) => {
     try {
       setVentaParaImprimir(await datosDelTicket(comp));
-      setTimeout(() => window.print(), 200);
+      setTimeout(() => imprimirSoloTicket(), 200);
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
     }
