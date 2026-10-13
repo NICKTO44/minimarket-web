@@ -5,13 +5,17 @@
 
 /* Estilos SOLO al imprimir: aquí es donde se formatea como ticket térmico angosto.
 
-   Pensado para una ticketera térmica de 80 mm, que tiene dos límites:
-   - De los 80 mm del papel solo imprime los 72 mm del centro. El ticket mide
-     71 mm en total (con su margen adentro); más ancho, se corta a la derecha.
-   - Imprime solo negro o blanco, en puntos gruesos. Un gris sale como puntos
-     sueltos y no se lee, igual que una letra muy fina o muy chica. Por eso
-     todo va en negro puro (#000), en letra de trazo firme y no menor de 11px;
-     lo que antes se distinguía con gris ahora se distingue con el grosor. */
+   Mismo diseño que el PDF del ticket (utils/pdfTicket.js): letra Courier,
+   mismos tamaños (en pt, igual que el PDF), texto normal y en negrita solo
+   el nombre del negocio, el comprobante, los productos y el TOTAL; líneas
+   punteadas finas y doble línea fina antes del total y antes del QR. Si se
+   cambia uno, conviene cambiar el otro.
+
+   Pensado para una ticketera térmica de 80 mm: de los 80 mm del papel solo
+   imprime los 72 mm del centro. El ticket mide 72 mm justos (con su margen
+   adentro), así ocupa todo lo que la ticketera puede imprimir; más ancho, se
+   corta a la derecha. Todo va en negro puro (#000): un gris la ticketera lo
+   imprime como puntos sueltos. */
 @media print {
   /* Al imprimir el ticket (utils/imprimirTicket.js) el sistema no entra en
      la impresión: ni ocupa lugar ni puede hacer que Chrome achique la hoja. */
@@ -31,12 +35,13 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: 71mm;
+    width: 72mm;
     box-sizing: border-box;
-    padding: 2mm 1.5mm 4mm;
-    font-family: Arial, Helvetica, 'Liberation Sans', sans-serif;
-    font-size: 12.5px;
-    line-height: 1.3;
+    padding: 3mm 1mm 5mm;
+    font-family: 'Courier New', Courier, 'Liberation Mono', monospace;
+    font-size: 8.5pt;
+    font-weight: 400;
+    line-height: 1.32;
     color: #000;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
@@ -51,15 +56,13 @@
   }
 
   .recibo-nombre-tienda {
-    font-size: 17px;
-    font-weight: 800;
-    letter-spacing: 0.04em;
+    font-size: 12pt;
+    font-weight: 700;
     text-transform: uppercase;
-    margin-bottom: 2px;
   }
 
-  .recibo-dato-tienda {
-    font-size: 11.5px;
+  .recibo-razon {
+    text-transform: uppercase;
   }
 
   .recibo-ruc {
@@ -68,85 +71,54 @@
 
   .recibo-linea {
     border-top: 1px dashed #000;
-    margin: 5px 0;
+    margin: 3pt 0 4pt;
   }
 
+  /* Doble línea fina, como en el PDF. */
   .recibo-linea-doble {
-    border-top: 2px solid #000;
-    margin: 4px 0;
+    height: 3pt;
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+    margin: 3pt 0 4pt;
   }
 
   .recibo-comprobante-tipo {
+    font-size: 9.5pt;
     font-weight: 700;
-    font-size: 12.5px;
-    letter-spacing: 0.02em;
-    margin: 2px 0;
   }
 
   .recibo-comprobante-numero {
-    font-weight: 800;
-    font-size: 14px;
-    margin-bottom: 2px;
+    font-size: 11pt;
+    font-weight: 700;
   }
 
   .recibo-seccion-titulo {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    margin-top: 2px;
-  }
-
-  .recibo-cliente-nombre {
-    font-size: 12.5px;
     font-weight: 700;
   }
 
-  .recibo-cliente-direccion {
-    font-size: 11.5px;
-  }
-
-  .recibo-fila-meta {
+  .recibo-fila-meta,
+  .recibo-item-detalle,
+  .recibo-detalle-pago {
     display: flex;
     justify-content: space-between;
-    gap: 8px;
-    font-size: 12px;
-    padding: 1px 0;
+    gap: 6pt;
   }
 
-  /* El dato (derecha) en negrita; su nombre (izquierda), normal. */
-  .recibo-fila-meta span:last-child {
-    font-weight: 700;
+  .recibo-fila-meta span:last-child,
+  .recibo-detalle-pago span:last-child {
     text-align: right;
   }
 
-  .recibo-fila-meta-sutil {
-    font-size: 11.5px;
-  }
-
   .recibo-item {
-    margin-bottom: 5px;
+    margin-bottom: 2pt;
   }
 
   .recibo-item-nombre {
     font-weight: 700;
   }
 
-  .recibo-item-detalle span:last-child,
-  .recibo-detalle-pago span:last-child {
-    font-weight: 700;
-  }
-
-  .recibo-item-detalle,
-  .recibo-detalle-pago {
-    display: flex;
-    justify-content: space-between;
-  }
-
   /* La cantidad o el monto (derecha) nunca se parte en dos líneas; si falta
      espacio, lo que baja de línea es el texto de la izquierda (un código largo). */
-  .recibo-item-detalle {
-    gap: 8px;
-  }
   .recibo-item-detalle span:first-child {
     min-width: 0;
     overflow-wrap: anywhere;
@@ -155,134 +127,53 @@
     white-space: nowrap;
   }
 
-  /* Total en barra negra (texto blanco): lo primero que se ve en el ticket. */
   .recibo-total {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
-    font-weight: 800;
-    font-size: 18px;
-    margin: 6px 0 3px;
-    padding: 5px 8px;
-    border-radius: 4px;
-    background: #000;
-  }
-  .recibo-imprimible .recibo-total,
-  .recibo-imprimible .recibo-total * {
-    color: #fff;
-  }
-
-  /* Logo del negocio, o un círculo negro con sus iniciales. */
-  .recibo-logo {
-    display: block;
-    max-width: 40mm;
-    max-height: 22mm;
-    margin: 0 auto 4px;
-    object-fit: contain;
-    filter: grayscale(1) contrast(1.2);
-  }
-  .recibo-monograma {
-    width: 14mm;
-    height: 14mm;
-    margin: 0 auto 4px;
-    border-radius: 50%;
-    background: #000;
-    display: grid;
-    place-items: center;
-    font-size: 18px;
-    font-weight: 800;
-  }
-  .recibo-imprimible .recibo-monograma {
-    color: #fff;
-  }
-  .recibo-razon {
+    font-size: 12pt;
     font-weight: 700;
-    text-transform: uppercase;
-  }
-
-  /* Recuadro del comprobante: RUC, tipo en franja negra y número. */
-  .recibo-caja-documento {
-    margin: 8px 0 6px;
-    border: 2px solid #000;
-    border-radius: 6px;
-    overflow: hidden;
-    text-align: center;
-  }
-  .recibo-caja-ruc {
-    padding: 4px 0;
-    font-size: 13px;
-    font-weight: 800;
-  }
-  .recibo-caja-tipo {
-    padding: 4px 3px;
-    background: #000;
-    font-size: 11.5px;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-  }
-  .recibo-imprimible .recibo-caja-tipo {
-    color: #fff;
-  }
-  .recibo-caja-numero {
-    padding: 5px 0;
-    font-size: 17px;
-    font-weight: 800;
-  }
-  .recibo-caja-nota {
-    padding: 4px 0;
-    font-size: 11px;
   }
 
   .recibo-importe-letras {
-    font-size: 11px;
-    line-height: 1.35;
-    margin: 3px 0;
+    margin-top: 2pt;
   }
 
-  .recibo-detalle-pago {
-    font-size: 12.5px;
-    padding: 1px 0;
-  }
-
-  /* Factura sujeta a detracción (SPOT) */
+  /* Detracción, venta al crédito y cambio de prenda. */
   .recibo-detraccion {
-    margin: 4px 0;
-    padding: 3px 0;
+    margin: 3pt 0;
+    padding: 3pt 0;
     border-top: 1px dashed #000;
     border-bottom: 1px dashed #000;
   }
 
   .recibo-detraccion-titulo {
-    font-size: 11.5px;
-    font-weight: 800;
+    font-weight: 700;
     text-align: center;
-    margin-bottom: 2px;
   }
 
   .recibo-disclaimer {
-    font-size: 11px;
-    line-height: 1.3;
-    margin: 4px 0;
+    font-size: 7pt;
+    margin-top: 2pt;
   }
 
   .recibo-gracias {
-    font-weight: 800;
-    font-size: 14px;
-    margin-top: 6px;
+    font-weight: 700;
+    margin-top: 4pt;
   }
 
-.recibo-qr-wrapper {
-  display: flex;
-  justify-content: center;
-  margin: 4px 0;
-}
+  .recibo-qr-wrapper {
+    display: flex;
+    justify-content: center;
+    margin: 2pt 0 4pt;
+  }
 
-.recibo-qr {
-  width: 32mm;
-  height: 32mm;
-  /* Cuadros nítidos: suavizado, la ticketera lo imprime borroso. */
-  image-rendering: pixelated;
-}
+  .recibo-qr {
+    width: 96pt;
+    height: 96pt;
+    /* Cuadros nítidos: suavizado, la ticketera lo imprime borroso. */
+    image-rendering: pixelated;
+  }
+
   @page {
     margin: 0;
     size: 80mm auto; /* ancho fijo, alto automático según el contenido */

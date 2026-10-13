@@ -7,17 +7,6 @@ import { nombreMetodo } from '../utils/metodoPago';
 import { desgloseDeComprobante, etiquetaTasa } from '../utils/igv';
 import { formatoCantidad, formatoPrecio, subtotalLinea } from '../utils/medidas';
 
-/** Iniciales del negocio para el círculo que va en lugar del logo: "Mi Minimarket" -> "MM". */
-function iniciales(nombre) {
-  const palabras = String(nombre || '')
-    .replace(/[^\p{L}\p{N} ]/gu, ' ')
-    .split(/\s+/)
-    .filter((p) => p.length > 1 || /\d/.test(p));
-  if (palabras.length === 0) return '·';
-  if (palabras.length === 1) return palabras[0][0].toUpperCase();
-  return (palabras[0][0] + palabras[1][0]).toUpperCase();
-}
-
 // diasCambio: plazo para cambiar una prenda (módulo "Cambio de prenda");
 // 0 o sin el módulo = no se imprime nada.
 // fecha: fecha y hora de emisión ya escritas (al reimprimir); sin ella, la
@@ -37,8 +26,6 @@ export default function Recibo({
   cliente,
   diasCambio = 0,
   fecha = null,
-  // URL del logo del negocio (Configuración). Sin logo, un círculo con sus iniciales.
-  logo = null,
 }) {
   const esComprobanteReal = !!comprobante;
   // La factura también sale en ticket de 80 mm: lleva el RUC del cliente,
@@ -119,28 +106,19 @@ export default function Recibo({
   // pantalla (ver utils/imprimirTicket.js).
   return createPortal(
     <div className="recibo-imprimible">
-      {logo ? (
-        <img className="recibo-logo" src={logo} alt="" />
-      ) : (
-        <div className="recibo-monograma">{iniciales(nombreTienda)}</div>
-      )}
       <div className="recibo-centro recibo-nombre-tienda">{nombreTienda}</div>
+      {/* Razón social (la pide SUNAT cuando es distinta del nombre comercial). */}
       {razonSocial && razonSocial.trim() !== String(nombreTienda || '').trim() && (
         <div className="recibo-centro recibo-dato-tienda recibo-razon">{razonSocial}</div>
       )}
       {direccion && <div className="recibo-centro recibo-dato-tienda">{direccion}</div>}
-      {telefono && <div className="recibo-centro recibo-dato-tienda">Tel. {telefono}</div>}
+      {telefono && <div className="recibo-centro recibo-dato-tienda">Tel: {telefono}</div>}
+      {ruc && <div className="recibo-centro recibo-dato-tienda recibo-ruc">RUC {ruc}</div>}
 
-      {/* Recuadro del comprobante: RUC, tipo en franja negra y número. */}
-      <div className="recibo-caja-documento">
-        {ruc && <div className="recibo-caja-ruc">R.U.C. {ruc}</div>}
-        <div className="recibo-caja-tipo">{comprobante ? encabezado : 'NOTA DE VENTA'}</div>
-        {numeroDocumento ? (
-          <div className="recibo-caja-numero">{numeroDocumento}</div>
-        ) : (
-          <div className="recibo-caja-nota">Sin comprobante tributario</div>
-        )}
-      </div>
+      <div className="recibo-linea"></div>
+      <div className="recibo-centro recibo-comprobante-tipo">{encabezado}</div>
+      {numeroDocumento && <div className="recibo-centro recibo-comprobante-numero">{numeroDocumento}</div>}
+      <div className="recibo-linea"></div>
 
       {cliente && (
         <>
@@ -224,6 +202,8 @@ export default function Recibo({
           </div>
         </>
       )}
+
+      <div className="recibo-linea-doble"></div>
 
       <div className="recibo-total">
         <span>TOTAL</span>
