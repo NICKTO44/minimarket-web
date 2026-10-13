@@ -32,6 +32,13 @@ pub struct EstadisticasCompletas {
     pub devoluciones_cantidad: i64,
     pub devoluciones_total: f64,
     pub total_neto: f64,
+    /// Gastos del negocio en el período (módulo Gastos, sin los anulados).
+    /// Solo para el administrador, igual que la pantalla de Gastos; para
+    /// otros roles no se envían.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gastos_cantidad: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gastos_total: Option<f64>,
     /// Lo cobrado en el período por cada medio de pago, de mayor a menor.
     /// Un pago mixto cuenta su parte en efectivo y su parte en el otro medio.
     pub por_metodo: Vec<PagoPorMetodo>,

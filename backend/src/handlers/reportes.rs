@@ -104,6 +104,7 @@ pub async fn productos_mas_vendidos(
 
 pub async fn estadisticas_completas(
     Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<crate::models::auth::Claims>,
     Query(rango): Query<RangoFechas>,
 ) -> Result<Json<EstadisticasCompletas>, StatusCode> {
     let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -132,6 +133,15 @@ pub async fn estadisticas_completas(
 
     let por_metodo = pagos_por_metodo(&conn, &rango).await;
 
+    // Gastos del período (por la fecha del gasto, que ya es de Perú). Los ven
+    // el administrador y el cajero (que maneja la caja); inventario no.
+    const ROL_CAJERO: i64 = 2;
+    let gastos = if claims.rol_id == crate::middleware_auth::ROL_ADMIN || claims.rol_id == ROL_CAJERO {
+        crate::handlers::gastos::total_del_rango(&conn, &rango.fecha_inicio, &rango.fecha_fin).await
+    } else {
+        None
+    };
+
     Ok(Json(EstadisticasCompletas {
         ventas_cantidad,
         ventas_total,
@@ -139,6 +149,8 @@ pub async fn estadisticas_completas(
         devoluciones_cantidad,
         devoluciones_total,
         total_neto: ventas_total - devoluciones_total,
+        gastos_cantidad: gastos.map(|g| g.0),
+        gastos_total: gastos.map(|g| g.1),
         por_metodo,
     }))
 }

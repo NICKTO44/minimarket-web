@@ -139,6 +139,14 @@ export default function Reportes({ ganancias = false, onVerSinPrecio }) {
                 <strong className="rep-tarjeta-valor">{estadisticas.devoluciones_cantidad}</strong>
                 <span className="rep-tarjeta-sub">- S/ {estadisticas.devoluciones_total.toFixed(2)}</span>
               </div>
+              {/* Gastos del negocio en las fechas elegidas (solo lo ve el administrador). */}
+              {estadisticas.gastos_total != null && (
+                <div className="rep-tarjeta rep-tarjeta-negativa">
+                  <span className="rep-tarjeta-label">Gastos</span>
+                  <strong className="rep-tarjeta-valor">{estadisticas.gastos_cantidad}</strong>
+                  <span className="rep-tarjeta-sub">- S/ {estadisticas.gastos_total.toFixed(2)}</span>
+                </div>
+              )}
               <div className="rep-tarjeta rep-tarjeta-destacada">
                 <span className="rep-tarjeta-label">Total neto</span>
                 <strong className="rep-tarjeta-valor">S/ {estadisticas.total_neto.toFixed(2)}</strong>

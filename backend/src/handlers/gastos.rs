@@ -520,6 +520,22 @@ pub async fn totales_por_mes(conn: &libsql::Connection, desde: &str, hasta: &str
     lista
 }
 
+/// Cantidad y suma de los gastos (sin anulados) entre dos fechas, ambas
+/// incluidas. Para el reporte de ventas. None si la base aún no tiene el
+/// módulo de gastos (migración 0022): el reporte sale igual, sin la tarjeta.
+pub async fn total_del_rango(conn: &libsql::Connection, desde: &str, hasta: &str) -> Option<(i64, f64)> {
+    let mut filas = conn
+        .query(
+            "SELECT COUNT(*), CAST(COALESCE(SUM(monto), 0) AS REAL)
+             FROM gastos WHERE anulado = 0 AND fecha BETWEEN ?1 AND ?2",
+            libsql::params![desde, hasta],
+        )
+        .await
+        .ok()?;
+    let f = filas.next().await.ok()??;
+    Some((f.get::<i64>(0).unwrap_or(0), redondear_2(f.get::<f64>(1).unwrap_or(0.0))))
+}
+
 // ---------------------------------------------------------------------
 // Anular
 // ---------------------------------------------------------------------

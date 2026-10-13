@@ -352,3 +352,46 @@ async fn abono_y_caja_con_doble_clic() {
     assert!(cerrar(1.0).await.is_err());
     assert_eq!(uno(&db, "SELECT monto_final_contado FROM cajas WHERE id = ?1", [caja]).await, 218.0);
 }
+
+#[tokio::test]
+async fn reporte_muestra_los_gastos_del_rango_a_admin_y_cajero() {
+    use axum::extract::Query;
+    use minimarket_backend::handlers::reportes;
+    let db = base("reporte_gastos", "").await;
+    let t = Arc::new(TenantDb(db.clone()));
+    let conn = db.connect().unwrap();
+    conn.execute_batch(
+        "INSERT INTO categorias_gasto (id, nombre) VALUES (500, 'Pasajes');
+         INSERT INTO gastos (fecha, categoria_id, descripcion, monto, metodo_pago, usuario_id) VALUES
+            ('2026-10-12', 500, 'Taxi', 5, 'EFECTIVO', 1),
+            ('2026-10-12', 500, 'Bolsas', 6, 'EFECTIVO_CAJA', 1),
+            ('2026-10-11', 500, 'Ayer', 11, 'YAPE', 1);
+         INSERT INTO gastos (fecha, categoria_id, descripcion, monto, metodo_pago, usuario_id, anulado) VALUES
+            ('2026-10-12', 500, 'Anulado', 100, 'EFECTIVO', 1, 1);",
+    )
+    .await
+    .expect("gastos de prueba");
+
+    let pedir = |rol_id: i64, desde: &str, hasta: &str| {
+        let mut c = claims();
+        c.rol_id = rol_id;
+        let rango: reportes::RangoFechas =
+            serde_json::from_value(json!({"fecha_inicio": desde, "fecha_fin": hasta})).unwrap();
+        reportes::estadisticas_completas(Extension(t.clone()), Extension(c), Query(rango))
+    };
+
+    // Solo el día 12: 5 + 6 (el anulado no cuenta).
+    let Json(e) = pedir(1, "2026-10-12", "2026-10-12").await.unwrap();
+    assert_eq!((e.gastos_cantidad, e.gastos_total), (Some(2), Some(11.0)));
+    // Del 11 al 12: los tres.
+    let Json(e) = pedir(1, "2026-10-11", "2026-10-12").await.unwrap();
+    assert_eq!((e.gastos_cantidad, e.gastos_total), (Some(3), Some(22.0)));
+    // El cajero también los ve.
+    let Json(e) = pedir(2, "2026-10-12", "2026-10-12").await.unwrap();
+    assert_eq!((e.gastos_cantidad, e.gastos_total), (Some(2), Some(11.0)));
+    // Inventario no.
+    let Json(e) = pedir(3, "2026-10-11", "2026-10-12").await.unwrap();
+    assert_eq!((e.gastos_cantidad, e.gastos_total), (None, None));
+    let texto = serde_json::to_string(&e).unwrap();
+    assert!(!texto.contains("gastos"), "{texto}");
+}
