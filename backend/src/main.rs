@@ -205,6 +205,9 @@ async fn main() {
         .route("/agente-impresion/ws", get(handlers::agente_impresion::agente_websocket))
         .route("/publico/comprobante/:identificador/:id", get(handlers::publico::ver_comprobante_publico))
         .route("/publico/negocio/:direccion", get(handlers::direcciones::negocio_publico))
+        // El sistema como app instalable, con el nombre y logo de cada negocio.
+        .route("/publico/app/:direccion/manifest", get(handlers::app_instalable::manifiesto))
+        .route("/publico/app/:direccion/icono/:tam", get(handlers::app_instalable::icono))
         .nest_service("/uploads", ServeDir::new("uploads"))
         .merge(rutas_autenticacion);
 

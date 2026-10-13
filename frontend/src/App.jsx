@@ -31,6 +31,7 @@ import Gastos from './pages/Gastos/Gastos';
 import AvisosListos from './components/AvisosListos';
 import DireccionNegocio from './components/DireccionNegocio';
 import { irADireccion, leerDireccion } from './utils/direccion';
+import { usarAppDelNegocio } from './utils/appInstalable';
 import {
   esAlmacen,
   esCajero,
@@ -355,6 +356,12 @@ function App() {
     if (verificandoSesion || logueado || resolviendoDireccion || direccionInicial.delSistema) return;
     irADireccion(slugRecordado ? `/${slugRecordado}` : '/');
   }, [verificandoSesion, logueado, resolviendoDireccion, slugRecordado, direccionInicial.delSistema]);
+
+  // App instalable con el nombre y el logo de este negocio (utils/appInstalable.js).
+  const logoDelNegocio = identidadNegocio.logo;
+  useEffect(() => {
+    if (slugRecordado) usarAppDelNegocio(slugRecordado, { conLogo: !!logoDelNegocio });
+  }, [slugRecordado, logoDelNegocio]);
 
   if (/^\/panel\/?$/.test(window.location.pathname)) {
     return (
