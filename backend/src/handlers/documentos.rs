@@ -21,6 +21,12 @@ pub struct ConsultaDocumentoResponse {
     /// RUC de persona natural no la traen). El formulario la propone y
     /// el cajero la puede cambiar.
     pub direccion: Option<String>,
+    /// Solo la calle, y el ubigeo de 6 dígitos del domicilio: la guía de
+    /// remisión pide el distrito aparte. Se omiten si no vienen.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ubigeo: Option<String>,
 }
 
 /// Siempre responde 200 -- nunca falla "hacia arriba" ni con un
@@ -37,8 +43,14 @@ pub async fn consultar_documento(Query(params): Query<ConsultaDocumento>) -> Jso
 
     match resultado {
         Some(v) => {
-            Json(ConsultaDocumentoResponse { existe: Some(v.existe), nombre: v.nombre_completo, direccion: v.direccion })
+            Json(ConsultaDocumentoResponse {
+            existe: Some(v.existe),
+            nombre: v.nombre_completo,
+            direccion: v.direccion,
+            calle: v.calle,
+            ubigeo: v.ubigeo,
+        })
         }
-        None => Json(ConsultaDocumentoResponse { existe: None, nombre: None, direccion: None }),
+        None => Json(ConsultaDocumentoResponse { existe: None, nombre: None, direccion: None, calle: None, ubigeo: None }),
     }
 }

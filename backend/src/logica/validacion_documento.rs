@@ -17,6 +17,11 @@ pub struct ValidacionDocumento {
     /// Dirección (fiscal en el RUC) tal como la tiene SUNAT/RENIEC, con
     /// departamento, provincia y distrito. `None` si no figura.
     pub direccion: Option<String>,
+    /// Solo la calle (sin departamento, provincia ni distrito), para los
+    /// formularios que piden el distrito aparte (guía de remisión).
+    pub calle: Option<String>,
+    /// Ubigeo INEI de 6 dígitos del domicilio, si Factiliza lo manda.
+    pub ubigeo: Option<String>,
 }
 
 /// Dirección que manda Factiliza. Viene en `direccion_completa` ("calle,
@@ -33,6 +38,43 @@ fn direccion_de(data: &serde_json::Value) -> Option<String> {
     }
     let completa = texto("direccion_completa");
     Some(if completa.chars().any(|c| c.is_alphanumeric()) { completa } else { calle })
+}
+
+/// Solo la calle del domicilio (el campo `direccion` de Factiliza), sin
+/// espacios de más. `None` si no figura (vacía o "-").
+fn calle_de(data: &serde_json::Value) -> Option<String> {
+    let calle = data
+        .get("direccion")
+        .and_then(|v| v.as_str())
+        .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
+        .unwrap_or_default();
+    calle.chars().any(|c| c.is_alphanumeric()).then_some(calle)
+}
+
+/// Ubigeo de 6 dígitos del domicilio. Factiliza lo manda como texto
+/// (`ubigeo_sunat` o `ubigeo`) o como lista ["15", "1501", "150101"]; se
+/// toma el de 6 dígitos que aparezca. `None` si no hay ninguno válido.
+fn ubigeo_de(data: &serde_json::Value) -> Option<String> {
+    let valido = |s: &str| {
+        let s = s.trim();
+        (s.len() == 6 && s.chars().all(|c| c.is_ascii_digit()) && s != "000000").then(|| s.to_string())
+    };
+    for clave in ["ubigeo_sunat", "ubigeo"] {
+        match data.get(clave) {
+            Some(serde_json::Value::String(s)) => {
+                if let Some(u) = valido(s) {
+                    return Some(u);
+                }
+            }
+            Some(serde_json::Value::Array(lista)) => {
+                if let Some(u) = lista.iter().rev().filter_map(|v| v.as_str()).find_map(valido) {
+                    return Some(u);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -84,12 +126,12 @@ pub async fn validar_dni(dni: &str) -> Option<ValidacionDocumento> {
     if !resp.status().is_success() {
         // Factiliza responde 400 cuando el DNI no existe -- eso SÍ es
         // una señal real ("no existe"), no un fallo de infraestructura.
-        return Some(ValidacionDocumento { existe: false, nombre_completo: None, estado: None, condicion: None, direccion: None });
+        return Some(ValidacionDocumento { existe: false, nombre_completo: None, estado: None, condicion: None, direccion: None, calle: None, ubigeo: None });
     }
 
     let cuerpo: RespuestaFactiliza = resp.json().await.ok()?;
     if !cuerpo.success {
-        return Some(ValidacionDocumento { existe: false, nombre_completo: None, estado: None, condicion: None, direccion: None });
+        return Some(ValidacionDocumento { existe: false, nombre_completo: None, estado: None, condicion: None, direccion: None, calle: None, ubigeo: None });
     }
 
     let data = cuerpo.data?;
@@ -97,7 +139,10 @@ pub async fn validar_dni(dni: &str) -> Option<ValidacionDocumento> {
 
     let direccion = direccion_de(&data);
 
-    Some(ValidacionDocumento { existe: true, nombre_completo, estado: None, condicion: None, direccion })
+    let calle = calle_de(&data);
+    let ubigeo = ubigeo_de(&data);
+
+    Some(ValidacionDocumento { existe: true, nombre_completo, estado: None, condicion: None, direccion, calle, ubigeo })
 }
 
 /// Valida un RUC de 11 dígitos contra Factiliza. Mismo contrato que
@@ -114,12 +159,12 @@ pub async fn validar_ruc(ruc: &str) -> Option<ValidacionDocumento> {
         .ok()?;
 
     if !resp.status().is_success() {
-        return Some(ValidacionDocumento { existe: false, nombre_completo: None, estado: None, condicion: None, direccion: None });
+        return Some(ValidacionDocumento { existe: false, nombre_completo: None, estado: None, condicion: None, direccion: None, calle: None, ubigeo: None });
     }
 
     let cuerpo: RespuestaFactiliza = resp.json().await.ok()?;
     if !cuerpo.success {
-        return Some(ValidacionDocumento { existe: false, nombre_completo: None, estado: None, condicion: None, direccion: None });
+        return Some(ValidacionDocumento { existe: false, nombre_completo: None, estado: None, condicion: None, direccion: None, calle: None, ubigeo: None });
     }
 
     let data = cuerpo.data?;
@@ -129,7 +174,10 @@ pub async fn validar_ruc(ruc: &str) -> Option<ValidacionDocumento> {
 
     let direccion = direccion_de(&data);
 
-    Some(ValidacionDocumento { existe: true, nombre_completo, estado, condicion, direccion })
+    let calle = calle_de(&data);
+    let ubigeo = ubigeo_de(&data);
+
+    Some(ValidacionDocumento { existe: true, nombre_completo, estado, condicion, direccion, calle, ubigeo })
 }
 
 /// RUC ya consultados en este arranque -> su dirección fiscal (o que no
@@ -187,6 +235,23 @@ mod pruebas {
         assert_eq!(direccion_de(&json!({ "direccion": "  ", "direccion_completa": ", LIMA - LIMA - LIMA" })), None);
         assert_eq!(direccion_de(&json!({ "direccion": null })), None);
         assert_eq!(direccion_de(&json!({})), None);
+    }
+
+    #[test]
+    fn calle_y_ubigeo_para_la_guia() {
+        let data = json!({
+            "direccion": "PJ. JORGE  BASADRE NRO. 158",
+            "direccion_completa": "PJ. JORGE BASADRE NRO. 158, LIMA - LIMA - SANTA ANITA",
+            "ubigeo": ["15", "1501", "150137"],
+        });
+        assert_eq!(calle_de(&data).as_deref(), Some("PJ. JORGE BASADRE NRO. 158"));
+        assert_eq!(ubigeo_de(&data).as_deref(), Some("150137"));
+        assert_eq!(ubigeo_de(&json!({ "ubigeo_sunat": "080108" })).as_deref(), Some("080108"));
+        assert_eq!(ubigeo_de(&json!({ "ubigeo": "150101" })).as_deref(), Some("150101"));
+        assert_eq!(ubigeo_de(&json!({ "ubigeo": "-" })), None);
+        assert_eq!(ubigeo_de(&json!({ "ubigeo": ["15", "1501", "-"] })), None);
+        assert_eq!(ubigeo_de(&json!({})), None);
+        assert_eq!(calle_de(&json!({ "direccion": "-" })), None);
     }
 
     #[test]

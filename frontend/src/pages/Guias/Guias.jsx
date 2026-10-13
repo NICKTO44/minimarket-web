@@ -23,6 +23,9 @@ function EstadoGuia({ estado }) {
   return <span className="pm-chip pm-chip-aviso">Sin enviar</span>;
 }
 
+/** Largo de un RUC o DNI completo (CE y otros: no se consultan). */
+const LARGO_DOCUMENTO = { RUC: 11, DNI: 8 };
+
 const FORMULARIO_VACIO = {
   destinatario_tipo: 'RUC',
   destinatario_documento: '',
@@ -105,6 +108,61 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
 
   const campo = (nombre) => ({ value: form[nombre], onChange: (e) => setForm((f) => ({ ...f, [nombre]: e.target.value })) });
 
+  // RUC o DNI escrito a mano: apenas está completo se busca en SUNAT/RENIEC
+  // con la misma consulta del punto de venta (api.documentoConsultar) y se
+  // llenan el nombre y, del destinatario, la dirección y el distrito de
+  // llegada. Si la consulta falla no pasa nada: se escribe a mano.
+  const [buscandoDocumento, setBuscandoDocumento] = useState(null); // 'destinatario' | 'transportista'
+
+  // `direccionDeRespaldo`: la que ya tenía guardada el cliente de la venta,
+  // solo si SUNAT/RENIEC no trae ninguna.
+  const consultarDocumento = (quien, tipo, numero, direccionDeRespaldo = '') => {
+    if (numero.length !== LARGO_DOCUMENTO[tipo]) {
+      if (direccionDeRespaldo) setForm((f) => ({ ...f, llegada_direccion: direccionDeRespaldo }));
+      return;
+    }
+    setBuscandoDocumento(quien);
+    api
+      .documentoConsultar(tipo, numero)
+      .then((r) => {
+        if (r.existe !== true) {
+          if (quien === 'destinatario' && direccionDeRespaldo) {
+            setForm((f) => (f.destinatario_documento === numero && !f.llegada_direccion ? { ...f, llegada_direccion: direccionDeRespaldo } : f));
+          }
+          return;
+        }
+        setForm((f) => {
+          // Si mientras tanto cambiaron el número, esta respuesta ya no sirve.
+          if (quien === 'transportista') {
+            if (f.transportista_ruc !== numero) return f;
+            return r.nombre ? { ...f, transportista_nombre: r.nombre } : f;
+          }
+          if (f.destinatario_documento !== numero || f.destinatario_tipo !== tipo) return f;
+          const nuevo = { ...f };
+          if (r.nombre) nuevo.destinatario_nombre = r.nombre;
+          // La llegada sale de este documento: lo que quedaba de otro se borra.
+          // Con el distrito aparte va solo la calle; sin él, la dirección completa.
+          nuevo.llegada_ubigeo = r.ubigeo || '';
+          nuevo.llegada_direccion = (r.ubigeo ? r.calle || r.direccion : r.direccion) || direccionDeRespaldo || '';
+          return nuevo;
+        });
+      })
+      .catch(() => {})
+      .finally(() => setBuscandoDocumento((b) => (b === quien ? null : b)));
+  };
+
+  const cambiarDocumentoDestinatario = (valor, tipo = form.destinatario_tipo) => {
+    const numero = LARGO_DOCUMENTO[tipo] ? valor.replace(/\D/g, '').slice(0, LARGO_DOCUMENTO[tipo]) : valor.slice(0, 12);
+    setForm((f) => ({ ...f, destinatario_tipo: tipo, destinatario_documento: numero }));
+    consultarDocumento('destinatario', tipo, numero);
+  };
+
+  const cambiarRucTransportista = (valor) => {
+    const numero = valor.replace(/\D/g, '').slice(0, 11);
+    setForm((f) => ({ ...f, transportista_ruc: numero }));
+    consultarDocumento('transportista', 'RUC', numero);
+  };
+
   const abrirNueva = () => {
     const ultimo = config?.ultimo || {};
     setForm({
@@ -147,8 +205,12 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
         destinatario_tipo: v.destinatario_tipo === 'DNI' ? 'DNI' : v.destinatario_tipo === 'RUC' ? 'RUC' : f.destinatario_tipo,
         destinatario_documento: v.destinatario_documento || '',
         destinatario_nombre: v.destinatario_nombre || '',
-        llegada_direccion: v.destinatario_direccion || '',
+        // La llegada (distrito y dirección) la llena la búsqueda del RUC/DNI.
+        llegada_ubigeo: '',
+        llegada_direccion: '',
       }));
+      const tipoCliente = v.destinatario_tipo === 'DNI' || v.destinatario_tipo === 'RUC' ? v.destinatario_tipo : null;
+      consultarDocumento('destinatario', tipoCliente, v.destinatario_documento || '', v.destinatario_direccion || '');
     } catch (e) {
       setVenta(null);
       setErrorForm(e.message);
@@ -452,15 +514,19 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
               <div className="pm-campos">
                 <label className="pm-campo">
                   <span>Documento</span>
-                  <select {...campo('destinatario_tipo')}>
+                  <select value={form.destinatario_tipo} onChange={(e) => cambiarDocumentoDestinatario(form.destinatario_documento, e.target.value)}>
                     <option value="RUC">RUC</option>
                     <option value="DNI">DNI</option>
                     <option value="CE">Carnet de extranjería</option>
                   </select>
                 </label>
                 <label className="pm-campo">
-                  <span>Número</span>
-                  <input inputMode="numeric" {...campo('destinatario_documento')} />
+                  <span>Número{buscandoDocumento === 'destinatario' && ' · buscando...'}</span>
+                  <input
+                    inputMode={LARGO_DOCUMENTO[form.destinatario_tipo] ? 'numeric' : 'text'}
+                    value={form.destinatario_documento}
+                    onChange={(e) => cambiarDocumentoDestinatario(e.target.value)}
+                  />
                 </label>
                 <label className="pm-campo pm-campo-ancho">
                   <span>Nombre o razón social</span>
@@ -551,8 +617,8 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
               ) : (
                 <div className="pm-campos" style={{ marginTop: 10 }}>
                   <label className="pm-campo">
-                    <span>RUC del transportista</span>
-                    <input inputMode="numeric" maxLength={11} {...campo('transportista_ruc')} />
+                    <span>RUC del transportista{buscandoDocumento === 'transportista' && ' · buscando...'}</span>
+                    <input inputMode="numeric" value={form.transportista_ruc} onChange={(e) => cambiarRucTransportista(e.target.value)} />
                   </label>
                   <label className="pm-campo">
                     <span>Registro MTC (opcional)</span>
