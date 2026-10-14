@@ -206,8 +206,10 @@ export default function Inventario({
   const productosFiltrados = useMemo(() => {
     let lista = verDesactivados ? desactivados : productos;
     if (busqueda.trim()) {
-      const q = busqueda.toLowerCase();
-      lista = lista.filter((p) => p.nombre.toLowerCase().includes(q) || p.codigo.includes(q));
+      const q = busqueda.trim().toLowerCase();
+      // El código también en minúsculas: antes "M63" no se encontraba (se
+      // comparaba "M63" con "m63") y solo aparecían los códigos de puros números.
+      lista = lista.filter((p) => p.nombre.toLowerCase().includes(q) || String(p.codigo || '').toLowerCase().includes(q));
     }
     if (filtroCategoria) {
       lista = lista.filter((p) => String(p.categoria_id) === filtroCategoria);
