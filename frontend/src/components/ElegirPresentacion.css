@@ -1,0 +1,53 @@
+/* Elegir presentación en el punto de venta (usa la base de CalculadoraPieTablar.css). */
+.ep-opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.ep-opcion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  color: #16181d;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ep-opcion:hover:not(:disabled),
+.ep-opcion:focus-visible {
+  border-color: var(--color-primario);
+  background: var(--color-primario-suave);
+  outline: none;
+}
+
+.ep-opcion:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ep-nombre {
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+}
+
+.ep-nombre small {
+  margin-top: 2px;
+  font-weight: 400;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.ep-precio {
+  font-weight: 700;
+  white-space: nowrap;
+}

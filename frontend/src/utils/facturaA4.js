@@ -374,7 +374,13 @@ function imprimirHtml(html) {
 
 // ===== Desde el documento enviado a SUNAT (emisión directa) =====
 
-const NOMBRE_UNIDAD = { NIU: 'Unidad', KGM: 'Kg', GRM: 'g', LTR: 'L', MLT: 'mL', ZZ: 'Servicio' };
+const NOMBRE_UNIDAD = {
+  NIU: 'Unidad', KGM: 'Kg', GRM: 'g', LTR: 'L', MLT: 'mL', ZZ: 'Servicio',
+  // Emisión directa: la unidad real (ver unidad_sunat_directo en el backend).
+  MTR: 'm', GLL: 'Galón', BX: 'Caja', PK: 'Paquete', DZN: 'Docena', PR: 'Par', SET: 'Juego', BG: 'Bolsa',
+  C62: 'Pieza', MTK: 'm²', MTQ: 'm³', TNE: 't', LBR: 'lb', ONZ: 'oz', YRD: 'yd', CEN: 'Ciento', BJ: 'Balde',
+  CA: 'Lata', ST: 'Pliego', TU: 'Tubo',
+};
 const NOMBRE_DOCUMENTO = { 6: 'RUC', 1: 'DNI', 4: 'C.E.', 7: 'Pasaporte', 0: 'Doc.' };
 
 /** "2026-10-09T10:42:00-05:00" -> { fecha: "09/10/2026", hora: "10:42", iso: "2026-10-09" } */

@@ -50,7 +50,7 @@ import {
   MODULO_MEDIDAS,
   MODULO_MESAS,
   MODULO_SERVICIOS,
-  MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VARIANTES,
+  MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VARIANTES, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
   rubroDe,
 } from './utils/rubros';
 
@@ -540,6 +540,8 @@ function App() {
               onCotizacionUsada={() => setCotizacionACargar(null)}
               variantes={negocio.modulos.includes(MODULO_VARIANTES)}
               precioEditable={negocio.modulos.includes(MODULO_PRECIO_VENTA)}
+              presentaciones={negocio.modulos.includes(MODULO_PRESENTACIONES)}
+              precioMayor={negocio.modulos.includes(MODULO_PRECIO_MAYOR)}
               cambios={negocio.modulos.includes(MODULO_CAMBIOS)}
               cambioEnCurso={negocio.modulos.includes(MODULO_CAMBIOS) ? cambioEnCurso : null}
               onCambioTerminado={() => setCambioEnCurso(null)}
@@ -558,6 +560,8 @@ function App() {
             etiquetas={etiquetas}
             esAdmin={usuarioActual?.rol_id === 1}
             variantes={negocio.modulos.includes(MODULO_VARIANTES)}
+            presentaciones={negocio.modulos.includes(MODULO_PRESENTACIONES)}
+            precioMayor={negocio.modulos.includes(MODULO_PRECIO_MAYOR)}
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS)}
             verSinPrecio={productosSinPrecio}
             onSinPrecioVisto={() => setProductosSinPrecio(false)}

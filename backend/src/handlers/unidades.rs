@@ -30,7 +30,11 @@ pub const UNIDADES_RESTAURANTE: &[&str] = &[
 ];
 
 /// Las de maderera / ferretería / construcción.
-pub const UNIDADES_CONSTRUCCION: &[&str] = &["PIE_TABLAR", "PIEZA", "PLANCHA", "M2", "M3"];
+pub const UNIDADES_CONSTRUCCION: &[&str] = &[
+    "PIE_TABLAR", "PIEZA", "PLANCHA", "M2", "M3",
+    // Ferretería: tornillos por ciento, fierro por varilla, pintura en balde o lata, lija por pliego, tubos.
+    "CIENTO", "VARILLA", "BALDE", "LATA", "PLIEGO", "TUBO",
+];
 
 /// La unidad base: nunca se puede apagar.
 const UNIDAD_BASE: &str = "UNIDAD";

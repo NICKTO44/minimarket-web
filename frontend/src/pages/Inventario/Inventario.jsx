@@ -13,6 +13,8 @@ import { TIPO_XLSX, escribirXlsx } from '../../utils/hojas';
 import { descargarArchivo } from '../../utils/pdfTicket';
 import { hoyLima } from '../../utils/formato';
 import { agruparPorModelo, etiquetaVariante, rangoPrecio } from '../../utils/variantes';
+import OpcionesDeVenta from '../../components/OpcionesDeVenta';
+import { OPCIONES_VACIAS, formularioAOpciones, opcionesAFormulario } from '../../utils/presentaciones';
 
 const FORM_VACIO = {
   codigo: '',
@@ -115,7 +117,11 @@ export default function Inventario({
   ganancias = false,
   verSinPrecio = false,
   onSinPrecioVisto,
+  // Módulos "Presentaciones" y "Precio por mayor": su sección en el formulario.
+  presentaciones = false,
+  precioMayor = false,
 }) {
+  const conOpcionesVenta = presentaciones || precioMayor;
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [busqueda, setBusqueda] = useState('');
@@ -136,6 +142,10 @@ export default function Inventario({
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [form, setForm] = useState(FORM_VACIO);
+  // Presentaciones y precios por mayor del producto (filas del formulario) y
+  // cómo llegaron, para guardarlas solo si cambiaron. null = no se pudieron leer.
+  const [opcionesVenta, setOpcionesVenta] = useState(OPCIONES_VACIAS);
+  const [opcionesVentaOriginal, setOpcionesVentaOriginal] = useState(JSON.stringify(OPCIONES_VACIAS));
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
 
@@ -249,6 +259,8 @@ export default function Inventario({
   const abrirNuevo = () => {
     setEditandoId(null);
     setForm(FORM_VACIO);
+    setOpcionesVenta(OPCIONES_VACIAS);
+    setOpcionesVentaOriginal(JSON.stringify(OPCIONES_VACIAS));
     setLoteInicialCantidad('');
     setLoteInicialFecha('');
     setLotesProducto([]);
@@ -287,6 +299,19 @@ export default function Inventario({
       cargarLotes(p.id);
     } else {
       setLotesProducto([]);
+    }
+
+    setOpcionesVenta(OPCIONES_VACIAS);
+    setOpcionesVentaOriginal(JSON.stringify(OPCIONES_VACIAS));
+    if (conOpcionesVenta) {
+      api
+        .presentacionesProducto(p.id)
+        .then((respuesta) => {
+          const filas = opcionesAFormulario(respuesta);
+          setOpcionesVenta(filas);
+          setOpcionesVentaOriginal(JSON.stringify(formularioAOpciones(filas)));
+        })
+        .catch(() => setOpcionesVentaOriginal(null));
     }
   };
 
@@ -413,6 +438,13 @@ export default function Inventario({
       }
     }
 
+    // Presentaciones y precio por mayor: se revisan antes de guardar nada.
+    const opcionesAGuardar = conOpcionesVenta ? formularioAOpciones(opcionesVenta) : null;
+    if (opcionesAGuardar?.error) {
+      setMensaje({ tipo: 'error', texto: opcionesAGuardar.error });
+      return;
+    }
+
     const payload = {
       codigo: form.codigo.trim(),
       nombre: form.nombre.trim(),
@@ -459,6 +491,27 @@ export default function Inventario({
             cargarTodo();
             return;
           }
+        }
+      }
+
+      // Presentaciones y precio por mayor (solo si cambiaron).
+      if (
+        opcionesAGuardar &&
+        idParaImagen &&
+        opcionesVentaOriginal !== null &&
+        JSON.stringify(opcionesAGuardar) !== opcionesVentaOriginal
+      ) {
+        try {
+          await api.presentacionesGuardar(idParaImagen, opcionesAGuardar);
+          setOpcionesVentaOriginal(JSON.stringify(opcionesAGuardar));
+        } catch (e) {
+          setEditandoId(idParaImagen);
+          setMensaje({
+            tipo: 'error',
+            texto: `Producto guardado, pero no se pudieron guardar sus presentaciones o precios por mayor (${e.message}). Toca Guardar para intentarlo de nuevo.`,
+          });
+          cargarTodo();
+          return;
         }
       }
 
@@ -1066,6 +1119,22 @@ export default function Inventario({
                   </>
                 )}
               </div>
+            )}
+
+            {conOpcionesVenta && opcionesVentaOriginal === null && (
+              <p className="inv-mensaje inv-mensaje-error">
+                No se pudieron leer las presentaciones de este producto: cierra y vuelve a abrirlo antes de cambiarlas.
+              </p>
+            )}
+            {conOpcionesVenta && opcionesVentaOriginal !== null && (
+              <OpcionesDeVenta
+                opciones={opcionesVenta}
+                onCambiar={setOpcionesVenta}
+                unidad={form.unidad_medida}
+                precioNormal={parseFloat(form.precio) || 0}
+                conPresentaciones={presentaciones}
+                conPrecioMayor={precioMayor}
+              />
             )}
 
             {mensaje && <p className={`inv-mensaje inv-mensaje-${mensaje.tipo}`}>{mensaje.texto}</p>}

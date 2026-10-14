@@ -1,0 +1,101 @@
+/* Presentaciones y precio por mayor en el formulario de producto. */
+.odv {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.odv-seccion {
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.odv-seccion h3 {
+  margin: 0 0 2px;
+  font-size: 14px;
+}
+
+.odv-ayuda {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.odv-fila {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.odv-fila-mayor {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.odv-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.odv-campo span {
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.odv-campo input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 16px; /* 16px: evita el zoom de iOS */
+  background: #fff;
+}
+
+.odv-quitar {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.odv-nota {
+  grid-column: 1 / -1;
+  margin: -2px 0 2px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.odv-agregar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1.5px dashed var(--color-primario, #16a34a);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-primario, #16a34a);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (max-width: 520px) {
+  .odv-fila {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+  .odv-campo-nombre {
+    grid-column: 1 / -1;
+  }
+}

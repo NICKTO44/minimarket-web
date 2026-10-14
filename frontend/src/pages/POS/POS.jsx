@@ -13,6 +13,8 @@ import { abreviaturaUnidad } from '../../utils/unidades';
 import { UNIDAD_PIE_TABLAR, formatoCantidad, formatoPrecio, leerCantidad, seVendeFraccionado, subtotalLinea } from '../../utils/medidas';
 import CalculadoraPieTablar from '../../components/CalculadoraPieTablar';
 import CantidadFraccionada from '../../components/CantidadFraccionada';
+import ElegirPresentacion from '../../components/ElegirPresentacion';
+import { agruparOpciones, detallePresentacion, escalaPara, escalasDe, precioUnitarioDe } from '../../utils/presentaciones';
 import CotizacionImprimible from '../../components/CotizacionImprimible';
 import { numeroCotizacion } from '../../utils/formato';
 import '../../components/PantallaModulo.css';
@@ -115,6 +117,41 @@ function PrecioEditable({ valor, onCambiar, etiqueta }) {
   );
 }
 
+// Línea del carrito vendida en una presentación (módulo PRESENTACIONES):
+// n rollos de 100 m entran como n × 100 m al precio del rollo / 100. Su
+// clave es la de la presentación: dos toques suman un rollo más.
+const redondear6 = (n) => Math.round(n * 1e6) / 1e6;
+function lineaDePresentacion(producto, presentacion, n) {
+  return {
+    ...producto,
+    clave: `pres-${presentacion.id}`,
+    presentacion,
+    cantidadPresentacion: n,
+    cantidad: redondear6(presentacion.factor * n),
+    precio: precioUnitarioDe(presentacion.precio, presentacion.factor),
+    detalle: detallePresentacion(presentacion.nombre, n),
+  };
+}
+
+// Precio por volumen: en las líneas normales del carrito, el precio de la
+// escala que alcanza su cantidad (las de "Precio por mayor" y, con
+// presentaciones, la del rollo o la caja: 150 m sueltos de un cable con
+// "Rollo x 100 m a S/ 85" salen a S/ 0.85 el m). Si baja de la escala, vuelve
+// al precio del producto. No toca las líneas con clave propia (presentación,
+// pedido de mesa, cotización, medidas) ni las que tienen un precio escrito a mano.
+function conPrecioPorMayor(lineas, opciones, modulos) {
+  return lineas.map((linea) => {
+    if (linea.clave || linea.precioOriginal != null) return linea;
+    const opcion = opciones.get(linea.id);
+    if (!opcion) return linea;
+    const normal = linea.precioNormal ?? linea.precio;
+    const escala = escalaPara(escalasDe(opcion, normal, modulos), linea.cantidad);
+    const precio = escala ? escala.precio : normal;
+    if (precio === linea.precio && (escala?.origen || null) === (linea.origenPrecio || null)) return linea;
+    return { ...linea, precio, precioNormal: escala ? normal : undefined, porMayor: !!escala, origenPrecio: escala?.origen };
+  });
+}
+
 // Líneas de un pedido de mesa convertidas en carrito del POS. Cada línea
 // es independiente (el mismo café puede ir con opciones distintas), por
 // eso lleva su propia clave; "detalle" son las opciones elegidas.
@@ -185,6 +222,10 @@ export default function POS({
   precioEditable = false,
   // Módulo "Cambio de prenda": plazo de cambio que se imprime en el ticket.
   cambios = false,
+  // Módulos "Presentaciones" (rollo, caja, ciento...) y "Precio por mayor".
+  // Apagados, el punto de venta es el de siempre (ni se consultan).
+  presentaciones = false,
+  precioMayor = false,
   // Cambio de prenda en curso (viene de Devoluciones): lo que el cliente
   // devuelve; lo que se agregue al carrito es lo que se lleva.
   cambioEnCurso = null,
@@ -211,9 +252,40 @@ export default function POS({
   // Categoría elegida para ver solo sus productos (null = todas).
   const [categoriaFiltro, setCategoriaFiltro] = useState(null);
   const buscadorRef = useRef(null);
-  const [carrito, setCarrito] = useState(() =>
+  const [carrito, setCarritoCrudo] = useState(() =>
     pedidoACobrar ? carritoDePedido(pedidoACobrar) : cotizacionACargar ? carritoDeCotizacion(cotizacionACargar) : []
   );
+  // Presentaciones y precios por mayor de cada producto (Map producto_id ->
+  // { presentaciones, mayor }). Solo se cargan con alguno de los dos módulos.
+  const [opcionesVenta, setOpcionesVenta] = useState(() => new Map());
+  const opcionesRef = useRef(opcionesVenta);
+  const [productoConPresentaciones, setProductoConPresentaciones] = useState(null);
+  // Todo cambio del carrito pasa por aquí: con "Precio por mayor" se ajusta
+  // el precio de cada línea a su cantidad. Sin el módulo, es el de siempre.
+  const setCarrito = useCallback(
+    (cambio) =>
+      setCarritoCrudo((prev) => {
+        const nuevo = typeof cambio === 'function' ? cambio(prev) : cambio;
+        return precioMayor || presentaciones
+          ? conPrecioPorMayor(nuevo, opcionesRef.current, { mayor: precioMayor, presentaciones })
+          : nuevo;
+      }),
+    [precioMayor, presentaciones]
+  );
+  const recargarOpcionesVenta = useCallback(() => {
+    if (!presentaciones && !precioMayor) return;
+    api
+      .opcionesVenta()
+      .then((respuesta) => {
+        const mapa = agruparOpciones(respuesta);
+        opcionesRef.current = mapa;
+        setOpcionesVenta(mapa);
+      })
+      .catch(() => {});
+  }, [presentaciones, precioMayor]);
+  useEffect(() => {
+    recargarOpcionesVenta();
+  }, [recargarOpcionesVenta]);
   // Cotización que se está vendiendo (al cobrar queda como vendida).
   const [cotizacionEnVenta, setCotizacionEnVenta] = useState(() =>
     !pedidoACobrar && cotizacionACargar ? { id: cotizacionACargar.id, numero: cotizacionACargar.numero } : null
@@ -620,7 +692,8 @@ export default function POS({
   };
 
   // Devuelve true si el producto entró al carrito (o se abrió su calculadora).
-  const agregarAlCarrito = (producto) => {
+  // suelto: elegido "Por metro" en el selector de presentaciones.
+  const agregarAlCarrito = (producto, { suelto = false } = {}) => {
     if (cobrandoPedido) {
       setMensaje({
         tipo: 'error',
@@ -645,6 +718,11 @@ export default function POS({
       return false;
     }
     setAvisoStock(null);
+    // Con presentaciones (rollo, caja...): primero se elige cómo se lleva.
+    if (presentaciones && !suelto && opcionesVenta.get(producto.id)?.presentaciones.length) {
+      setProductoConPresentaciones(producto);
+      return true;
+    }
     // Madera por pie tablar: se abre la calculadora de medidas.
     if (esMadera) {
       setProductoAMedir(producto);
@@ -678,6 +756,29 @@ export default function POS({
         return prev.map((i) => (i === existe ? { ...i, cantidad: redondear3(i.cantidad + cantidad) } : i));
       }
       return [...prev, { ...producto, cantidad, descuentoMonto: 0 }];
+    });
+  };
+
+  // Elegida una presentación: entra (o suma una más) en su propia línea.
+  const agregarPresentacion = (presentacion) => {
+    const producto = productoConPresentaciones;
+    setProductoConPresentaciones(null);
+    if (!producto) return;
+    const clave = `pres-${presentacion.id}`;
+    const yaHay = carrito.find((i) => i.clave === clave)?.cantidadPresentacion || 0;
+    if (disponibleDe(producto.id, clave) + 1e-6 < presentacion.factor * (yaHay + 1)) {
+      setAvisoStock({ texto: textoSinStock(producto.id, producto.nombre, disponibleDe(producto.id)) });
+      recargarProductos();
+      return;
+    }
+    setCarrito((prev) => {
+      const existe = prev.find((i) => i.clave === clave);
+      if (existe) {
+        return prev.map((i) =>
+          i === existe ? { ...lineaDePresentacion(i, presentacion, existe.cantidadPresentacion + 1), descuentoMonto: i.descuentoMonto } : i
+        );
+      }
+      return [...prev, { ...lineaDePresentacion(producto, presentacion, 1), descuentoMonto: 0 }];
     });
   };
 
@@ -769,6 +870,21 @@ export default function POS({
   // − y +: de uno en uno. Con cantidades con decimales (0.5 kg) el − no
   // baja de lo que hay si quedaría en cero o menos.
   const cambiarCantidad = (clave, delta) => {
+    // En presentación, − y + cambian cuántos rollos (o cajas) se lleva.
+    const enPresentacion = carrito.find((i) => claveDe(i) === clave && i.presentacion);
+    if (enPresentacion) {
+      const n = enPresentacion.cantidadPresentacion + delta;
+      if (n < 1) return;
+      if (delta > 0 && disponibleDe(enPresentacion.id, clave) + 1e-6 < enPresentacion.presentacion.factor * n) {
+        setMensaje({ tipo: 'error', texto: textoSinStock(enPresentacion.id, enPresentacion.nombre, 0) });
+        recargarProductos();
+        return;
+      }
+      setCarrito((prev) =>
+        prev.map((i) => (claveDe(i) === clave ? { ...lineaDePresentacion(i, i.presentacion, n), descuentoMonto: i.descuentoMonto } : i))
+      );
+      return;
+    }
     // El + no pasa de lo que hay en stock.
     const linea = delta > 0 ? carrito.find((i) => claveDe(i) === clave) : null;
     if (linea) {
@@ -962,6 +1078,8 @@ export default function POS({
           cantidad: i.cantidad,
           descuentoMonto: i.descuentoMonto || 0,
           detalle: i.detalle || null,
+          // Vendido en rollo, caja...: el servidor revisa su precio y su cantidad.
+          ...(i.presentacion ? { presentacion_id: i.presentacion.id } : {}),
         })),
         total,
         // Al crédito el servidor ignora el método: el pago queda pendiente.
@@ -1096,6 +1214,8 @@ export default function POS({
       // esta pantalla estaba abierta, se vuelve a leer la lista para que al
       // agregarlo de nuevo entre con el precio nuevo.
       if (esPrecioCambiado(e)) api.productos().then(setProductos).catch(() => {});
+      // Una presentación o un precio por mayor que cambiaron: se releen también.
+      if (esPrecioCambiado(e) || /presentaci[oó]n/i.test(e?.message || '')) recargarOpcionesVenta();
     } finally {
       setProcesando(false);
     }
@@ -1112,13 +1232,17 @@ export default function POS({
   // puede imprimir de las dos formas: en ticket de 80 mm (el mismo Recibo)
   // o en A4 (el PDF real de FacturaLibre); se elige con dos botones.
   // Emisión directa: el A4 es nuestro diseño (utils/facturaA4.js), armado
-  // con el documento que se envió a SUNAT; solo si SUNAT lo aceptó.
+  // con el documento que se envió a SUNAT; solo si SUNAT lo aceptó. Ahí la
+  // boleta también se puede imprimir en ticket o en A4, igual que la factura.
   const facturaConA4 = (() => {
     const comp = ultimaVentaParaImprimir?.comprobante;
+    if (!comp?.comprobante_id) return false;
+    if (comp.tipo === 'FACTURA') return !!comp.enlace_pdf || comp.estado === 'ACEPTADO';
     return (
-      comp?.tipo === 'FACTURA' && !!comp?.comprobante_id && (!!comp?.enlace_pdf || comp?.estado === 'ACEPTADO')
+      comp.tipo === 'BOLETA' && !comp.enlace_pdf && comp.estado === 'ACEPTADO' && cfgEmisor?.facturacion_proveedor === 'SUNAT_DIRECTO'
     );
   })();
+  const nombreUltimoComprobante = ultimaVentaParaImprimir?.comprobante?.tipo === 'FACTURA' ? 'factura' : 'boleta';
 
   const imprimirA4Propio = async (comp) => {
     try {
@@ -1651,7 +1775,19 @@ export default function POS({
               <div className="pos-carrito-item-info">
                 <span className="pos-carrito-item-nombre">{item.nombre}</span>
                 {item.detalle && <span className="pos-carrito-item-detalle">{item.detalle}</span>}
-                {precioEditable && !cobrandoPedido ? (
+                {item.porMayor && (
+                  <span className="pos-carrito-item-detalle">
+                    {item.origenPrecio === 'mayor' ? 'Precio por mayor' : `Al precio de ${item.origenPrecio}`} · normal S/{' '}
+                    {formatoPrecio(item.precioNormal)}
+                  </span>
+                )}
+                {item.presentacion ? (
+                  // Rollo, caja...: su precio fijo y cuánto es en la unidad del producto.
+                  <span className="pos-carrito-item-precio">
+                    S/ {Number(item.presentacion.precio).toFixed(2)} c/u · {formatoCantidad(item.cantidad)}{' '}
+                    {abreviaturaUnidad(item.unidad_medida)} · S/ {subtotalLinea(item.precio, item.cantidad).toFixed(2)}
+                  </span>
+                ) : precioEditable && !cobrandoPedido ? (
                   <span className="pos-carrito-item-precio pos-precio-editable">
                     S/{' '}
                     <PrecioEditable
@@ -1683,7 +1819,14 @@ export default function POS({
                 )}
               </div>
               {!cobrandoPedido &&
-                (esLineaMedida(item) ? (
+                (item.presentacion ? (
+                  <div className="pos-carrito-item-controles">
+                    <button onClick={() => cambiarCantidad(claveDe(item), -1)}>−</button>
+                    <span>{item.cantidadPresentacion}</span>
+                    <button onClick={() => cambiarCantidad(claveDe(item), 1)}>+</button>
+                    <button className="pos-quitar" onClick={() => quitarDelCarrito(claveDe(item))}>🗑</button>
+                  </div>
+                ) : esLineaMedida(item) ? (
                   <div className="pos-carrito-item-controles pos-carrito-item-medida">
                     <span>
                       {formatoCantidad(item.cantidad)} {abreviaturaUnidad(item.unidad_medida)}
@@ -1986,10 +2129,10 @@ export default function POS({
                 : `Imprimir última boleta · ${ultimaVentaParaImprimir.venta.folio}`}
             </button>
           )}
-          {/* Última venta con factura: ticket de 80 mm o A4. */}
+          {/* Última venta con factura o boleta aceptada: ticket de 80 mm o A4. */}
           {ultimaVentaParaImprimir && !mostrarModalVenta && facturaConA4 && (
             <div className="pos-imprimir-factura">
-              <span>Imprimir última factura · {ultimaVentaParaImprimir.venta.folio}</span>
+              <span>Imprimir última {nombreUltimoComprobante} · {ultimaVentaParaImprimir.venta.folio}</span>
               <div className="pos-imprimir-dos">
                 <button className="pos-imprimir" onClick={() => imprimirComprobante('TICKET')}>
                   🖨 Ticket 80 mm
@@ -2124,8 +2267,33 @@ export default function POS({
         <CantidadFraccionada
           producto={productoAPesar}
           yaEnCarrito={carrito.filter((i) => i.id === productoAPesar.id).reduce((s, i) => s + i.cantidad, 0)}
+          escalas={
+            precioMayor || presentaciones
+              ? escalasDe(opcionesVenta.get(productoAPesar.id), productoAPesar.precio, { mayor: precioMayor, presentaciones })
+              : []
+          }
+          yaSuelto={carrito.find((i) => !i.clave && i.id === productoAPesar.id)?.cantidad || 0}
           onAgregar={agregarFraccion}
           onCerrar={() => setProductoAPesar(null)}
+        />
+      )}
+
+      {productoConPresentaciones && (
+        <ElegirPresentacion
+          producto={productoConPresentaciones}
+          presentaciones={opcionesVenta.get(productoConPresentaciones.id)?.presentaciones || []}
+          escalas={escalasDe(opcionesVenta.get(productoConPresentaciones.id), productoConPresentaciones.precio, {
+            mayor: precioMayor,
+            presentaciones,
+          })}
+          disponible={disponibleDe(productoConPresentaciones.id)}
+          onSuelto={() => {
+            const producto = productoConPresentaciones;
+            setProductoConPresentaciones(null);
+            agregarAlCarrito(producto, { suelto: true });
+          }}
+          onPresentacion={agregarPresentacion}
+          onCerrar={() => setProductoConPresentaciones(null)}
         />
       )}
 
@@ -2241,9 +2409,9 @@ export default function POS({
 
             <div className="pos-venta-modal-acciones">
               {facturaConA4 ? (
-                // Factura: se elige el papel con un toque.
+                // Factura o boleta: se elige el papel con un toque.
                 <div className="pos-venta-modal-formatos">
-                  <span className="pos-venta-modal-formatos-titulo">Imprimir factura en</span>
+                  <span className="pos-venta-modal-formatos-titulo">Imprimir {nombreUltimoComprobante} en</span>
                   <div className="pos-imprimir-dos">
                     <button className="pos-venta-modal-imprimir" onClick={() => imprimirComprobante('TICKET')}>
                       🖨 Ticket

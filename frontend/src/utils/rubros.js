@@ -19,6 +19,9 @@ export const MODULO_CAMBIOS = 'CAMBIOS';
 // No pertenece a ningún rubro: viene apagado y lo enciende quien lo quiera.
 export const MODULO_GANANCIAS = 'GANANCIAS';
 export const MODULO_PRECIO_VENTA = 'PRECIO_VENTA';
+// Ferretería: el mismo producto en rollo, caja o ciento, y precio por mayor.
+export const MODULO_PRESENTACIONES = 'PRESENTACIONES';
+export const MODULO_PRECIO_MAYOR = 'PRECIO_MAYOR';
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
 export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA];
 
@@ -81,6 +84,18 @@ export const MODULOS = [
     descripcion:
       'En el punto de venta puedes cambiar el precio de un producto solo para esa venta (una rebaja, un precio por mayor). La boleta o factura sale con ese precio y el producto conserva el suyo.',
   },
+  {
+    valor: MODULO_PRESENTACIONES,
+    label: 'Presentaciones',
+    descripcion:
+      'Vende el mismo producto de varias formas, cada una con su precio: cable por metro o por rollo de 100 m, tornillos por unidad, ciento o millar. El stock sigue en una sola unidad.',
+  },
+  {
+    valor: MODULO_PRECIO_MAYOR,
+    label: 'Precio por mayor',
+    descripcion:
+      'Un precio menor desde cierta cantidad (desde 50 unidades, S/ 0.80 c/u). Al vender se aplica solo cuando el cliente lleva esa cantidad.',
+  },
 ];
 
 export const RUBRO_GENERAL = 'GENERAL';
@@ -114,10 +129,13 @@ export const RUBROS = [
   {
     valor: 'FERRETERIA',
     label: 'Ferretería',
-    descripcion: 'Materiales, herramientas y pinturas; venta por unidad, metro, kilo o galón.',
+    descripcion: 'Materiales, herramientas y pinturas: por unidad, metro, kilo o galón, en rollo, caja o ciento, con precio por mayor, proformas y crédito.',
     Icono: Hammer,
-    modulos: [MODULO_SERVICIOS],
-    unidades: ['UNIDAD', 'KG', 'LITRO', 'PAQUETE', 'CAJA', 'DOCENA', 'PAR', 'METRO', 'GALON', 'BOLSA', 'ROLLO', 'MILLAR', 'JUEGO', 'PIEZA', 'PLANCHA'],
+    modulos: [MODULO_SERVICIOS, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_GUIAS, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR],
+    unidades: [
+      'UNIDAD', 'KG', 'LITRO', 'PAQUETE', 'CAJA', 'DOCENA', 'PAR', 'METRO', 'GALON', 'BOLSA', 'ROLLO', 'MILLAR', 'JUEGO',
+      'PIEZA', 'PLANCHA', 'CIENTO', 'VARILLA', 'BALDE', 'LATA', 'PLIEGO', 'TUBO',
+    ],
     etiquetas: {},
   },
   {

@@ -12,6 +12,11 @@ pub struct ProductoVenta {
     /// Se agrega al nombre guardado en la venta y en el comprobante.
     #[serde(default)]
     pub detalle: Option<String>,
+    /// Vendido en una presentación del producto ("Rollo x 100 m", migración
+    /// 0030). La línea ya llega en la unidad del producto (100 m a precio /
+    /// factor); el servidor la revisa y le pone el nombre de la presentación.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentacion_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]

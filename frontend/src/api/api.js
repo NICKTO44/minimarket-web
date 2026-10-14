@@ -146,6 +146,10 @@ export const api = {
   productosStockBajo: () => request('/productos/stock-bajo'),
   productoCrear: (data) => request('/productos', { method: 'POST', body: JSON.stringify(data) }),
   productoActualizar: (id, data) => request(`/productos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  // Presentaciones (rollo, caja...) y precio por mayor (módulos PRESENTACIONES y PRECIO_MAYOR).
+  opcionesVenta: () => request('/productos/opciones-venta'),
+  presentacionesProducto: (id) => request(`/productos/${id}/presentaciones`),
+  presentacionesGuardar: (id, data) => request(`/productos/${id}/presentaciones`, { method: 'PUT', body: JSON.stringify(data) }),
   // Importar desde Excel/CSV (solo administrador). solo_revisar: true = vista previa.
   productosImportar: (data) => request('/productos/importar', { method: 'POST', body: JSON.stringify(data) }),
   productoEliminar: (id) => request(`/productos/${id}`, { method: 'DELETE' }),

@@ -50,6 +50,11 @@ pub const MODULO_GANANCIAS: &str = "GANANCIAS";
 /// venta (así funcionan las cotizaciones); el módulo solo muestra el campo
 /// para escribirlo. Tampoco pertenece a un rubro: viene apagado.
 pub const MODULO_PRECIO_VENTA: &str = "PRECIO_VENTA";
+/// Presentaciones: el mismo producto en rollo, caja, ciento... con su
+/// precio; el stock sigue en la unidad del producto (handlers/presentaciones.rs).
+pub const MODULO_PRESENTACIONES: &str = "PRESENTACIONES";
+/// Precio por mayor: otro precio por unidad desde cierta cantidad.
+pub const MODULO_PRECIO_MAYOR: &str = "PRECIO_MAYOR";
 
 const MODULOS: &[&str] = &[
     MODULO_MESAS,
@@ -63,6 +68,8 @@ const MODULOS: &[&str] = &[
     MODULO_CAMBIOS,
     MODULO_GANANCIAS,
     MODULO_PRECIO_VENTA,
+    MODULO_PRESENTACIONES,
+    MODULO_PRECIO_MAYOR,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
@@ -79,8 +86,11 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
     ),
     (
         "FERRETERIA",
-        &[MODULO_SERVICIOS],
-        &["UNIDAD", "KG", "LITRO", "PAQUETE", "CAJA", "DOCENA", "PAR", "METRO", "GALON", "BOLSA", "ROLLO", "MILLAR", "JUEGO", "PIEZA", "PLANCHA"],
+        &[MODULO_SERVICIOS, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_GUIAS, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR],
+        &[
+            "UNIDAD", "KG", "LITRO", "PAQUETE", "CAJA", "DOCENA", "PAR", "METRO", "GALON", "BOLSA", "ROLLO", "MILLAR", "JUEGO",
+            "PIEZA", "PLANCHA", "CIENTO", "VARILLA", "BALDE", "LATA", "PLIEGO", "TUBO",
+        ],
     ),
     (
         "MADERERA",

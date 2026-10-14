@@ -212,3 +212,20 @@
   background: #d1d5db;
   cursor: not-allowed;
 }
+
+/* Precio por volumen en la ventana "¿Cuánto?" (CantidadFraccionada). */
+.pt-mayor {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--color-primario-suave);
+  color: var(--color-primario);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.pt-escalas {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: #6b7280;
+}

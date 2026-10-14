@@ -27,6 +27,12 @@ export const GRUPOS_UNIDADES = [
       { valor: 'PLANCHA', label: 'Plancha', abrev: 'plancha' },
       { valor: 'M2', label: 'Metro cuadrado', abrev: 'm²' },
       { valor: 'M3', label: 'Metro cúbico', abrev: 'm³' },
+      { valor: 'CIENTO', label: 'Ciento', abrev: 'cto' },
+      { valor: 'VARILLA', label: 'Varilla', abrev: 'var' },
+      { valor: 'BALDE', label: 'Balde', abrev: 'balde' },
+      { valor: 'LATA', label: 'Lata', abrev: 'lata' },
+      { valor: 'PLIEGO', label: 'Pliego', abrev: 'pliego' },
+      { valor: 'TUBO', label: 'Tubo', abrev: 'tubo' },
     ],
   },
   {

@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::logica::facturacion::{codigo_tipo_documento_identidad, unidad_sunat};
+use crate::logica::facturacion::{codigo_tipo_documento_identidad, unidad_sunat, unidad_sunat_directo};
 use crate::logica::tiempo::fecha_valida;
 
 /// Motivos de traslado que ofrece el sistema (catálogo 20 de SUNAT).
@@ -364,7 +364,7 @@ pub fn armar_guia_sunat(
             json!({
                 "codigo": if it.codigo.trim().is_empty() { format!("P{:03}", i + 1) } else { it.codigo.trim().to_string() },
                 "descripcion": it.descripcion,
-                "unidad": unidad_sunat(&it.unidad),
+                "unidad": unidad_sunat_directo(&it.unidad),
                 "cantidad": it.cantidad,
             })
         })

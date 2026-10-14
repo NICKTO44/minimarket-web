@@ -395,3 +395,85 @@ async fn reporte_muestra_los_gastos_del_rango_a_admin_y_cajero() {
     let texto = serde_json::to_string(&e).unwrap();
     assert!(!texto.contains("gastos"), "{texto}");
 }
+
+#[tokio::test]
+async fn ferreteria_presentaciones_y_precio_por_mayor() {
+    use minimarket_backend::handlers::presentaciones::{self, OpcionesVenta};
+    let db = base("ferreteria", "PRESENTACIONES,PRECIO_MAYOR").await;
+    let t = Arc::new(TenantDb(db.clone()));
+    abrir_caja(&t).await.unwrap();
+    let conn = db.connect().unwrap();
+    conn.execute_batch(
+        "INSERT INTO productos (id, codigo, nombre, precio, stock, categoria_id, unidad_medida) VALUES
+            (950, 'CAB-12', 'Cable THW 12', 1.00, 500, 900, 'METRO'),
+            (951, 'TOR-1', 'Tornillo 1 pulg', 0.20, 1000, 900, 'UNIDAD');",
+    )
+    .await
+    .unwrap();
+
+    // El formulario del producto guarda presentaciones y precios por mayor.
+    let opciones: OpcionesVenta = serde_json::from_value(json!({
+        "presentaciones": [{"nombre": "Rollo x 100 m", "factor": 100, "precio": 85}],
+        "precios_mayor": [{"desde": 50, "precio": 0.9}]
+    }))
+    .unwrap();
+    let Json(guardadas) = presentaciones::guardar(Extension(t.clone()), Path(950), Json(opciones)).await.unwrap();
+    assert_eq!(guardadas.presentaciones.len(), 1);
+    let rollo = guardadas.presentaciones[0].id.unwrap();
+    let Json(todas) = presentaciones::todas(Extension(t.clone())).await.unwrap();
+    assert_eq!(todas.presentaciones[0].producto_id, Some(950));
+    assert_eq!(todas.precios_mayor[0].desde, 50.0);
+
+    let rollos = |n: f64, precio: f64| {
+        json!({"id": 950, "nombre": "Cable THW 12", "precio": precio, "cantidad": 100.0 * n, "descuentoMonto": 0, "presentacion_id": rollo})
+    };
+
+    // 2 rollos: 200 m a S/ 0.85 = S/ 170, y el stock baja 200 m.
+    let venta_id = vender(&t, json!({"productos": [rollos(2.0, 0.85)], "total": 170.0})).await.unwrap();
+    assert_eq!(uno(&db, "SELECT stock FROM productos WHERE id = ?1", [950]).await, 300.0);
+    let (nombre, unidad, cantidad) = {
+        let mut f = conn
+            .query("SELECT nombre_producto, unidad_medida, cantidad FROM detalles_venta WHERE venta_id = ?1", libsql::params![venta_id])
+            .await
+            .unwrap();
+        let fila = f.next().await.unwrap().unwrap();
+        let datos = (fila.get::<String>(0).unwrap(), fila.get::<String>(1).unwrap(), fila.get::<f64>(2).unwrap());
+        while f.next().await.unwrap().is_some() {}
+        datos
+    };
+    assert_eq!(nombre, "Cable THW 12 (2 × Rollo x 100 m)");
+    assert_eq!(unidad, "METRO");
+    assert_eq!(cantidad, 200.0);
+
+    // Precio inventado, o 1.5 rollos: no.
+    let (codigo, _) = vender(&t, json!({"productos": [rollos(1.0, 0.5)], "total": 50.0})).await.unwrap_err();
+    assert_eq!(codigo, StatusCode::CONFLICT);
+    let (codigo, _) = vender(&t, json!({"productos": [rollos(1.5, 0.85)], "total": 127.5})).await.unwrap_err();
+    assert_eq!(codigo, StatusCode::BAD_REQUEST);
+    // Una presentación que no es de ese producto: no.
+    let mut ajena = rollos(1.0, 0.85);
+    ajena["presentacion_id"] = json!(rollo + 999);
+    assert_eq!(vender(&t, json!({"productos": [ajena], "total": 85.0})).await.unwrap_err().0, StatusCode::CONFLICT);
+
+    // Por metro, como siempre: precio normal.
+    vender(&t, json!({"productos": [linea(950, 1.0, 10.0)], "total": 10.0})).await.unwrap();
+    // Por mayor: desde 50 m vale S/ 0.90; con menos, no.
+    vender(&t, json!({"productos": [linea(950, 0.9, 60.0)], "total": 54.0})).await.unwrap();
+    assert_eq!(vender(&t, json!({"productos": [linea(950, 0.9, 40.0)], "total": 36.0})).await.unwrap_err().0, StatusCode::CONFLICT);
+    assert_eq!(uno(&db, "SELECT stock FROM productos WHERE id = ?1", [950]).await, 230.0);
+
+    // 150 m sueltos: como pasa los 100 m del rollo, el metro sale al precio del rollo.
+    vender(&t, json!({"productos": [linea(950, 0.85, 150.0)], "total": 127.5})).await.unwrap();
+    // Con 99 m, no.
+    assert_eq!(vender(&t, json!({"productos": [linea(950, 0.85, 99.0)], "total": 84.15})).await.unwrap_err().0, StatusCode::CONFLICT);
+    assert_eq!(uno(&db, "SELECT stock FROM productos WHERE id = ?1", [950]).await, 80.0);
+
+    // Un producto sin nada de esto sigue igual: su precio y nada más.
+    vender(&t, json!({"productos": [linea(951, 0.2, 10.0)], "total": 2.0})).await.unwrap();
+    assert_eq!(vender(&t, json!({"productos": [linea(951, 0.1, 10.0)], "total": 1.0})).await.unwrap_err().0, StatusCode::CONFLICT);
+
+    // Si el negocio cambia la presentación, la que estaba en un carrito ya no vale.
+    let nuevas: OpcionesVenta = serde_json::from_value(json!({"presentaciones": [{"nombre": "Rollo x 100 m", "factor": 100, "precio": 90}]})).unwrap();
+    let _ = presentaciones::guardar(Extension(t.clone()), Path(950), Json(nuevas)).await.unwrap();
+    assert_eq!(vender(&t, json!({"productos": [rollos(1.0, 0.85)], "total": 85.0})).await.unwrap_err().0, StatusCode::CONFLICT);
+}

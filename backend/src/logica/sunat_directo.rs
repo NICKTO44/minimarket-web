@@ -12,7 +12,7 @@
 
 use serde_json::{json, Value};
 
-use crate::logica::facturacion::{codigo_tipo_documento_identidad, unidad_sunat, DatosParaEmitir};
+use crate::logica::facturacion::{codigo_tipo_documento_identidad, unidad_sunat_directo, DatosParaEmitir};
 use crate::logica::igv::{valor_sin_igv, Afectacion};
 
 /// Datos del negocio que van en el comprobante como emisor.
@@ -107,7 +107,7 @@ pub fn armar_documento(
             let valor_venta = round2(it.cantidad * valor_unitario);
             let igv = if gravado { round2(it.cantidad * it.precio_unitario - valor_venta) } else { 0.0 };
             json!({
-                "unidad": unidad_sunat(&it.unidad_medida),
+                "unidad": unidad_sunat_directo(&it.unidad_medida),
                 "cantidad": it.cantidad,
                 "codProducto": format!("P{:03}", idx + 1),
                 "codProdSunat": codigo_producto_sunat,

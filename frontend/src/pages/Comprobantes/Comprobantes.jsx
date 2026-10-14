@@ -366,10 +366,14 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     };
   };
 
-  // Factura con hoja A4: la de FacturaLibre (su PDF oficial) o la emitida
-  // directo a SUNAT y aceptada (nuestro diseño, utils/facturaA4.js).
+  // Comprobante con hoja A4 (además del ticket de 80 mm):
+  // - la factura de FacturaLibre (su PDF oficial);
+  // - la factura o la boleta emitida directo a SUNAT y aceptada (nuestro
+  //   diseño, utils/facturaA4.js, armado con el documento que se envió).
   const a4Propio = (comp) => comp.proveedor === 'SUNAT_DIRECTO' && comp.estado === 'ACEPTADO' && !comp.enlace_pdf;
-  const facturaConA4 = (comp) => comp.tipo === 'FACTURA' && !!comp.id && (!!comp.enlace_pdf || a4Propio(comp));
+  const facturaConA4 = (comp) =>
+    !!comp.id && ((comp.tipo === 'FACTURA' && (!!comp.enlace_pdf || a4Propio(comp))) || (comp.tipo === 'BOLETA' && a4Propio(comp)));
+  const nombreTipo = (comp) => (comp.tipo === 'FACTURA' ? 'factura' : 'boleta');
 
   // Nuestro A4, armado con el documento que se envió a SUNAT.
   const imprimirA4Propio = async (comp) => {
@@ -403,10 +407,10 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
 
   const reimprimir = (evento, comp) => {
     setMensaje(null);
-    // La factura se puede imprimir en ticket de 80 mm o en A4: se pregunta.
+    // La factura y la boleta se pueden imprimir en ticket de 80 mm o en A4: se pregunta.
     if (facturaConA4(comp)) {
       abrirMenu(evento, comp, [
-        { cual: 'ticket', titulo: 'Ticket 80 mm', detalle: 'Para la impresora térmica, igual que la boleta' },
+        { cual: 'ticket', titulo: 'Ticket 80 mm', detalle: 'Para la impresora térmica' },
         {
           cual: 'a4',
           titulo: 'Hoja A4',
@@ -415,8 +419,8 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
       ]);
       return;
     }
-    // Boleta, o comprobante sin PDF real (nota simple, o rechazado) —
-    // usamos nuestro ticket propio.
+    // Nota simple, o comprobante sin A4 (rechazado, o boleta de FacturaLibre):
+    // nuestro ticket propio.
     imprimirTicket(comp);
   };
 
@@ -490,15 +494,15 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   // Lo que se puede descargar de una fila. El PDF siempre; el XML y la
   // constancia solo de boletas y facturas aceptadas por SUNAT.
   const opcionesDescarga = (comp) => {
-    const opciones = a4Propio(comp) && comp.tipo === 'FACTURA'
+    const opciones = a4Propio(comp) && facturaConA4(comp)
       ? [
           { cual: 'a4', titulo: 'PDF A4', detalle: 'Se abre para imprimir: elige "Guardar como PDF"' },
-          { cual: 'pdf80', titulo: 'PDF ticket 80 mm', detalle: 'La misma factura en formato ticket' },
+          { cual: 'pdf80', titulo: 'PDF ticket 80 mm', detalle: `La misma ${nombreTipo(comp)} en formato ticket` },
         ]
       : facturaConA4(comp)
       ? [
           { cual: 'pdf', titulo: 'PDF A4', detalle: 'El de FacturaLibre, para imprimir o enviar' },
-          { cual: 'pdf80', titulo: 'PDF ticket 80 mm', detalle: 'La misma factura en formato ticket' },
+          { cual: 'pdf80', titulo: 'PDF ticket 80 mm', detalle: `La misma ${nombreTipo(comp)} en formato ticket` },
         ]
       : [
           {

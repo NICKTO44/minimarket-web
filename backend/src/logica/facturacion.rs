@@ -79,6 +79,41 @@ pub fn unidad_sunat(unidad_medida: &str) -> &'static str {
     }
 }
 
+/// Unidad de medida (catálogo 03 de SUNAT) para la emisión DIRECTA a SUNAT
+/// (comprobantes y guías). Además de las de peso y volumen, manda la unidad
+/// real de lo que se vende por metro, galón, caja, docena...: antes todo eso
+/// salía como NIU ("Unidad") y una factura de 25 m de cable decía "25 Unidad".
+///
+/// Solo códigos que están tanto en la lista clásica de SUNAT como en la
+/// UN/ECE Rec. 20 que SUNAT valida hoy. Las unidades sin un código seguro
+/// (rollo, millar, saco, plancha, pie tablar, varilla, las de restaurante)
+/// siguen como NIU, igual que antes. FacturaLibre sigue con `unidad_sunat`.
+pub fn unidad_sunat_directo(unidad_medida: &str) -> &'static str {
+    match unidad_medida {
+        "METRO" => "MTR",
+        "GALON" => "GLL",
+        "CAJA" => "BX",
+        "PAQUETE" => "PK",
+        "DOCENA" => "DZN",
+        "PAR" => "PR",
+        "JUEGO" => "SET",
+        "BOLSA" => "BG",
+        "PIEZA" => "C62",
+        "M2" => "MTK",
+        "M3" => "MTQ",
+        "TONELADA" => "TNE",
+        "LIBRA" => "LBR",
+        "ONZA" => "ONZ",
+        "YARDA" => "YRD",
+        "CIENTO" => "CEN",
+        "BALDE" => "BJ",
+        "LATA" => "CA",
+        "PLIEGO" => "ST",
+        "TUBO" => "TU",
+        otra => unidad_sunat(otra),
+    }
+}
+
 /// Catálogo 06 de SUNAT (tipos de documento de identidad). Pública para
 /// que el handler la reuse al armar el ComprobanteResponse — así el
 /// código que va al QR es exactamente el mismo que se mandó a
@@ -363,5 +398,32 @@ pub async fn emitir_facturalibre(
             hash: None,
             fecha_emision: hoy,
         },
+    }
+}
+#[cfg(test)]
+mod pruebas_unidades {
+    use super::*;
+
+    #[test]
+    fn facturalibre_sigue_igual() {
+        // Lo que ya se emitía por FacturaLibre no cambia.
+        for (u, c) in [("UNIDAD", "NIU"), ("KG", "KGM"), ("GRAMO", "GRM"), ("LITRO", "LTR"), ("ML", "MLT"), ("PAQUETE", "NIU"), ("METRO", "NIU"), ("DOCENA", "NIU")] {
+            assert_eq!(unidad_sunat(u), c, "{u}");
+        }
+    }
+
+    #[test]
+    fn directo_manda_la_unidad_real() {
+        for (u, c) in [
+            ("UNIDAD", "NIU"), ("KG", "KGM"), ("LITRO", "LTR"), ("METRO", "MTR"), ("GALON", "GLL"), ("CAJA", "BX"),
+            ("PAQUETE", "PK"), ("DOCENA", "DZN"), ("PAR", "PR"), ("JUEGO", "SET"), ("CIENTO", "CEN"), ("M2", "MTK"),
+            ("PIEZA", "C62"), ("BALDE", "BJ"), ("LATA", "CA"), ("PLIEGO", "ST"), ("TUBO", "TU"),
+        ] {
+            assert_eq!(unidad_sunat_directo(u), c, "{u}");
+        }
+        // Sin código seguro: como antes.
+        for u in ["ROLLO", "MILLAR", "SACO", "PLANCHA", "PIE_TABLAR", "VARILLA", "PLATO", "PORCION"] {
+            assert_eq!(unidad_sunat_directo(u), "NIU", "{u}");
+        }
     }
 }

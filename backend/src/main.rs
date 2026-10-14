@@ -215,6 +215,12 @@ async fn main() {
         .route("/productos", get(handlers::productos::listar_productos))
         .route("/productos", post(handlers::productos::agregar_producto))
         .route("/productos/stock-bajo", get(handlers::productos::productos_stock_bajo))
+        // Presentaciones (rollo, caja...) y precio por mayor (handlers/presentaciones.rs).
+        .route("/productos/opciones-venta", get(handlers::presentaciones::todas))
+        .route(
+            "/productos/:id/presentaciones",
+            get(handlers::presentaciones::del_producto).put(handlers::presentaciones::guardar),
+        )
         // Importar desde Excel/CSV: hasta 5,000 filas en una sola petición.
         .route(
             "/productos/importar",

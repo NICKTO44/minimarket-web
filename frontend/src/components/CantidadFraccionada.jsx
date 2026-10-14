@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Package, Scale } from 'lucide-react';
-import { formatoCantidad, leerCantidad, subtotalLinea } from '../utils/medidas';
+import { formatoCantidad, formatoPrecio, leerCantidad, subtotalLinea } from '../utils/medidas';
 import { abreviaturaUnidad, etiquetaUnidad } from '../utils/unidades';
+import { escalaPara } from '../utils/presentaciones';
 import './CalculadoraPieTablar.css';
 
 // Atajos según la unidad: en kilos, litros o metros se vende por fracción
@@ -21,7 +22,11 @@ const ATAJOS_POR_DEFECTO = ['1/4', '1/2', '3/4', '1', '2'];
  * escribir la cantidad ("0.75", "1/2", "1 1/2") o el monto en soles que
  * pide el cliente ("S/ 5 de azúcar"), y se calcula la cantidad.
  */
-export default function CantidadFraccionada({ producto, yaEnCarrito = 0, onAgregar, onCerrar }) {
+// escalas: precios por volumen del producto (precio por mayor y el del rollo
+// o la caja, ver utils/presentaciones.js), y yaSuelto lo que ya está en su
+// línea del carrito: se muestra el precio que se cobrará antes de agregar.
+// Sin escalas, la ventana es la de siempre.
+export default function CantidadFraccionada({ producto, yaEnCarrito = 0, escalas = [], yaSuelto = 0, onAgregar, onCerrar }) {
   const [modo, setModo] = useState('CANTIDAD');
   const [texto, setTexto] = useState('');
   const campo = useRef(null);
@@ -51,9 +56,12 @@ export default function CantidadFraccionada({ producto, yaEnCarrito = 0, onAgreg
       : monto && producto.precio > 0
         ? Math.round((monto / producto.precio) * 1000) / 1000 || null
         : null;
+  // Precio por volumen que alcanza la línea con lo nuevo (o el normal).
+  const escala = cantidad ? escalaPara(escalas, yaSuelto + cantidad) : null;
+  const precioAplicado = escala ? escala.precio : producto.precio;
   // Lo que se cobrará en el carrito (precio × cantidad, al céntimo). Por
   // monto puede diferir en un céntimo de lo escrito por el redondeo.
-  const importe = cantidad ? subtotalLinea(producto.precio, cantidad) : 0;
+  const importe = cantidad ? subtotalLinea(precioAplicado, cantidad) : 0;
   const controlaStock = producto.controla_stock !== false;
   const disponible = Math.max(0, producto.stock - yaEnCarrito);
   const sinStock = controlaStock && cantidad !== null && cantidad > disponible + 1e-6;
@@ -122,6 +130,17 @@ export default function CantidadFraccionada({ producto, yaEnCarrito = 0, onAgreg
           </span>
           <strong>S/ {importe.toFixed(2)}</strong>
         </div>
+        {escala && (
+          <p className="pt-mayor">
+            {escala.origen === 'mayor' ? 'Precio por mayor' : `Al precio de ${escala.origen}`}: S/ {formatoPrecio(escala.precio)} por {unidad}
+            {' '}(normal S/ {formatoPrecio(producto.precio)})
+          </p>
+        )}
+        {escalas.length > 0 && (
+          <p className="pt-escalas">
+            {escalas.map((e) => `Desde ${formatoCantidad(e.desde)} ${unidad}: S/ ${formatoPrecio(e.precio)}`).join(' · ')}
+          </p>
+        )}
         {sinStock && (
           <p className="pt-aviso">
             No alcanza el stock: quedan {formatoCantidad(disponible)} {unidad}.

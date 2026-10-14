@@ -431,6 +431,45 @@ pub async fn procesar_venta(
     // Una venta que sale de una cotización pendiente puede llevar el precio
     // cotizado. Antes el navegador podía mandar cualquier precio.
     let revisar_precios = !precio_libre && payload.pedido_id.is_none();
+
+    // Presentaciones y precio por mayor (migración 0030, handlers/presentaciones.rs).
+    // Solo se consultan si la venta los usa: una venta común hace las mismas
+    // consultas de siempre.
+    let mut especiales: Option<std::collections::HashMap<i64, crate::handlers::presentaciones::Especiales>> = None;
+    if payload.productos.iter().any(|p| p.presentacion_id.is_some()) {
+        let esp = crate::handlers::presentaciones::especiales_de(&conn, &ids).await;
+        for p in payload.productos.iter_mut() {
+            let Some(pid) = p.presentacion_id else { continue };
+            let Some((nombre_pres, factor, precio_pres)) =
+                esp.get(&p.id).and_then(|e| e.presentaciones.get(&pid)).cloned()
+            else {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!("La presentación de {} cambió. Quítalo del carrito y vuelve a agregarlo.", p.nombre),
+                ));
+            };
+            let Some(n) = crate::handlers::presentaciones::presentaciones_en(p.cantidad, factor) else {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!("La cantidad de {} no corresponde a \"{}\". Vuelve a agregarlo.", p.nombre, nombre_pres),
+                ));
+            };
+            let precio_esperado = crate::handlers::presentaciones::precio_unitario_de(precio_pres, factor);
+            if revisar_precios && (p.precio - precio_esperado).abs() >= 1e-6 {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!(
+                        "El precio de {} ({}) cambió: ahora es S/ {:.2}. Quítalo del carrito y vuelve a agregarlo.",
+                        p.nombre, nombre_pres, precio_pres
+                    ),
+                ));
+            }
+            // El nombre en la venta y el comprobante: "Cable (2 × Rollo x 100 m)".
+            p.detalle = Some(format!("{} × {}", n, nombre_pres));
+        }
+        especiales = Some(esp);
+    }
+
     let mut cotizados: std::collections::HashMap<i64, Vec<f64>> = std::collections::HashMap::new();
     if revisar_precios {
         if let Some(cotizacion_id) = payload.cotizacion_id {
@@ -448,10 +487,26 @@ pub async fn procesar_venta(
             }
         }
         for p in &payload.productos {
+            // Las de presentación ya se revisaron arriba.
+            if p.presentacion_id.is_some() {
+                continue;
+            }
             let Some(datos) = leidos.get(&p.id) else { continue };
             let precio_producto = datos.5;
             let de_cotizacion = cotizados.get(&p.id).map(Vec::as_slice).unwrap_or(&[]);
-            if !precio_permitido(p.precio, precio_producto, de_cotizacion) {
+            if precio_permitido(p.precio, precio_producto, de_cotizacion) {
+                continue;
+            }
+            // Precio por mayor (o el de una presentación cuando se lleva su
+            // cantidad o más): se consulta solo si el precio no es el de siempre.
+            if especiales.is_none() {
+                especiales = Some(crate::handlers::presentaciones::especiales_de(&conn, &ids).await);
+            }
+            let por_mayor = especiales
+                .as_ref()
+                .and_then(|e| e.get(&p.id))
+                .is_some_and(|e| crate::handlers::presentaciones::precio_por_volumen_valido(p.precio, p.cantidad, e));
+            if !por_mayor {
                 let nombre = datos.2.clone().unwrap_or_else(|| p.nombre.clone());
                 return Err((
                     StatusCode::CONFLICT,
@@ -881,7 +936,7 @@ mod pruebas_total {
     use crate::models::venta::ProductoVenta;
 
     fn linea(precio: f64, cantidad: f64) -> ProductoVenta {
-        ProductoVenta { id: 1, nombre: "Polo".into(), precio, cantidad, descuento_monto: None, detalle: None }
+        ProductoVenta { id: 1, nombre: "Polo".into(), precio, cantidad, descuento_monto: None, detalle: None, presentacion_id: None }
     }
 
     #[test]

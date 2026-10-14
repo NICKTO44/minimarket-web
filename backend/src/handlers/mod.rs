@@ -2,6 +2,7 @@ pub mod auth;
 pub mod direcciones;
 pub mod app_instalable;
 pub mod productos;
+pub mod presentaciones;
 pub mod clientes;
 pub mod ventas;
 pub mod lotes;
