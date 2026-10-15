@@ -399,6 +399,10 @@ pub fn armar_guia_sunat(
             transportista["nroMtc"] = json!(mtc);
         }
         envio["transportista"] = transportista;
+        // Transporte público: SUNAT exige también la fecha de entrega de los
+        // bienes al transportista (error 3617 sin ella). Es el mismo día del
+        // traslado.
+        envio["fecEntregaBienes"] = json!(format!("{}T00:00:00-05:00", datos.fecha_traslado));
     }
 
     let nombre_comercial = if emisor.nombre_comercial.trim().is_empty() { emisor.razon_social.trim() } else { emisor.nombre_comercial.trim() };
@@ -661,6 +665,7 @@ mod pruebas {
         assert_eq!(g["addDocs"][0]["tipo"], "01");
         assert_eq!(g["details"][0]["codigo"], "M1");
         assert!(g["envio"].get("transportista").is_none());
+        assert!(g["envio"].get("fecEntregaBienes").is_none());
 
         let mut publico = base();
         publico.modo = "PUBLICO".into();
@@ -669,6 +674,7 @@ mod pruebas {
         let g = armar_guia_sunat(&d, &emisor, "T001", 6, "2026-10-04", "09:30:00", None);
         assert_eq!(g["envio"]["modTraslado"], "01");
         assert_eq!(g["envio"]["transportista"]["nroMtc"], "ABC123");
+        assert_eq!(g["envio"]["fecEntregaBienes"], "2026-10-04T00:00:00-05:00");
         assert!(g["envio"].get("choferes").is_none());
         assert!(g.get("addDocs").is_none());
     }
