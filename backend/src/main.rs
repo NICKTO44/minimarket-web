@@ -217,6 +217,12 @@ async fn main() {
         .route("/productos/stock-bajo", get(handlers::productos::productos_stock_bajo))
         // Presentaciones (rollo, caja...) y precio por mayor (handlers/presentaciones.rs).
         .route("/productos/opciones-venta", get(handlers::presentaciones::todas))
+        .route("/medicamentos/fichas", get(handlers::medicamentos::todas))
+        .route("/recetas", get(handlers::recetas::libro))
+        .route(
+            "/productos/:id/ficha",
+            axum::routing::put(handlers::medicamentos::guardar).delete(handlers::medicamentos::quitar),
+        )
         .route(
             "/productos/:id/presentaciones",
             get(handlers::presentaciones::del_producto).put(handlers::presentaciones::guardar),
@@ -256,6 +262,8 @@ async fn main() {
         .route("/lotes", post(handlers::lotes::agregar_lote))
         .route("/productos/:id/lotes", get(handlers::lotes::obtener_lotes_de_producto))
         .route("/lotes/por-vencer", get(handlers::lotes::lotes_por_vencer))
+        .route("/lotes/mermas", get(handlers::lotes::reporte_mermas))
+        .route("/lotes/:id/ventas", get(handlers::lotes::ventas_de_lote))
         .route("/lotes/:id/descartar", post(handlers::lotes::descartar_lote))
         .route("/cajas/abrir", post(handlers::cajas::abrir_caja))
         .route("/cajas/cerrar", post(handlers::cajas::cerrar_caja))
@@ -278,6 +286,10 @@ async fn main() {
         .route("/devoluciones-proveedor", post(handlers::devoluciones_proveedor::registrar_devolucion))
         .route("/devoluciones-proveedor", get(handlers::devoluciones_proveedor::listar_devoluciones))
         .route("/devoluciones-proveedor/:id/resolver", post(handlers::devoluciones_proveedor::resolver_devolucion))
+        .route(
+            "/devoluciones-proveedor/:id/nota-credito",
+            axum::routing::put(handlers::devoluciones_proveedor::anotar_nota_credito),
+        )
         .route("/reportes/ventas", get(handlers::reportes::ventas_por_rango))
         .route("/reportes/productos-vendidos", get(handlers::reportes::productos_mas_vendidos))
         .route("/reportes/estadisticas", get(handlers::reportes::estadisticas_completas))

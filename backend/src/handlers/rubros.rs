@@ -55,6 +55,23 @@ pub const MODULO_PRECIO_VENTA: &str = "PRECIO_VENTA";
 pub const MODULO_PRESENTACIONES: &str = "PRESENTACIONES";
 /// Precio por mayor: otro precio por unidad desde cierta cantidad.
 pub const MODULO_PRECIO_MAYOR: &str = "PRECIO_MAYOR";
+/// Farmacia / Botica: principio activo, concentración, forma, laboratorio,
+/// registro sanitario y condición de venta de cada medicamento
+/// (handlers/medicamentos.rs).
+pub const MODULO_FICHA_MEDICAMENTO: &str = "FICHA_MEDICAMENTO";
+/// Farmacia: no se cobra un medicamento con receta sin ella, y libro de
+/// recetas (handlers/recetas.rs). Necesita FICHA_MEDICAMENTO.
+pub const MODULO_RECETAS: &str = "RECETAS";
+/// Farmacia: en el punto de venta, los productos con el mismo principio
+/// activo, concentración y forma (para un agotado o uno más barato). Se
+/// calcula en el navegador con las fichas. Necesita FICHA_MEDICAMENTO.
+pub const MODULO_ALTERNATIVAS: &str = "ALTERNATIVAS";
+
+/// (módulo, el módulo que necesita encendido).
+const DEPENDENCIAS: &[(&str, &str)] = &[
+    (MODULO_RECETAS, MODULO_FICHA_MEDICAMENTO),
+    (MODULO_ALTERNATIVAS, MODULO_FICHA_MEDICAMENTO),
+];
 
 const MODULOS: &[&str] = &[
     MODULO_MESAS,
@@ -70,6 +87,9 @@ const MODULOS: &[&str] = &[
     MODULO_PRECIO_VENTA,
     MODULO_PRESENTACIONES,
     MODULO_PRECIO_MAYOR,
+    MODULO_FICHA_MEDICAMENTO,
+    MODULO_RECETAS,
+    MODULO_ALTERNATIVAS,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
@@ -102,8 +122,24 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
         &[MODULO_CREDITO, MODULO_VARIANTES, MODULO_CAMBIOS],
         &["UNIDAD", "PAR", "DOCENA", "PAQUETE", "CAJA", "JUEGO"],
     ),
+    (
+        "FARMACIA",
+        &[MODULO_FICHA_MEDICAMENTO, MODULO_RECETAS, MODULO_ALTERNATIVAS, MODULO_PRESENTACIONES],
+        &[
+            "UNIDAD", "TABLETA", "CAPSULA", "BLISTER", "CAJA", "FRASCO", "AMPOLLA", "VIAL", "SOBRE", "TUBO",
+            "SUPOSITORIO", "OVULO", "PARCHE", "ML", "GRAMO", "PAQUETE",
+        ],
+    ),
     (RUBRO_GENERAL, &[], &[]),
 ];
+
+/// El primer módulo de la lista que necesita otro que no está encendido.
+pub fn faltante(modulos: &[String]) -> Option<(&'static str, &'static str)> {
+    DEPENDENCIAS
+        .iter()
+        .find(|(m, necesita)| modulos.iter().any(|x| x == m) && !modulos.iter().any(|x| x == necesita))
+        .copied()
+}
 
 fn plantilla(rubro: &str) -> Option<&'static (&'static str, &'static [&'static str], &'static [&'static str])> {
     RUBROS.iter().find(|r| r.0 == rubro)
@@ -195,6 +231,12 @@ pub async fn guardar_negocio(
     }
     if let Some(malo) = payload.modulos.iter().find(|m| !MODULOS.contains(&m.as_str())) {
         return Err((StatusCode::BAD_REQUEST, format!("Módulo no válido: {}", malo)));
+    }
+    if let Some((modulo, necesita)) = faltante(&payload.modulos) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("El módulo {} necesita encendido también el módulo {}.", modulo, necesita),
+        ));
     }
     let conn = tenant.0.connect().map_err(e500)?;
     let actualizando = || (StatusCode::CONFLICT, "Aún no se puede guardar: el sistema se está actualizando. Intenta en un minuto.".to_string());

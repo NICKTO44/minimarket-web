@@ -149,44 +149,73 @@ fn es_corte_de_sesion(mensaje: &str) -> bool {
 // cuántos sean: uno lee sus lotes y otro los descuenta. Va dentro de la
 // transacción de la venta, que debe ser corta.
 // `pedidos`: (producto_id, cantidad vendida) ya sumada por producto.
-async fn descontar_stock_fefo(conn: &libsql::Connection, pedidos: &[(i64, f64)]) -> Result<(), String> {
+// Si la base tiene la tabla venta_lotes (migración 0033), anota de qué lote
+// salió cada cantidad, en el mismo viaje que el descuento.
+async fn descontar_stock_fefo(conn: &libsql::Connection, venta_id: i64, pedidos: &[(i64, f64)]) -> Result<(), String> {
     if pedidos.is_empty() {
         return Ok(());
     }
     // Los ids son enteros: se escriben directo en la lista.
     let productos = pedidos.iter().map(|(id, _)| id.to_string()).collect::<Vec<_>>().join(",");
+    // Un lote vencido NO se vende: vale hasta el día de su vencimiento
+    // inclusive (hora de Lima). Se leen también los vencidos solo para
+    // poder decir cuántos hay en el mensaje de error.
+    let hoy = crate::handlers::carta::hoy_lima();
     let mut rows = conn
         .query(
             &format!(
-                "SELECT id, producto_id, CAST(cantidad AS REAL) FROM lotes_producto
-                 WHERE producto_id IN ({}) AND activo = 1 AND cantidad > 0
-                 ORDER BY producto_id, fecha_vencimiento ASC, id ASC",
+                "SELECT l.id, l.producto_id, CAST(l.cantidad AS REAL), p.nombre,
+                        CASE WHEN date(l.fecha_vencimiento) < ?1 THEN 1 ELSE 0 END,
+                        (SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'venta_lotes')
+                 FROM lotes_producto l JOIN productos p ON p.id = l.producto_id
+                 WHERE l.producto_id IN ({}) AND l.activo = 1 AND l.cantidad > 0
+                 ORDER BY l.producto_id, l.fecha_vencimiento ASC, l.id ASC",
                 productos
             ),
-            (),
+            libsql::params![hoy],
         )
         .await
         .map_err(|e| format!("Error al leer lotes: {}", e))?;
 
-    // producto_id -> sus lotes (id, cantidad), del que vence antes al que vence después.
+    // producto_id -> sus lotes VIGENTES (id, cantidad), del que vence antes
+    // al que vence después; aparte, cuánto hay vencido y el nombre.
     let mut lotes: std::collections::HashMap<i64, Vec<(i64, f64)>> = std::collections::HashMap::new();
+    let mut vencido: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
+    let mut nombres: std::collections::HashMap<i64, String> = std::collections::HashMap::new();
+    let mut anotar_lotes = false;
     while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
-        lotes
-            .entry(row.get::<i64>(1).unwrap_or_default())
-            .or_default()
-            .push((row.get(0).unwrap_or_default(), row.get(2).unwrap_or(0.0)));
+        anotar_lotes = row.get::<i64>(5).unwrap_or(0) > 0;
+        let producto_id = row.get::<i64>(1).unwrap_or_default();
+        let cantidad = row.get::<f64>(2).unwrap_or(0.0);
+        if let Ok(nombre) = row.get::<String>(3) {
+            nombres.entry(producto_id).or_insert(nombre);
+        }
+        if row.get::<i64>(4).unwrap_or(0) == 1 {
+            *vencido.entry(producto_id).or_insert(0.0) += cantidad;
+        } else {
+            lotes.entry(producto_id).or_default().push((row.get(0).unwrap_or_default(), cantidad));
+        }
     }
 
-    // (lote_id, cuánto se le descuenta)
-    let mut descuentos: Vec<(i64, f64)> = Vec::new();
+    // (lote_id, cuánto se le descuenta, producto_id)
+    let mut descuentos: Vec<(i64, f64, i64)> = Vec::new();
     for (producto_id, cantidad_requerida) in pedidos {
         let del_producto = lotes.get(producto_id).map(Vec::as_slice).unwrap_or(&[]);
         let disponible_total: f64 = del_producto.iter().map(|(_, c)| c).sum();
         if disponible_total + 1e-6 < *cantidad_requerida {
-            return Err(format!(
-                "Stock insuficiente por vencimiento (disponible: {}, solicitado: {})",
-                disponible_total, cantidad_requerida
-            ));
+            let nombre = nombres.get(producto_id).cloned().unwrap_or_else(|| format!("Producto #{}", producto_id));
+            let vencidos = vencido.get(producto_id).copied().unwrap_or(0.0);
+            return Err(if vencidos > 1e-9 {
+                format!(
+                    "\"{}\": solo hay {} sin vencer (solicitado: {}). Hay {} en lotes vencidos que no se pueden vender; descártalos en Stock y lotes.",
+                    nombre, redondear_2(disponible_total), redondear_2(*cantidad_requerida), redondear_2(vencidos)
+                )
+            } else {
+                format!(
+                    "\"{}\": stock insuficiente por vencimiento (disponible: {}, solicitado: {})",
+                    nombre, redondear_2(disponible_total), redondear_2(*cantidad_requerida)
+                )
+            });
         }
         let mut restante = *cantidad_requerida;
         for (lote_id, cantidad_lote) in del_producto {
@@ -194,7 +223,7 @@ async fn descontar_stock_fefo(conn: &libsql::Connection, pedidos: &[(i64, f64)])
                 break;
             }
             let a_descontar = cantidad_lote.min(restante);
-            descuentos.push((*lote_id, a_descontar));
+            descuentos.push((*lote_id, a_descontar, *producto_id));
             restante -= a_descontar;
         }
     }
@@ -204,14 +233,23 @@ async fn descontar_stock_fefo(conn: &libsql::Connection, pedidos: &[(i64, f64)])
 
     // Solo números ya validados: se escriben directo en la sentencia. El
     // trigger de lotes recalcula el stock de cada producto.
-    let casos: String = descuentos.iter().map(|(id, cantidad)| format!(" WHEN {} THEN {}", id, cantidad)).collect();
-    let lista: String = descuentos.iter().map(|(id, _)| id.to_string()).collect::<Vec<_>>().join(",");
-    conn.execute(
-        &format!("UPDATE lotes_producto SET cantidad = MAX(cantidad - CASE id{} ELSE 0 END, 0) WHERE id IN ({})", casos, lista),
-        (),
-    )
-    .await
-    .map_err(|e| format!("Error al descontar lote: {}", e))?;
+    let casos: String = descuentos.iter().map(|(id, cantidad, _)| format!(" WHEN {} THEN {}", id, cantidad)).collect();
+    let lista: String = descuentos.iter().map(|(id, _, _)| id.to_string()).collect::<Vec<_>>().join(",");
+    let mut sql = format!("UPDATE lotes_producto SET cantidad = MAX(cantidad - CASE id{} ELSE 0 END, 0) WHERE id IN ({});", casos, lista);
+    if anotar_lotes {
+        let filas: Vec<String> = descuentos
+            .iter()
+            .filter(|(_, cantidad, _)| *cantidad > 0.0)
+            .map(|(lote_id, cantidad, producto_id)| format!("({}, {}, {}, {})", venta_id, producto_id, lote_id, cantidad))
+            .collect();
+        if !filas.is_empty() {
+            sql.push_str(&format!(
+                "\nINSERT INTO venta_lotes (venta_id, producto_id, lote_id, cantidad) VALUES {};",
+                filas.join(", ")
+            ));
+        }
+    }
+    conn.execute_batch(&sql).await.map_err(|e| format!("Error al descontar lote: {}", e))?;
     Ok(())
 }
 
@@ -421,6 +459,14 @@ pub async fn procesar_venta(
     }
     let mut ids: Vec<i64> = pedido_por_producto.keys().copied().collect();
     ids.sort_unstable();
+
+    // 2a. Control de recetas (módulo RECETAS, farmacia): los medicamentos que
+    // piden receta no se cobran sin ella. Se revisa antes de tocar nada; un
+    // negocio sin el módulo no hace esta consulta.
+    let receta_lista = {
+        let pedidos: Vec<(i64, f64)> = ids.iter().map(|id| (*id, pedido_por_producto[id])).collect();
+        crate::handlers::recetas::preparar(&conn, modulos.as_deref(), payload.receta.as_ref(), &pedidos).await?
+    };
     let mut leidos = datos_productos_para_venta(&conn, &ids)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
@@ -673,7 +719,7 @@ pub async fn procesar_venta(
                     a_descontar.push((p.id, p.cantidad));
                 }
             }
-            descontar_stock_fefo(conn, &perecibles).await.map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+            descontar_stock_fefo(conn, venta_id, &perecibles).await.map_err(|e| (StatusCode::BAD_REQUEST, e))?;
             if !a_descontar.is_empty() {
                 // Solo números (ids enteros y cantidades ya validadas como finitas):
                 // se escriben directo en la sentencia.
@@ -788,6 +834,11 @@ pub async fn procesar_venta(
             // 6d. Si salió de una cotización, queda vendida (no puede hacer fallar la venta).
             if let Some(cotizacion_id) = payload.cotizacion_id {
                 crate::handlers::cotizaciones::marcar_vendida(&conn, cotizacion_id, venta_id).await;
+            }
+
+            // 6e. Constancia de la receta (módulo RECETAS): entra con la venta o no entra.
+            if let Some(lista) = &receta_lista {
+                crate::handlers::recetas::registrar(&conn, lista, venta_id, usuario_id, &claims.nombre_completo).await?;
             }
 
             // 7. Si fue el cobro de un pedido de mesa: se cierra y la mesa queda libre.

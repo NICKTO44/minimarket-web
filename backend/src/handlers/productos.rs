@@ -8,6 +8,20 @@ use crate::models::producto::*;
 /// Unidades de medida soportadas: el catálogo vive en handlers/unidades.rs
 /// (no en un CHECK de SQLite), para que agregar una nueva sea solo un
 /// cambio de código + redeploy, sin tocar ninguna base de tenant.
+/// Stock que se puede vender, para usar dentro de un SELECT sobre
+/// `productos p`. Con vencimiento: solo los lotes vigentes (vencen hoy o
+/// después, hora de Lima; igual que la venta, ventas.rs). Sin vencimiento:
+/// el stock de siempre.
+macro_rules! stock_vendible {
+    () => {
+        "CASE WHEN p.lleva_vencimiento = 1 THEN CAST(COALESCE((
+            SELECT SUM(l.cantidad) FROM lotes_producto l
+            WHERE l.producto_id = p.id AND l.activo = 1 AND l.cantidad > 0
+              AND date(l.fecha_vencimiento) >= date('now', '-5 hours')
+        ), 0) AS REAL) ELSE p.stock END"
+    };
+}
+
 pub(crate) fn unidad_valida(unidad: &str) -> bool {
     crate::handlers::unidades::es_valida(unidad)
 }
@@ -35,9 +49,15 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
 
     // controla_stock llegó con la migración 0007 y carta_fecha/agotado con
     // la 0009; si esta base todavía no las tiene, se lista igual que antes.
-    const SQL_BASE: &str = "SELECT p.id, p.codigo, p.nombre, p.descripcion, p.precio, p.stock, p.stock_minimo,
+    // Con vencimiento, el stock que se muestra es el que se puede vender
+    // (ver stock_vendible!).
+    const SQL_BASE: &str = concat!(
+        "SELECT p.id, p.codigo, p.nombre, p.descripcion, p.precio, ",
+        stock_vendible!(),
+        ", p.stock_minimo,
                     p.unidad_medida, p.categoria_id, c.nombre, p.descuento_porcentaje,
-                    p.lleva_vencimiento, p.imagen_url, p.activo, p.precio_compra";
+                    p.lleva_vencimiento, p.imagen_url, p.activo, p.precio_compra"
+    );
     const SQL_DESDE: &str = " FROM productos p
              LEFT JOIN categorias c ON p.categoria_id = c.id
              WHERE p.activo = ?1";
@@ -129,18 +149,24 @@ pub async fn productos_stock_bajo(
 
     // Los preparados al momento (controla_stock = 0) no tienen stock que
     // reponer, así que no se listan como "stock bajo".
-    const SQL_STOCK_BAJO: &str = "SELECT p.id, p.codigo, p.nombre, p.stock, p.stock_minimo, p.unidad_medida, c.nombre
+    // Con vencimiento cuenta solo lo vigente: un producto con todo vencido
+    // está en cero aunque sus lotes sigan sin descartar.
+    const SQL_STOCK_BAJO: &str = concat!(
+        "SELECT * FROM (SELECT p.id, p.codigo, p.nombre, ",
+        stock_vendible!(),
+        " AS stock_vendible, p.stock_minimo, p.unidad_medida, c.nombre
              FROM productos p
              LEFT JOIN categorias c ON p.categoria_id = c.id
-             WHERE p.activo = 1 AND p.stock <= p.stock_minimo";
-    const SQL_ORDEN: &str = " ORDER BY (p.stock - p.stock_minimo), p.nombre";
+             WHERE p.activo = 1 FILTRO) p WHERE p.stock_vendible <= p.stock_minimo"
+    );
+    const SQL_ORDEN: &str = " ORDER BY (p.stock_vendible - p.stock_minimo), p.nombre";
     let mut rows = match conn
-        .query(&format!("{} AND p.controla_stock = 1{}", SQL_STOCK_BAJO, SQL_ORDEN), ())
+        .query(&format!("{}{}", SQL_STOCK_BAJO.replace("FILTRO", "AND p.controla_stock = 1"), SQL_ORDEN), ())
         .await
     {
         Ok(rows) => rows,
         Err(_) => conn
-            .query(&format!("{}{}", SQL_STOCK_BAJO, SQL_ORDEN), ())
+            .query(&format!("{}{}", SQL_STOCK_BAJO.replace("FILTRO", ""), SQL_ORDEN), ())
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
     };

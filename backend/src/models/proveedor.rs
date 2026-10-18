@@ -62,6 +62,9 @@ pub struct ItemRecepcion {
     pub cantidad_conforme: f64,
     // Si el producto lleva vencimiento, se necesita esta fecha para crear el lote
     pub fecha_vencimiento: Option<String>,
+    /// Número de lote que trae el empaque (opcional; en farmacia, el que
+    /// sale en las alertas de retiro).
+    pub numero_lote: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -130,6 +133,13 @@ pub struct ResolverDevolucionProveedorRequest {
     pub estado: String, // ACEPTADA | RECHAZADA
     pub tipo_resolucion: Option<String>, // CREDITO | REEMBOLSO | CAMBIO
     pub notas: Option<String>,
+    /// N.° de la nota de crédito que emitió el proveedor (opcional).
+    pub nota_credito_proveedor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NotaCreditoProveedorRequest {
+    pub nota_credito_proveedor: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -143,6 +153,7 @@ pub struct DevolucionProveedorResumen {
     pub monto_devolucion: f64,
     pub estado: String,
     pub tipo_resolucion: Option<String>,
+    pub nota_credito_proveedor: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

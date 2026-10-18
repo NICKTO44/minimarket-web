@@ -348,7 +348,10 @@ pub struct MesGanancia {
     pub compras: f64,
     /// Gastos del negocio del mes (alquiler, luz, sueldos...; módulo Gastos).
     pub gastos: f64,
-    /// Ganancia de las ventas menos los gastos del negocio.
+    /// Mercadería vencida que se descartó en el mes, a su costo (lotes
+    /// descartados en Stock y lotes; tabla mermas_lote, migración 0032).
+    pub mermas: f64,
+    /// Ganancia de las ventas menos los gastos del negocio y la merma.
     pub ganancia_neta: f64,
     /// Parte del costo se calculó con el precio de compra de hoy (ventas
     /// anteriores a encender el módulo).
@@ -451,6 +454,7 @@ pub async fn reporte(
             sin_costo: 0.0,
             compras: 0.0,
             gastos: 0.0,
+            mermas: 0.0,
             ganancia_neta: 0.0,
             estimado: false,
         })
@@ -553,13 +557,33 @@ pub async fn reporte(
         }
     }
 
+    // 3c. Merma por vencimiento: lotes descartados, al costo que tenían al
+    //     descartarlos. fecha_hora ya es de Perú. Sin la 0032 no hay tabla:
+    //     queda en cero, como antes.
+    if let Ok(mut filas) = conn
+        .query(
+            "SELECT substr(fecha_hora, 1, 7), CAST(COALESCE(SUM(cantidad * costo_unitario), 0) AS REAL)
+             FROM mermas_lote
+             WHERE costo_unitario > 0 AND substr(fecha_hora, 1, 10) BETWEEN ?1 AND ?2
+             GROUP BY 1",
+            libsql::params![primer_dia_rango.clone(), ultimo_dia_mes.clone()],
+        )
+        .await
+    {
+        while let Ok(Some(f)) = filas.next().await {
+            if let Some(i) = posicion.get(&f.get::<String>(0).unwrap_or_default()) {
+                meses[*i].mermas = redondear_2(f.get(1).unwrap_or(0.0));
+            }
+        }
+    }
+
     for m in &mut meses {
         m.vendido = redondear_2(m.vendido);
         m.vendido_con_costo = redondear_2(m.vendido_con_costo);
         m.costo = redondear_2(m.costo);
         m.sin_costo = redondear_2(m.vendido - m.vendido_con_costo);
         m.ganancia = redondear_2(m.vendido_con_costo - m.costo);
-        m.ganancia_neta = redondear_2(m.ganancia - m.gastos);
+        m.ganancia_neta = redondear_2(m.ganancia - m.gastos - m.mermas);
         m.margen = Some(m.vendido_con_costo).filter(|v| *v > 0.005).map(|v| (m.ganancia / v * 1000.0).round() / 10.0);
     }
 

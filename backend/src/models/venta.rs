@@ -56,6 +56,9 @@ pub struct NuevaVenta {
     /// venta anterior. Los productos de esta venta son lo que se lleva.
     #[serde(default)]
     pub cambio_prenda: Option<crate::handlers::cambios::CambioVenta>,
+    /// Receta de los medicamentos que la piden (módulo RECETAS).
+    #[serde(default)]
+    pub receta: Option<crate::handlers::recetas::RecetaVenta>,
 }
 
 #[derive(Debug, Serialize)]

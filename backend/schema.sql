@@ -344,7 +344,11 @@ BEGIN
   WHERE id = (
     SELECT id FROM lotes_producto
     WHERE producto_id = NEW.producto_id AND activo = 1
-    ORDER BY fecha_vencimiento ASC
+    -- Al lote vigente que vence primero (migración 0031).
+    ORDER BY
+      CASE WHEN date(fecha_vencimiento) >= date('now', '-5 hours') THEN 0 ELSE 1 END ASC,
+      CASE WHEN date(fecha_vencimiento) >= date('now', '-5 hours') THEN fecha_vencimiento END ASC,
+      fecha_vencimiento DESC
     LIMIT 1
   )
   AND (SELECT lleva_vencimiento FROM productos WHERE id = NEW.producto_id) = 1;

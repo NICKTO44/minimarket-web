@@ -95,11 +95,22 @@ pub async fn resolver_devolucion(
     if payload.estado == "ACEPTADA" && payload.tipo_resolucion.is_none() {
         return Err((StatusCode::BAD_REQUEST, "Debes indicar el tipo de resolución (CREDITO, REEMBOLSO o CAMBIO)".into()));
     }
+    let nota_credito = if payload.estado == "ACEPTADA" {
+        limpiar_nota_credito(payload.nota_credito_proveedor.as_deref())?
+    } else {
+        None
+    };
 
     conn.execute(
         "UPDATE devoluciones_proveedor SET estado = ?1, tipo_resolucion = ?2, notas = COALESCE(?3, notas), fecha_resolucion = datetime('now','localtime') WHERE id = ?4",
         libsql::params![payload.estado.clone(), payload.tipo_resolucion.clone(), payload.notas.clone(), id],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al resolver: {}", e)))?;
+    // La resolución ya quedó: si el número no se pudo guardar (base sin la
+    // 0033), no se deshace; solo se avisa.
+    let nota_pendiente = match &nota_credito {
+        Some(numero) => guardar_nota_credito(&conn, id, Some(numero.clone())).await.is_err(),
+        None => false,
+    };
 
     let mut r2 = conn.query(
         "SELECT p.credito_disponible FROM proveedores p JOIN devoluciones_proveedor d ON d.proveedor_id = p.id WHERE d.id = ?1",
@@ -118,6 +129,11 @@ pub async fn resolver_devolucion(
         },
         "RECHAZADA" => "Devolución rechazada por el proveedor.".into(),
         _ => "Estado actualizado.".into(),
+    };
+    let message = if nota_pendiente {
+        format!("{} No se pudo guardar el N.° de nota de crédito; anótalo luego desde la lista.", message)
+    } else {
+        message
     };
 
     Ok(Json(DevolucionProveedorResponse {
@@ -140,26 +156,28 @@ pub async fn listar_devoluciones(
 ) -> Result<Json<Vec<DevolucionProveedorResumen>>, StatusCode> {
     let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let (query, filtra) = match params.compra_id {
-        Some(_) => (
-            "SELECT d.id, d.compra_id, p.nombre, d.folio, d.fecha, d.motivo, d.monto_devolucion, d.estado, d.tipo_resolucion
-             FROM devoluciones_proveedor d JOIN proveedores p ON d.proveedor_id = p.id
-             WHERE d.compra_id = ?1 ORDER BY d.fecha DESC",
-            true,
-        ),
-        None => (
-            "SELECT d.id, d.compra_id, p.nombre, d.folio, d.fecha, d.motivo, d.monto_devolucion, d.estado, d.tipo_resolucion
-             FROM devoluciones_proveedor d JOIN proveedores p ON d.proveedor_id = p.id
-             ORDER BY d.fecha DESC LIMIT 50",
-            false,
-        ),
+    // La columna nota_credito_proveedor llegó con la 0033: sin ella, NULL.
+    let consulta = |nota: &str| {
+        let filtro = if params.compra_id.is_some() { "WHERE d.compra_id = ?1 ORDER BY d.fecha DESC" } else { "ORDER BY d.fecha DESC LIMIT 50" };
+        format!(
+            "SELECT d.id, d.compra_id, p.nombre, d.folio, d.fecha, d.motivo, d.monto_devolucion, d.estado, d.tipo_resolucion, {}
+             FROM devoluciones_proveedor d JOIN proveedores p ON d.proveedor_id = p.id {}",
+            nota, filtro
+        )
     };
-
-    let mut rows = if filtra {
-        conn.query(query, libsql::params![params.compra_id.unwrap()]).await
-    } else {
-        conn.query(query, ()).await
-    }.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let leer = |sql: String| {
+        let conn = &conn;
+        async move {
+            match params.compra_id {
+                Some(compra_id) => conn.query(&sql, libsql::params![compra_id]).await,
+                None => conn.query(&sql, ()).await,
+            }
+        }
+    };
+    let mut rows = match leer(consulta("d.nota_credito_proveedor")).await {
+        Ok(r) => r,
+        Err(_) => leer(consulta("NULL")).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    };
 
     let mut devoluciones = Vec::new();
     while let Some(row) = rows.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
@@ -173,8 +191,82 @@ pub async fn listar_devoluciones(
             monto_devolucion: row.get(6).unwrap_or_default(),
             estado: row.get(7).unwrap_or_default(),
             tipo_resolucion: row.get(8).ok(),
+            nota_credito_proveedor: row.get(9).ok(),
         });
     }
 
     Ok(Json(devoluciones))
+}
+/// N.° de nota de crédito del proveedor: vacío = sin número. Se guarda en
+/// mayúsculas, como "FC01-00000123" (serie de 4 letras o números, guion y
+/// hasta 8 dígitos). Solo se guarda como referencia: no se consulta en SUNAT.
+fn limpiar_nota_credito(texto: Option<&str>) -> Result<Option<String>, (StatusCode, String)> {
+    let Some(t) = texto.map(|t| t.trim().to_uppercase()).filter(|t| !t.is_empty()) else {
+        return Ok(None);
+    };
+    let valido = match t.split_once('-') {
+        Some((serie, numero)) => {
+            serie.len() == 4
+                && serie.chars().all(|c| c.is_ascii_alphanumeric())
+                && (1..=8).contains(&numero.len())
+                && numero.chars().all(|c| c.is_ascii_digit())
+        }
+        None => false,
+    };
+    if !valido {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "El N.° de nota de crédito va como serie-número, por ejemplo FC01-00000123.".into(),
+        ));
+    }
+    Ok(Some(t))
+}
+
+async fn guardar_nota_credito(conn: &libsql::Connection, id: i64, numero: Option<String>) -> Result<(), (StatusCode, String)> {
+    conn.execute(
+        "UPDATE devoluciones_proveedor SET nota_credito_proveedor = ?1 WHERE id = ?2",
+        libsql::params![numero, id],
+    )
+    .await
+    .map(|_| ())
+    .map_err(|_| {
+        (
+            StatusCode::CONFLICT,
+            "El sistema se está actualizando: el N.° de nota de crédito todavía no se puede guardar. Intenta en un minuto.".into(),
+        )
+    })
+}
+
+/// PUT /devoluciones-proveedor/:id/nota-credito — anotar (o corregir) el N.°
+/// de la nota de crédito del proveedor después de resolver: muchas veces
+/// llega días después. Solo devoluciones aceptadas.
+pub async fn anotar_nota_credito(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Path(id): Path<i64>,
+    Json(payload): Json<NotaCreditoProveedorRequest>,
+) -> Result<Json<DevolucionProveedorResponse>, (StatusCode, String)> {
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut r = conn
+        .query("SELECT estado, folio FROM devoluciones_proveedor WHERE id = ?1", libsql::params![id])
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let (estado, folio): (String, String) = match r.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        Some(row) => (row.get(0).unwrap_or_default(), row.get(1).unwrap_or_default()),
+        None => return Err((StatusCode::NOT_FOUND, "Devolución no encontrada".into())),
+    };
+    if estado != "ACEPTADA" {
+        return Err((StatusCode::BAD_REQUEST, "Solo las devoluciones aceptadas llevan nota de crédito del proveedor.".into()));
+    }
+    let numero = limpiar_nota_credito(payload.nota_credito_proveedor.as_deref())?;
+    guardar_nota_credito(&conn, id, numero.clone()).await?;
+    Ok(Json(DevolucionProveedorResponse {
+        success: true,
+        message: match &numero {
+            Some(n) => format!("Nota de crédito {} anotada en {}.", n, folio),
+            None => format!("Se quitó el N.° de nota de crédito de {}.", folio),
+        },
+        devolucion_id: Some(id),
+        folio: Some(folio),
+        credito_disponible: None,
+    }))
 }

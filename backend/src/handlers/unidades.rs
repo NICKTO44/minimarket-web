@@ -36,6 +36,11 @@ pub const UNIDADES_CONSTRUCCION: &[&str] = &[
     "CIENTO", "VARILLA", "BALDE", "LATA", "PLIEGO", "TUBO",
 ];
 
+/// Las de farmacia / botica (el tubo de una crema es el de ferretería).
+pub const UNIDADES_FARMACIA: &[&str] = &[
+    "TABLETA", "CAPSULA", "BLISTER", "FRASCO", "AMPOLLA", "VIAL", "SOBRE", "SUPOSITORIO", "OVULO", "PARCHE",
+];
+
 /// La unidad base: nunca se puede apagar.
 const UNIDAD_BASE: &str = "UNIDAD";
 
@@ -44,6 +49,7 @@ fn catalogo() -> impl Iterator<Item = &'static str> {
         .iter()
         .chain(UNIDADES_RESTAURANTE.iter())
         .chain(UNIDADES_CONSTRUCCION.iter())
+        .chain(UNIDADES_FARMACIA.iter())
         .copied()
 }
 

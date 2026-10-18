@@ -42,3 +42,5 @@ pub mod importacion;
 pub mod billeteras;
 pub mod panel;
 pub mod gastos;
+pub mod medicamentos;
+pub mod recetas;
