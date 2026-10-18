@@ -52,3 +52,13 @@ function desdeUtc(texto) {
 export function hoyLima(dias = 0) {
   return new Date(Date.now() - 5 * 3600 * 1000 + dias * 86400 * 1000).toISOString().slice(0, 10);
 }
+
+/**
+ * Diferencia de caja con su signo: "+S/ 1.50", "-S/ 0.20" o "S/ 0.00".
+ * Redondea a céntimos antes, para no mostrar "-0.00" por decimales de más.
+ */
+export function textoDiferencia(diferencia) {
+  const n = Math.round((Number(diferencia) || 0) * 100) / 100;
+  if (n === 0) return 'S/ 0.00';
+  return `${n > 0 ? '+' : '-'}S/ ${Math.abs(n).toFixed(2)}`;
+}

@@ -1,0 +1,77 @@
+/* Receta médica antes de cobrar (usa la base de CalculadoraPieTablar.css). */
+.rv-modal {
+  max-width: 460px;
+}
+
+.rv-icono-retenida {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.rv-lista {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rv-lista li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: #f4f5f7;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.rv-etiqueta {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.rv-etiqueta-receta_retenida {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.rv-confirmar {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1.5px solid var(--color-primario);
+  border-radius: 10px;
+  background: var(--color-primario-suave);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rv-confirmar input {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.rv-nota {
+  margin: 10px 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+@media (max-width: 420px) {
+  .rv-campos {
+    grid-template-columns: 1fr;
+  }
+}

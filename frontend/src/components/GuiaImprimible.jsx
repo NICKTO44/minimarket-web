@@ -4,14 +4,7 @@ import './Recibo.css';
 import { fechaCorta } from '../utils/formato';
 import { formatoCantidad } from '../utils/medidas';
 import { abreviaturaUnidad } from '../utils/unidades';
-
-const NOMBRE_DOCUMENTO = { RUC: 'RUC', DNI: 'DNI', CE: 'C.E.', PASAPORTE: 'Pasaporte' };
-
-/** "T001-75" -> "T001-000075", como el resto de tickets. */
-function numeroConCeros(numero) {
-  const [serie, correlativo] = String(numero || '').split('-');
-  return correlativo ? `${serie}-${correlativo.padStart(6, '0')}` : serie;
-}
+import { NOMBRE_DOCUMENTO, lugarDeGuia, motivoDeGuia, numeroConCeros } from '../utils/guiaTexto';
 
 /**
  * Guía de remisión para la ticketera de 80 mm (mismo formato angosto que el
@@ -22,6 +15,9 @@ function numeroConCeros(numero) {
  * abrir la guía). `guia.qr` es el QR de SUNAT, si FacturaLibre lo entregó:
  * un enlace (se dibuja aquí) o la imagen ya hecha. Sin él, el ticket sale
  * sin QR; no se inventa uno.
+ *
+ * El botón "PDF" arma el mismo contenido en utils/pdfTicket.js (pdfDeGuia):
+ * si cambia lo que muestra este ticket, hay que reflejarlo también allí.
  */
 export default function GuiaImprimible({ guia, motivos, nombreTienda, direccion, telefono, ruc }) {
   const datos = guia?.datos || null;
@@ -57,16 +53,8 @@ export default function GuiaImprimible({ guia, motivos, nombreTienda, direccion,
   if (!datos) return null;
 
   const imagenQr = !qr ? null : qr.startsWith('data:image/') ? qr : qrDibujado.de === qr ? qrDibujado.imagen : null;
-  const lugar = (punto) => {
-    const u = ubigeos?.find((x) => x.ubigeo === punto?.ubigeo);
-    const direccionPunto = punto?.direccion || '';
-    return u ? `${direccionPunto}, ${u.distrito} - ${u.provincia} - ${u.departamento}` : direccionPunto;
-  };
-  const motivo =
-    (datos.motivo === '13' && datos.motivo_descripcion) ||
-    motivos?.find((m) => m.codigo === datos.motivo)?.nombre ||
-    datos.motivo_descripcion ||
-    '';
+  const lugar = (punto) => lugarDeGuia(punto, ubigeos);
+  const motivo = motivoDeGuia(datos, motivos);
   const privado = datos.modo !== 'PUBLICO';
   const items = datos.items || [];
 

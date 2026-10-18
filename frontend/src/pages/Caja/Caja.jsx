@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { ArrowDownToLine, ArrowUpFromLine, ReceiptText } from 'lucide-react';
 import { api } from '../../api/api';
 import { ventasDeCajaPorMetodo } from '../../utils/metodoPago';
-import { fechaHoraLima } from '../../utils/formato';
+import { fechaHoraLima, textoDiferencia } from '../../utils/formato';
 import FormularioGasto from '../../components/FormularioGasto';
 import MovimientoCaja from '../../components/MovimientoCaja';
 import './Caja.css';
@@ -172,10 +172,7 @@ export default function Caja({ usuario }) {
           </div>
           <div className={`caja-diferencia caja-diferencia-${estadoDif}`}>
             <span>Diferencia</span>
-            <strong>
-              {resumenCierre.diferencia >= 0 ? '+' : ''}
-              S/ {resumenCierre.diferencia.toFixed(2)}
-            </strong>
+            <strong>{textoDiferencia(resumenCierre.diferencia)}</strong>
           </div>
 
           <button className="caja-boton-primario" onClick={() => setResumenCierre(null)}>
@@ -333,8 +330,7 @@ export default function Caja({ usuario }) {
               Math.abs(diferencia) < 0.01 ? 'ok' : Math.abs(diferencia) <= 10 ? 'aceptable' : 'alerta'
             }`}
           >
-            Diferencia: {diferencia >= 0 ? '+' : ''}
-            S/ {diferencia.toFixed(2)}
+            Diferencia: {textoDiferencia(diferencia)}
           </p>
         )}
 

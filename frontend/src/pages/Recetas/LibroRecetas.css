@@ -1,0 +1,122 @@
+/* Libro de recetas (usa la base de StockLotes.css). */
+.lr-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+  padding-bottom: 9px;
+  color: #374151 !important;
+  font-size: 13px !important;
+}
+
+.lr-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lr-receta {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px 16px;
+  border-left: 4px solid #d97706;
+}
+
+.lr-retenida {
+  border-left-color: #b91c1c;
+}
+
+.lr-anulada {
+  opacity: 0.6;
+}
+
+.lr-receta header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+}
+
+.lr-folio {
+  font-weight: 700;
+  color: #16181d;
+}
+
+.lr-fecha {
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+.lr-etiqueta {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.lr-etiqueta-retenida {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.lr-productos {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  font-size: 13.5px;
+  color: #16181d;
+}
+
+.lr-productos li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.lr-productos small {
+  font-size: 11px;
+  color: #92400e;
+  font-weight: 700;
+}
+
+.lr-datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.lr-datos dt {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #9ca3af;
+}
+
+.lr-datos dd {
+  margin: 0;
+  font-size: 13px;
+  color: #374151;
+}
+
+/* Cada receta se abre en su detalle. */
+.lr-receta[role='button'] {
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+
+.lr-receta[role='button']:hover,
+.lr-receta[role='button']:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-primario-borde);
+  outline: none;
+}
+
+.lr-ver {
+  margin-left: auto;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-primario-texto);
+}

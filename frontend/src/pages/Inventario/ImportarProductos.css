@@ -376,3 +376,17 @@
     font-size: 19px;
   }
 }
+
+/* Lotes: otra fila del mismo producto, y la nota de cómo se leen. */
+.imp-tabla tr.imp-fila-lote td {
+  color: #4b5563;
+  background: #f8fafc;
+}
+
+.imp-nota.imp-nota-lotes {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #374151;
+}

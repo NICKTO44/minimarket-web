@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { api } from '../../api/api';
 import { confirmar } from '../../utils/confirmar';
-import { MODULO_GANANCIAS, MODULO_MESAS, MODULOS, MODULOS_SIN_RUBRO, RUBROS, rubroDe } from '../../utils/rubros';
+import {
+  MODULO_GANANCIAS,
+  MODULO_MESAS,
+  MODULOS,
+  MODULOS_SIN_RUBRO,
+  RUBROS,
+  alternarConDependencias,
+  rubroDe,
+} from '../../utils/rubros';
 import './ConfiguracionNegocio.css';
 
 function nombresModulos(valores) {
@@ -88,8 +96,18 @@ export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMen
       });
       if (!ok) return;
     }
-    const nuevos = encender ? [...modulos, modulo.valor] : modulos.filter((m) => m !== modulo.valor);
-    guardar(rubro, nuevos, `${modulo.label}: ${encender ? 'activado' : 'desactivado'}.`);
+    // Encender uno puede encender el que necesita (Recetas -> Ficha), y
+    // apagar uno apaga los que dependen de él: se avisa cuáles.
+    const nuevos = alternarConDependencias(modulos, modulo.valor);
+    const arrastrados = MODULOS.filter(
+      (m) => m.valor !== modulo.valor && modulos.includes(m.valor) !== nuevos.includes(m.valor)
+    ).map((m) => m.label);
+    guardar(
+      rubro,
+      nuevos,
+      `${modulo.label}: ${encender ? 'activado' : 'desactivado'}.` +
+        (arrastrados.length ? ` También ${encender ? 'se activó' : 'se desactivó'}: ${arrastrados.join(', ')}.` : '')
+    );
   };
 
   return (

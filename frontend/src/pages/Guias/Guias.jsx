@@ -4,7 +4,7 @@ import { api } from '../../api/api';
 import GuiaImprimible from '../../components/GuiaImprimible';
 import SelectorUbigeo from '../../components/SelectorUbigeo';
 import { fechaCorta } from '../../utils/formato';
-import { descargarArchivo } from '../../utils/pdfTicket';
+import { descargarArchivo, pdfDeGuia } from '../../utils/pdfTicket';
 import { formatoCantidad } from '../../utils/medidas';
 import { abreviaturaUnidad } from '../../utils/unidades';
 import '../../components/PantallaModulo.css';
@@ -281,6 +281,22 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
     }
   };
 
+  // PDF de 80 mm con el mismo contenido del ticket. En el celular se abre en
+  // otra pestaña, para no tapar el sistema.
+  const [armandoPdf, setArmandoPdf] = useState(false);
+  const bajarPdf = async (guia) => {
+    setArmandoPdf(true);
+    try {
+      const { bytes, nombre } = await pdfDeGuia({ guia, motivos: config?.motivos, nombreTienda, direccion, telefono, ruc });
+      const enCelular = window.matchMedia('(pointer: coarse), (max-width: 899px)').matches;
+      descargarArchivo(bytes, nombre, { nuevaPestana: enCelular });
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    } finally {
+      setArmandoPdf(false);
+    }
+  };
+
   // Guía directa: XML firmado o constancia de SUNAT.
   const bajarArchivo = async (guia, cual) => {
     try {
@@ -422,6 +438,11 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
               {abierta.estado === 'ACEPTADA' && abierta.datos && (
                 <button className="pm-boton" onClick={() => window.print()}>
                   <Printer size={15} /> Ticket 80 mm
+                </button>
+              )}
+              {abierta.estado === 'ACEPTADA' && abierta.datos && (
+                <button className="pm-boton-secundario" onClick={() => bajarPdf(abierta)} disabled={armandoPdf}>
+                  <FileDown size={15} /> {armandoPdf ? 'Armando...' : 'PDF'}
                 </button>
               )}
               {abierta.enlace_pdf && (

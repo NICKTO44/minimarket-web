@@ -22,6 +22,7 @@ import {
   HandCoins,
   Route,
   TrendingDown,
+  FileCheck2,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
@@ -57,6 +58,7 @@ export const GRUPOS_MENU = [
       { id: 'COMPROBANTES', label: 'Comprobantes', icono: Receipt },
       { id: 'REPORTES', label: 'Reportes', icono: BarChart3 },
       { id: 'GASTOS', label: 'Gastos', icono: TrendingDown, soloAdmin: true },
+      { id: 'RECETAS', label: 'Libro de recetas', icono: FileCheck2, soloAdmin: true, modulo: 'RECETAS' },
       { id: 'SUSCRIPCION', label: 'Suscripción', icono: CreditCard, soloAdmin: true },
       { id: 'CONFIGURACION', label: 'Configuración', icono: Settings, soloAdmin: true },
     ],

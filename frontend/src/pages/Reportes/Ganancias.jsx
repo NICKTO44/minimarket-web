@@ -231,6 +231,17 @@ export default function Ganancias({ onVerSinPrecio }) {
           <span>Gastos del negocio</span>
           <strong>{soles(actual.gastos || 0)}</strong>
         </div>
+        {actual.mermas > 0.005 && (
+          <>
+            <span className="gan-neta-signo" aria-hidden="true">
+              −
+            </span>
+            <div>
+              <span>Productos vencidos</span>
+              <strong>{soles(actual.mermas)}</strong>
+            </div>
+          </>
+        )}
         <span className="gan-neta-signo" aria-hidden="true">
           =
         </span>
@@ -494,7 +505,7 @@ export default function Ganancias({ onVerSinPrecio }) {
       <p className="gan-pie">
         Ganancia = lo vendido menos lo que costó esa mercadería, con IGV incluido en ambos. El costo es el promedio de lo
         que había en la tienda el día de cada venta. La ganancia neta resta además los gastos del negocio del mes (alquiler,
-        sueldos, servicios) registrados en Gastos.
+        sueldos, servicios) registrados en Gastos, y la mercadería vencida que se descartó en Stock y lotes, a su costo.
       </p>
     </div>
   );

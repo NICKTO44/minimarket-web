@@ -36,6 +36,22 @@ export const GRUPOS_UNIDADES = [
     ],
   },
   {
+    titulo: 'Farmacia',
+    rubros: ['FARMACIA'],
+    unidades: [
+      { valor: 'TABLETA', label: 'Tableta', abrev: 'tab' },
+      { valor: 'CAPSULA', label: 'Cápsula', abrev: 'cáp' },
+      { valor: 'BLISTER', label: 'Blíster', abrev: 'blíster' },
+      { valor: 'FRASCO', label: 'Frasco', abrev: 'fco' },
+      { valor: 'AMPOLLA', label: 'Ampolla', abrev: 'amp' },
+      { valor: 'VIAL', label: 'Vial', abrev: 'vial' },
+      { valor: 'SOBRE', label: 'Sobre', abrev: 'sobre' },
+      { valor: 'SUPOSITORIO', label: 'Supositorio', abrev: 'sup' },
+      { valor: 'OVULO', label: 'Óvulo', abrev: 'óvulo' },
+      { valor: 'PARCHE', label: 'Parche', abrev: 'parche' },
+    ],
+  },
+  {
     titulo: 'Básicas',
     unidades: [
       { valor: 'UNIDAD', label: 'Unidad', abrev: 'und' },

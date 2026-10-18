@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../api/api';
 import './StockLotes.css';
 import { confirmar } from '../../utils/confirmar';
+import ReporteVencidos from './ReporteVencidos';
 
 const HORIZONTES = [
   { dias: 7, label: '7 días' },
@@ -9,7 +10,9 @@ const HORIZONTES = [
   { dias: 30, label: '30 días' },
 ];
 
-export default function StockLotes() {
+export default function StockLotes({ esAdmin = false }) {
+  // 'alertas' = lotes por vencer; 'reporte' = reporte de vencidos (solo admin).
+  const [vista, setVista] = useState('alertas');
   const [horizonte, setHorizonte] = useState(15);
   const [lotes, setLotes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -32,15 +35,15 @@ export default function StockLotes() {
     const razon = lote.dias_restantes < 0 ? 'ya venció' : `vence en ${lote.dias_restantes} día(s)`;
     const confirmado = await confirmar({
       titulo: '¿Descartar este lote?',
-      mensaje: `El lote de "${lote.producto_nombre}" ${razon}. Se retirará del stock.`,
+      mensaje: `El lote de "${lote.producto_nombre}" ${razon}. Se retirará del stock y quedará registrado en el reporte de vencidos.`,
       detalle: { etiqueta: 'Unidades que salen del stock', valor: String(lote.cantidad) },
       textoConfirmar: 'Descartar lote',
       icono: 'tiempo',
     });
     if (!confirmado) return;
     try {
-      await api.loteDescartar(lote.lote_id);
-      setMensaje({ tipo: 'exito', texto: 'Lote descartado y stock actualizado.' });
+      const r = await api.loteDescartar(lote.lote_id);
+      setMensaje({ tipo: 'exito', texto: r?.message || 'Lote descartado y stock actualizado.' });
       cargar();
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
@@ -60,6 +63,7 @@ export default function StockLotes() {
     <div className="sl-layout">
       <div className="sl-header">
         <h1>Stock y Lotes</h1>
+        {vista === 'alertas' && (
         <div className="sl-horizontes">
           {HORIZONTES.map((h) => (
             <button
@@ -71,8 +75,24 @@ export default function StockLotes() {
             </button>
           ))}
         </div>
+        )}
       </div>
 
+      {esAdmin && (
+        <div className="sl-pestanas" role="tablist">
+          <button type="button" role="tab" aria-selected={vista === 'alertas'} className={vista === 'alertas' ? 'activo' : ''} onClick={() => setVista('alertas')}>
+            Por vencer
+          </button>
+          <button type="button" role="tab" aria-selected={vista === 'reporte'} className={vista === 'reporte' ? 'activo' : ''} onClick={() => setVista('reporte')}>
+            Reporte de vencidos
+          </button>
+        </div>
+      )}
+
+      {vista === 'reporte' && esAdmin ? (
+        <ReporteVencidos />
+      ) : (
+      <>
       <p className="sl-subtitulo">
         Lotes que vencen en los próximos {horizonte} días (o ya vencidos), ordenados del más urgente al menos urgente.
       </p>
@@ -119,6 +139,8 @@ export default function StockLotes() {
             );
           })}
         </div>
+      )}
+      </>
       )}
     </div>
   );

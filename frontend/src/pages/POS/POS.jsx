@@ -24,6 +24,9 @@ import { agruparPorModelo } from '../../utils/variantes';
 import AvisoNotaCredito from '../../components/AvisoNotaCredito';
 import { enlaceComprobantePublico } from '../../utils/enlacePublico';
 import { imprimirTicket } from '../../utils/imprimirTicket';
+import { alternativasDe, etiquetaCondicion, fichaCoincide, mapaFichas, resumenFicha, textoPlano } from '../../utils/medicamentos';
+import AlternativasMedicamento from '../../components/AlternativasMedicamento';
+import RecetaVenta, { RECETA_VACIA, recetaParaEnviar } from '../../components/RecetaVenta';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -226,6 +229,15 @@ export default function POS({
   // Apagados, el punto de venta es el de siempre (ni se consultan).
   presentaciones = false,
   precioMayor = false,
+  // Módulo "Ficha del medicamento" (farmacia): buscar por principio activo y
+  // verlo bajo el nombre, con el aviso de receta. Apagado, ni se consulta.
+  fichaMedicamento = false,
+  // Módulo "Control de recetas" (farmacia): antes de cobrar medicamentos con
+  // receta se pide confirmarla (y los datos, si es receta retenida).
+  recetas = false,
+  // Módulo "Alternativas" (farmacia): mismo principio activo, concentración
+  // y forma, para un agotado o para cambiar una línea del carrito.
+  alternativas = false,
   // Cambio de prenda en curso (viene de Devoluciones): lo que el cliente
   // devuelve; lo que se agregue al carrito es lo que se lleva.
   cambioEnCurso = null,
@@ -286,6 +298,20 @@ export default function POS({
   useEffect(() => {
     recargarOpcionesVenta();
   }, [recargarOpcionesVenta]);
+  // Fichas de medicamentos (Map producto_id -> ficha), solo con el módulo.
+  const [fichas, setFichas] = useState(() => new Map());
+  useEffect(() => {
+    if (!fichaMedicamento && !recetas && !alternativas) return;
+    api
+      .medicamentosFichas()
+      .then((lista) => setFichas(mapaFichas(lista)))
+      .catch(() => {});
+  }, [fichaMedicamento, recetas, alternativas]);
+  // Ventana de alternativas: { producto, motivo: 'SIN_STOCK' | 'CAMBIAR', linea? }.
+  const [alternativasAbiertas, setAlternativasAbiertas] = useState(null);
+  // Datos de la receta de esta venta y si la ventana está abierta.
+  const [recetaDatos, setRecetaDatos] = useState(RECETA_VACIA);
+  const [pidiendoReceta, setPidiendoReceta] = useState(false);
   // Cotización que se está vendiendo (al cobrar queda como vendida).
   const [cotizacionEnVenta, setCotizacionEnVenta] = useState(() =>
     !pedidoACobrar && cotizacionACargar ? { id: cotizacionACargar.id, numero: cotizacionACargar.numero } : null
@@ -608,8 +634,15 @@ export default function POS({
   const productosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     const deCategoria = categoriaActiva == null ? productos : productos.filter((p) => p.categoria_id === categoriaActiva);
+    const plano = fichaMedicamento ? textoPlano(q) : '';
     const base = q
-      ? deCategoria.filter((p) => p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q))
+      ? deCategoria.filter(
+          (p) =>
+            p.nombre.toLowerCase().includes(q) ||
+            p.codigo.toLowerCase().includes(q) ||
+            // Farmacia: también por principio activo o laboratorio.
+            (fichaMedicamento && fichaCoincide(fichas.get(p.id), plano))
+        )
       : deCategoria;
 
     // El orden por nombre ya viene del backend (ORDER BY p.nombre), así
@@ -626,7 +659,7 @@ export default function POS({
       return [...base].sort((a, b) => Number(!!b.carta_dia) - Number(!!a.carta_dia));
     }
     return base;
-  }, [productos, busqueda, ordenPrecio, categoriaActiva]);
+  }, [productos, busqueda, ordenPrecio, categoriaActiva, fichaMedicamento, fichas]);
 
   // Tallas y colores: una tarjeta por modelo (con las tallas que pasaron el
   // buscador). Sin el módulo, una tarjeta por producto, como siempre.
@@ -666,6 +699,17 @@ export default function POS({
     if (!producto || producto.controla_stock === false) return Infinity;
     const enCarrito = carrito.reduce((suma, i) => (i.id === id && claveDe(i) !== salvoClave ? suma + i.cantidad : suma), 0);
     return redondear3(producto.stock - enCarrito);
+  };
+
+  // Farmacia (módulo ALTERNATIVAS): equivalentes con lo que queda para vender.
+  const alternativasPara = (id) => alternativasDe(id, fichas, productos, (p) => disponibleDe(p.id));
+  // Sin stock (o ya todo en el carrito): si hay otro con el mismo principio
+  // activo, concentración y forma, se ofrece en vez de solo avisar.
+  const ofrecerAlternativas = (producto) => {
+    if (!alternativas || !alternativasPara(producto.id).some((a) => a.conStock)) return false;
+    setAvisoStock(null);
+    setAlternativasAbiertas({ producto: productos.find((p) => p.id === producto.id) || producto, motivo: 'SIN_STOCK' });
+    return true;
   };
 
   // Texto de "no hay" o "solo quedan N" para un producto con stock.
@@ -713,6 +757,7 @@ export default function POS({
     const fraccionado = seVendeFraccionado(producto.unidad_medida);
     const cuanto = medidas ? Math.min(1, disponible) : 1;
     if (disponible <= 0 || (!esMadera && !fraccionado && disponible + 1e-6 < cuanto)) {
+      if (ofrecerAlternativas(producto)) return false;
       setAvisoStock({ texto: textoSinStock(producto.id, producto.nombre, disponible) });
       recargarProductos();
       return false;
@@ -767,6 +812,7 @@ export default function POS({
     const clave = `pres-${presentacion.id}`;
     const yaHay = carrito.find((i) => i.clave === clave)?.cantidadPresentacion || 0;
     if (disponibleDe(producto.id, clave) + 1e-6 < presentacion.factor * (yaHay + 1)) {
+      if (ofrecerAlternativas(producto)) return;
       setAvisoStock({ texto: textoSinStock(producto.id, producto.nombre, disponibleDe(producto.id)) });
       recargarProductos();
       return;
@@ -876,6 +922,7 @@ export default function POS({
       const n = enPresentacion.cantidadPresentacion + delta;
       if (n < 1) return;
       if (delta > 0 && disponibleDe(enPresentacion.id, clave) + 1e-6 < enPresentacion.presentacion.factor * n) {
+        if (ofrecerAlternativas(enPresentacion)) return;
         setMensaje({ tipo: 'error', texto: textoSinStock(enPresentacion.id, enPresentacion.nombre, 0) });
         recargarProductos();
         return;
@@ -890,6 +937,7 @@ export default function POS({
     if (linea) {
       const tope = disponibleDe(linea.id, clave);
       if (linea.cantidad + delta > tope + 1e-6) {
+        if (ofrecerAlternativas(linea)) return;
         setMensaje({ tipo: 'error', texto: textoSinStock(linea.id, linea.nombre, 0) });
         recargarProductos();
         return;
@@ -933,6 +981,41 @@ export default function POS({
   };
 
   const quitarDelCarrito = (clave) => setCarrito((prev) => prev.filter((i) => claveDe(i) !== clave));
+
+  // Alternativa elegida: si venía de una línea del carrito, la reemplaza con
+  // la misma cantidad (hasta donde alcance el stock); si no, se agrega.
+  const elegirAlternativa = (producto) => {
+    const abiertas = alternativasAbiertas;
+    setAlternativasAbiertas(null);
+    if (!abiertas?.linea) {
+      agregarAlCarrito(producto);
+      return;
+    }
+    const linea = abiertas.linea;
+    const sencillo =
+      !seVendeFraccionado(producto.unidad_medida) && !(presentaciones && opcionesVenta.get(producto.id)?.presentaciones.length);
+    if (!sencillo) {
+      quitarDelCarrito(claveDe(linea));
+      agregarAlCarrito(producto);
+      return;
+    }
+    const enCarrito = carrito.filter((i) => i.id === producto.id).reduce((s, i) => s + i.cantidad, 0);
+    const disponible = producto.controla_stock === false ? Infinity : producto.stock - enCarrito;
+    const cantidad = Math.min(linea.cantidad, Math.floor(disponible));
+    if (!(cantidad >= 1)) {
+      setAvisoStock({ texto: textoSinStock(producto.id, producto.nombre, disponible) });
+      return;
+    }
+    setCarrito((prev) => {
+      const sinLinea = prev.filter((i) => claveDe(i) !== claveDe(linea));
+      const existe = sinLinea.find((i) => !i.clave && i.id === producto.id);
+      if (existe) return sinLinea.map((i) => (i === existe ? { ...i, cantidad: redondear3(i.cantidad + cantidad) } : i));
+      return [...sinLinea, { ...producto, cantidad, descuentoMonto: 0 }];
+    });
+    if (cantidad < linea.cantidad) {
+      setMensaje({ tipo: 'error', texto: `Solo había ${cantidad} de "${producto.nombre}": revisa la cantidad.` });
+    }
+  };
 
   // Cada línea se redondea al céntimo (igual que el servidor): con
   // cantidades enteras da lo mismo que antes; con decimales evita totales
@@ -1059,7 +1142,27 @@ export default function POS({
     onCotizacionUsada?.();
   };
 
-  const procesarVenta = async () => {
+  // Medicamentos del carrito que piden receta (una vez por producto).
+  const medicamentosConReceta = useMemo(() => {
+    if (!recetas) return [];
+    const vistos = new Map();
+    for (const i of carrito) {
+      const condicion = fichas.get(i.id)?.condicion_venta;
+      if (condicion && condicion !== 'SIN_RECETA' && !vistos.has(i.id)) vistos.set(i.id, { id: i.id, nombre: i.nombre, condicion });
+    }
+    return [...vistos.values()];
+  }, [recetas, carrito, fichas]);
+
+  // "Cobrar": si lleva medicamentos con receta, primero la ventana de receta.
+  const intentarCobrar = () => {
+    if (medicamentosConReceta.length > 0) {
+      setPidiendoReceta(true);
+      return;
+    }
+    procesarVenta(null);
+  };
+
+  const procesarVenta = async (receta) => {
     if (tipoComprobante !== 'NINGUNO' && !facturacionConfigurada) {
       setMensaje({
         tipo: 'error',
@@ -1107,7 +1210,10 @@ export default function POS({
         pago_otro_metodo: esMixto ? mixtoOtroMetodo : null,
         pago_efectivo_metodo: esMixto ? mixtoSegundoMetodo : null,
         pedido_id: pedidoACobrar?.id || null,
+        ...(receta ? { receta } : {}),
       });
+      // La receta era de esta venta: la siguiente empieza en blanco.
+      setRecetaDatos(RECETA_VACIA);
 
       // La venta ya quedó registrada: se muestra de inmediato para seguir
       // con el siguiente cliente. La boleta o factura se emite en segundo
@@ -1499,6 +1605,16 @@ export default function POS({
                   <div className="pos-producto-imagen pos-producto-imagen-vacia">📦</div>
                 )}
                 <span className="pos-producto-nombre">{p.nombre}</span>
+                {fichaMedicamento && fichas.has(p.id) && (
+                  <span className="pos-producto-ficha" title={resumenFicha(fichas.get(p.id))}>
+                    {etiquetaCondicion(fichas.get(p.id).condicion_venta) && (
+                      <span className={`pos-receta pos-receta-${fichas.get(p.id).condicion_venta.toLowerCase()}`}>
+                        {etiquetaCondicion(fichas.get(p.id).condicion_venta)}
+                      </span>
+                    )}
+                    {resumenFicha(fichas.get(p.id))}
+                  </span>
+                )}
                 <span className="pos-producto-fila">
                   <span className="pos-producto-precio">S/ {p.precio.toFixed(2)}</span>
                   {p.agotado && <span className="pos-producto-stock pos-producto-stock-bajo">Agotado</span>}
@@ -1775,6 +1891,18 @@ export default function POS({
               <div className="pos-carrito-item-info">
                 <span className="pos-carrito-item-nombre">{item.nombre}</span>
                 {item.detalle && <span className="pos-carrito-item-detalle">{item.detalle}</span>}
+                {alternativas &&
+                  !item.presentacion &&
+                  !cobrandoPedido &&
+                  alternativasPara(item.id).some((a) => a.conStock) && (
+                    <button
+                      type="button"
+                      className="pos-ver-alternativas"
+                      onClick={() => setAlternativasAbiertas({ producto: item, motivo: 'CAMBIAR', linea: item })}
+                    >
+                      Ver alternativas
+                    </button>
+                  )}
                 {item.porMayor && (
                   <span className="pos-carrito-item-detalle">
                     {item.origenPrecio === 'mayor' ? 'Precio por mayor' : `Al precio de ${item.origenPrecio}`} · normal S/{' '}
@@ -2155,7 +2283,7 @@ export default function POS({
             </button>
           )}
 
-          <button className="pos-cobrar" disabled={!puedeCobrar} onClick={procesarVenta}>
+          <button className="pos-cobrar" disabled={!puedeCobrar} onClick={intentarCobrar}>
             {procesando
               ? 'Procesando...'
               : enCambio
@@ -2275,6 +2403,33 @@ export default function POS({
           yaSuelto={carrito.find((i) => !i.clave && i.id === productoAPesar.id)?.cantidad || 0}
           onAgregar={agregarFraccion}
           onCerrar={() => setProductoAPesar(null)}
+        />
+      )}
+
+      {alternativasAbiertas && (
+        <AlternativasMedicamento
+          producto={alternativasAbiertas.producto}
+          ficha={fichas.get(alternativasAbiertas.producto.id)}
+          alternativas={alternativasPara(alternativasAbiertas.producto.id)}
+          motivo={alternativasAbiertas.motivo}
+          onElegir={elegirAlternativa}
+          onCerrar={() => setAlternativasAbiertas(null)}
+        />
+      )}
+
+      {pidiendoReceta && (
+        <RecetaVenta
+          medicamentos={medicamentosConReceta}
+          datosIniciales={recetaDatos}
+          onCerrar={(datos) => {
+            setRecetaDatos(datos);
+            setPidiendoReceta(false);
+          }}
+          onConfirmar={(datos) => {
+            setRecetaDatos(datos);
+            setPidiendoReceta(false);
+            procesarVenta(recetaParaEnviar(datos));
+          }}
         />
       )}
 

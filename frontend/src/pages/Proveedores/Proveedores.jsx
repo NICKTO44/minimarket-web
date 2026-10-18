@@ -71,8 +71,17 @@ export default function Proveedores() {
   const [resolverEstado, setResolverEstado] = useState('ACEPTADA');
   const [resolverTipo, setResolverTipo] = useState('CREDITO');
   const [resolverNotas, setResolverNotas] = useState('');
+  const [resolverNotaCredito, setResolverNotaCredito] = useState('');
+  // Anotar el N.° de nota de crédito del proveedor después de resolver.
+  const [notaCreditoEditando, setNotaCreditoEditando] = useState(null);
+  const [notaCreditoTexto, setNotaCreditoTexto] = useState('');
+  const [guardandoNotaCredito, setGuardandoNotaCredito] = useState(false);
   const [resolviendo, setResolviendo] = useState(false);
   const [compraCreditoAplicado, setCompraCreditoAplicado] = useState('');
+  // Caja abierta (para pagar una compra con su efectivo) y la fila de la
+  // recepción a la que le falta algo, para marcarla.
+  const [cajaAbierta, setCajaAbierta] = useState(null);
+  const [faltaEnRecepcion, setFaltaEnRecepcion] = useState(null);
 
   const cargarTodo = () => {
     setCargando(true);
@@ -113,6 +122,9 @@ export default function Proveedores() {
     }
   };
 
+  // Al cambiar la compra, el aviso de error anterior ya no aplica.
+  const olvidarError = () => setMensaje((actual) => (actual?.tipo === 'error' ? null : actual));
+
   const agregarItemCompra = () => {
     if (!compraProductoSel || !compraCantidad || !compraPrecio) {
       setMensaje({ tipo: 'error', texto: 'Selecciona producto, cantidad y precio.' });
@@ -126,6 +138,7 @@ export default function Proveedores() {
     setCompraProductoSel('');
     setCompraCantidad('');
     setCompraPrecio('');
+    olvidarError();
   };
 
   const limpiarFormNuevoProducto = () => {
@@ -176,19 +189,55 @@ export default function Proveedores() {
     }
   };
 
-  const quitarItemCompra = (idx) => setCompraItems((prev) => prev.filter((_, i) => i !== idx));
+  const quitarItemCompra = (idx) => {
+    setCompraItems((prev) => prev.filter((_, i) => i !== idx));
+    olvidarError();
+  };
 
    const subtotalCompra = compraItems.reduce((sum, i) => sum + i.cantidad * i.precio_compra, 0);
    const totalCompra = Math.max(0, subtotalCompra - (parseFloat(compraCreditoAplicado) || 0));
+
+  // Efectivo que hay en la caja abierta (mismo cálculo que el servidor).
+  const efectivoEnCaja = cajaAbierta
+    ? (cajaAbierta.monto_inicial || 0) +
+      (cajaAbierta.ventas_efectivo || 0) +
+      (cajaAbierta.ingresos_total || 0) -
+      (cajaAbierta.retiros_total || 0) -
+      (cajaAbierta.gastos_total || 0)
+    : 0;
+  const cajaNoAlcanza = compraTipoPago === 'EFECTIVO_CAJA' && totalCompra > efectivoEnCaja + 0.005;
+
+  const abrirNuevaCompra = () => {
+    setMensaje(null);
+    setMostrarNuevaCompra(true);
+    // Con caja abierta, por defecto se paga con su efectivo (así el cuadre
+    // del cierre ya lo descuenta); sin caja, efectivo de otro lado.
+    setCajaAbierta(null);
+    setCompraTipoPago('EFECTIVO');
+    api
+      .cajaAbierta()
+      .then((caja) => {
+        setCajaAbierta(caja || null);
+        if (caja) setCompraTipoPago('EFECTIVO_CAJA');
+      })
+      .catch(() => {});
+  };
 
   const guardarCompra = async () => {
     if (!compraProveedorId || compraItems.length === 0) {
       setMensaje({ tipo: 'error', texto: 'Elige un proveedor y agrega al menos un producto.' });
       return;
     }
+    if (cajaNoAlcanza) {
+      setMensaje({
+        tipo: 'error',
+        texto: `En la caja solo hay S/ ${Math.max(0, efectivoEnCaja).toFixed(2)} en efectivo. Si la pagas con plata de otro lado, elige "Efectivo (no de la caja)".`,
+      });
+      return;
+    }
     setGuardandoCompra(true);
     try {
-       await api.compraCrear({
+      const respuesta = await api.compraCrear({
         proveedor_id: parseInt(compraProveedorId, 10),
         fecha_compra: hoyLima(),
         items: compraItems.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad, precio_compra: i.precio_compra })),
@@ -199,7 +248,10 @@ export default function Proveedores() {
       setMostrarNuevaCompra(false);
       setCompraProveedorId('');
       setCompraItems([]);
-      setMensaje({ tipo: 'exito', texto: 'Compra registrada. Ahora puedes recibirla cuando llegue la mercadería.' });
+      setMensaje({
+        tipo: 'exito',
+        texto: `${respuesta?.message || 'Compra registrada.'} Ahora puedes recibirla cuando llegue la mercadería.`,
+      });
       cargarTodo();
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
@@ -221,6 +273,7 @@ export default function Proveedores() {
 
   const abrirRecepcion = async (compra) => {
     setMensaje(null);
+    setFaltaEnRecepcion(null);
     try {
       const detalle = await api.compraDetalle(compra.id);
       setCompraSeleccionada(detalle);
@@ -234,6 +287,7 @@ export default function Proveedores() {
           cantidad_recibida: String(it.cantidad),
           cantidad_conforme: String(it.cantidad),
           fecha_vencimiento: '',
+          numero_lote: '',
         }))
       );
     } catch (e) {
@@ -246,10 +300,18 @@ export default function Proveedores() {
   };
 
   const confirmarRecepcion = async () => {
+    setFaltaEnRecepcion(null);
     for (const it of itemsRecepcion) {
       const conforme = parseFloat(it.cantidad_conforme) || 0;
-      if (it.lleva_vencimiento && conforme > 0 && !it.fecha_vencimiento) {
-        setMensaje({ tipo: 'error', texto: `Falta la fecha de vencimiento del lote para "${it.producto_nombre}".` });
+      if (!it.lleva_vencimiento || conforme <= 0) continue;
+      const texto = !it.fecha_vencimiento
+        ? `Falta la fecha de vencimiento del lote para "${it.producto_nombre}".`
+        : it.fecha_vencimiento < hoyLima()
+          ? `El lote de "${it.producto_nombre}" ya venció (${it.fecha_vencimiento.split('-').reverse().join('/')}): no se puede recibir para vender.`
+          : null;
+      if (texto) {
+        setMensaje({ tipo: 'error', texto });
+        setFaltaEnRecepcion(it.detalle_id);
         return;
       }
     }
@@ -262,6 +324,7 @@ export default function Proveedores() {
           cantidad_recibida: parseFloat(it.cantidad_recibida) || 0,
           cantidad_conforme: parseFloat(it.cantidad_conforme) || 0,
           fecha_vencimiento: it.lleva_vencimiento ? it.fecha_vencimiento : null,
+          numero_lote: it.lleva_vencimiento ? it.numero_lote.trim() || null : null,
         })),
       });
       setMensaje({ tipo: 'exito', texto: resultado.message });
@@ -352,10 +415,32 @@ export default function Proveedores() {
   };
 
   const abrirResolver = (dev) => {
+    setMensaje(null);
     setDevolucionAResolver(dev);
     setResolverEstado('ACEPTADA');
     setResolverTipo('CREDITO');
     setResolverNotas('');
+    setResolverNotaCredito('');
+  };
+
+  const abrirNotaCredito = (dev) => {
+    setMensaje(null);
+    setNotaCreditoEditando(dev);
+    setNotaCreditoTexto(dev.nota_credito_proveedor || '');
+  };
+
+  const guardarNotaCredito = async () => {
+    setGuardandoNotaCredito(true);
+    try {
+      const resultado = await api.devolucionProveedorNotaCredito(notaCreditoEditando.id, notaCreditoTexto.trim() || null);
+      setMensaje({ tipo: 'exito', texto: resultado.message });
+      setNotaCreditoEditando(null);
+      cargarTodo();
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    } finally {
+      setGuardandoNotaCredito(false);
+    }
   };
 
   const confirmarResolucion = async () => {
@@ -365,6 +450,7 @@ export default function Proveedores() {
         estado: resolverEstado,
         tipo_resolucion: resolverEstado === 'ACEPTADA' ? resolverTipo : null,
         notas: resolverNotas || null,
+        nota_credito_proveedor: resolverEstado === 'ACEPTADA' ? resolverNotaCredito.trim() || null : null,
       });
       setMensaje({ tipo: 'exito', texto: resultado.message });
       setDevolucionAResolver(null);
@@ -376,6 +462,15 @@ export default function Proveedores() {
     }
   };
 
+  // El error de lo que se está haciendo en una ventana se muestra dentro de
+  // ella (arriba de la página quedaría tapado por la ventana).
+  const errorEnVentana =
+    mensaje?.tipo === 'error' ? (
+      <p className="prov-mensaje prov-mensaje-error prov-mensaje-ventana" role="alert">
+        {mensaje.texto}
+      </p>
+    ) : null;
+
   return (
     <div className="prov-layout">
       <div className="prov-header">
@@ -386,10 +481,13 @@ export default function Proveedores() {
           <button className={vista === 'DEVOLUCIONES' ? 'activo' : ''} onClick={() => setVista('DEVOLUCIONES')}>Devoluciones</button>
         </div>
         {vista === 'COMPRAS' && (
-          <button className="prov-boton-nuevo" onClick={() => setMostrarNuevaCompra(true)}>+ Nueva compra</button>
+          <button className="prov-boton-nuevo" onClick={abrirNuevaCompra}>+ Nueva compra</button>
         )}
         {vista === 'PROVEEDORES' && (
-          <button className="prov-boton-nuevo" onClick={() => setMostrarNuevoProveedor(true)}>+ Nuevo proveedor</button>
+          <button className="prov-boton-nuevo" onClick={() => {
+            setMensaje(null);
+            setMostrarNuevoProveedor(true);
+          }}>+ Nuevo proveedor</button>
         )}
       </div>
 
@@ -480,10 +578,16 @@ export default function Proveedores() {
                   <td>
                     <span className={`prov-badge prov-badge-${d.estado.toLowerCase()}`}>{d.estado}</span>
                     {d.tipo_resolucion && <span className="prov-nota-parcial">{d.tipo_resolucion}</span>}
+                    {d.nota_credito_proveedor && <span className="prov-nota-credito">NC {d.nota_credito_proveedor}</span>}
                   </td>
                   <td>
                     {d.estado === 'PENDIENTE' && (
                       <button className="prov-boton-recibir" onClick={() => abrirResolver(d)}>Resolver</button>
+                    )}
+                    {d.estado === 'ACEPTADA' && (
+                      <button className="prov-boton-nota-credito" onClick={() => abrirNotaCredito(d)}>
+                        {d.nota_credito_proveedor ? 'Editar N.° NC' : 'Anotar N.° NC'}
+                      </button>
                     )}
                   </td>
                 </tr>
@@ -521,6 +625,7 @@ export default function Proveedores() {
                 <input value={formProveedor.numero_documento} onChange={(e) => setFormProveedor({ ...formProveedor, numero_documento: e.target.value })} />
               </div>
             </div>
+            {errorEnVentana}
             <div className="prov-modal-acciones">
               <button className="prov-boton-cancelar" onClick={() => setMostrarNuevoProveedor(false)}>Cancelar</button>
               <button className="prov-boton-guardar" onClick={guardarProveedor} disabled={guardandoProveedor}>
@@ -567,11 +672,30 @@ export default function Proveedores() {
             })()}
             <div className="prov-campo">
               <label>Forma de pago</label>
-              <select value={compraTipoPago} onChange={(e) => setCompraTipoPago(e.target.value)}>
-                <option value="EFECTIVO">Efectivo</option>
+              <select
+                value={compraTipoPago}
+                onChange={(e) => {
+                  setCompraTipoPago(e.target.value);
+                  olvidarError();
+                }}
+              >
+                <option value="EFECTIVO_CAJA" disabled={!cajaAbierta}>
+                  {cajaAbierta ? 'Efectivo de la caja abierta' : 'Efectivo de la caja (no hay caja abierta)'}
+                </option>
+                <option value="EFECTIVO">Efectivo (no de la caja)</option>
                 <option value="TRANSFERENCIA">Transferencia</option>
                 <option value="CREDITO">Crédito</option>
               </select>
+              {compraTipoPago === 'EFECTIVO_CAJA' && cajaAbierta && (
+                <p className={`prov-nota-caja${cajaNoAlcanza ? ' prov-nota-caja-falta' : ''}`}>
+                  {cajaNoAlcanza
+                    ? `En la caja hay S/ ${Math.max(0, efectivoEnCaja).toFixed(2)}: no alcanza para esta compra.`
+                    : `Se descuenta del efectivo de la caja de ${cajaAbierta.usuario_nombre} (hay S/ ${efectivoEnCaja.toFixed(2)}): el cierre ya lo tendrá en cuenta.`}
+                </p>
+              )}
+              {compraTipoPago === 'EFECTIVO' && (
+                <p className="prov-nota-caja">Pagado con plata que no sale de la caja: no cambia el cuadre de caja.</p>
+              )}
             </div>
             <div className="prov-agregar-item">
               <select value={compraProductoSel} onChange={(e) => setCompraProductoSel(e.target.value)}>
@@ -682,6 +806,7 @@ export default function Proveedores() {
                  <span>Total a pagar</span>
               <strong>S/ {totalCompra.toFixed(2)}</strong>
             </div>
+            {errorEnVentana}
             <div className="prov-modal-acciones">
               <button className="prov-boton-cancelar" onClick={cerrarModalCompra}>Cancelar</button>
               <button className="prov-boton-guardar" onClick={guardarCompra} disabled={guardandoCompra}>
@@ -772,6 +897,7 @@ export default function Proveedores() {
               </span>
               <strong>Total S/ {compraVista.compra.total.toFixed(2)}</strong>
             </div>
+            {errorEnVentana}
             <div className="prov-modal-acciones">
               <button className="prov-boton-cancelar" onClick={() => setCompraVista(null)}>
                 Cerrar
@@ -806,12 +932,34 @@ export default function Proveedores() {
                   {it.lleva_vencimiento && (
                     <div className="prov-campo">
                       <label>Vencimiento</label>
-                      <input type="date" value={it.fecha_vencimiento} onChange={(e) => cambiarItemRecepcion(idx, 'fecha_vencimiento', e.target.value)} />
+                      <input
+                        type="date"
+                        min={hoyLima()}
+                        value={it.fecha_vencimiento}
+                        className={faltaEnRecepcion === it.detalle_id ? 'prov-input-falta' : undefined}
+                        aria-invalid={faltaEnRecepcion === it.detalle_id || undefined}
+                        onChange={(e) => {
+                          cambiarItemRecepcion(idx, 'fecha_vencimiento', e.target.value);
+                          if (faltaEnRecepcion === it.detalle_id) setFaltaEnRecepcion(null);
+                        }}
+                      />
+                    </div>
+                  )}
+                  {it.lleva_vencimiento && (
+                    <div className="prov-campo">
+                      <label>N.° de lote</label>
+                      <input
+                        value={it.numero_lote}
+                        maxLength={40}
+                        placeholder="Opcional"
+                        onChange={(e) => cambiarItemRecepcion(idx, 'numero_lote', e.target.value)}
+                      />
                     </div>
                   )}
                 </div>
               </div>
             ))}
+            {errorEnVentana}
             <div className="prov-modal-acciones">
               <button className="prov-boton-cancelar" onClick={() => setCompraSeleccionada(null)}>Cancelar</button>
               <button className="prov-boton-guardar" onClick={confirmarRecepcion} disabled={recibiendo}>
@@ -857,10 +1005,40 @@ export default function Proveedores() {
             {itemsDevolucion.length === 0 && (
               <p className="prov-items-vacio">Esta compra no tiene nada pendiente de reclamar.</p>
             )}
+            {errorEnVentana}
             <div className="prov-modal-acciones">
               <button className="prov-boton-cancelar" onClick={() => setCompraParaDevolver(null)}>Cancelar</button>
               <button className="prov-boton-guardar" onClick={registrarDevolucion} disabled={registrandoDevolucion}>
                 {registrandoDevolucion ? 'Registrando...' : 'Registrar devolución'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {notaCreditoEditando && (
+        <div className="prov-modal-overlay" onClick={() => setNotaCreditoEditando(null)}>
+          <div className="prov-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Nota de crédito — {notaCreditoEditando.folio}</h2>
+            <p className="prov-recepcion-nota">
+              {notaCreditoEditando.proveedor_nombre} · S/ {notaCreditoEditando.monto_devolucion.toFixed(2)}
+            </p>
+            <div className="prov-campo">
+              <label>N.° de nota de crédito del proveedor</label>
+              <input
+                value={notaCreditoTexto}
+                maxLength={13}
+                placeholder="FC01-00000123"
+                autoFocus
+                onChange={(e) => setNotaCreditoTexto(e.target.value.toUpperCase())}
+              />
+              <small className="prov-ayuda">Déjalo vacío para quitarlo. Es solo una referencia: no se consulta en SUNAT.</small>
+            </div>
+            {errorEnVentana}
+            <div className="prov-modal-acciones">
+              <button className="prov-boton-cancelar" onClick={() => setNotaCreditoEditando(null)}>Cancelar</button>
+              <button className="prov-boton-guardar" onClick={guardarNotaCredito} disabled={guardandoNotaCredito}>
+                {guardandoNotaCredito ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>
@@ -892,11 +1070,27 @@ export default function Proveedores() {
               </div>
             )}
 
+            {resolverEstado === 'ACEPTADA' && (
+              <div className="prov-campo">
+                <label>N.° de nota de crédito del proveedor (opcional)</label>
+                <input
+                  value={resolverNotaCredito}
+                  maxLength={13}
+                  placeholder="FC01-00000123"
+                  onChange={(e) => setResolverNotaCredito(e.target.value.toUpperCase())}
+                />
+                <small className="prov-ayuda">
+                  La emite el proveedor en SUNAT y corrige su factura. Si aún no llega, anótala después desde la lista.
+                </small>
+              </div>
+            )}
+
             <div className="prov-campo">
               <label>Notas (opcional)</label>
               <input value={resolverNotas} onChange={(e) => setResolverNotas(e.target.value)} />
             </div>
 
+            {errorEnVentana}
             <div className="prov-modal-acciones">
               <button className="prov-boton-cancelar" onClick={() => setDevolucionAResolver(null)}>Cancelar</button>
               <button className="prov-boton-guardar" onClick={confirmarResolucion} disabled={resolviendo}>

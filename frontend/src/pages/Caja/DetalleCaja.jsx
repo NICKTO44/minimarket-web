@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Printer, Wallet, X } from 'lucide-react';
 import { api } from '../../api/api';
 import { ventasDeCajaPorMetodo } from '../../utils/metodoPago';
-import { fechaHoraLima } from '../../utils/formato';
+import { fechaHoraLima, textoDiferencia } from '../../utils/formato';
 import '../../components/FormularioGasto.css';
 import './Caja.css';
 
@@ -170,10 +170,7 @@ export default function DetalleCaja({ cajaId, onCerrar }) {
                   {caja.diferencia != null && (
                     <div className={`caja-diferencia caja-diferencia-${estadoDiferencia(caja.diferencia)}`}>
                       <span>Diferencia</span>
-                      <strong>
-                        {caja.diferencia >= 0 ? '+' : ''}
-                        {soles(caja.diferencia)}
-                      </strong>
+                      <strong>{textoDiferencia(caja.diferencia)}</strong>
                     </div>
                   )}
                   {caja.justificacion_diferencia && <p className="dcaja-nota">Justificación: {caja.justificacion_diferencia}</p>}

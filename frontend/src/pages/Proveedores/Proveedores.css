@@ -749,3 +749,52 @@
     max-width: 100%;
   }
 }
+/* N.° de nota de crédito del proveedor en devoluciones */
+.prov-nota-credito {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #166534;
+}
+
+.prov-boton-nota-credito {
+  padding: 6px 10px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.prov-ayuda {
+  font-size: 11.5px;
+  color: #6b7280;
+}
+
+/* Error dentro de una ventana (no detrás de ella). */
+.prov-mensaje.prov-mensaje-ventana {
+  margin: 14px 0 0;
+}
+
+/* El campo que falta en la recepción. */
+.prov-campo input.prov-input-falta {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px #fee2e2;
+}
+
+/* Forma de pago de la compra: de dónde sale la plata. */
+.prov-nota-caja {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+.prov-nota-caja.prov-nota-caja-falta {
+  color: #b91c1c;
+  font-weight: 600;
+}

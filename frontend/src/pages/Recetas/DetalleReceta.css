@@ -1,0 +1,96 @@
+/* Detalle de una receta del libro (sobre la base de CalculadoraPieTablar.css). */
+.pt-modal.dr-modal {
+  max-width: 520px;
+}
+
+.dr-seccion {
+  padding: 12px 0;
+  border-top: 1px solid #eef0f3;
+}
+
+.dr-seccion h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.dr-datos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  margin: 0;
+}
+
+.dr-dato dt {
+  font-size: 11.5px;
+  color: #6b7280;
+}
+
+.dr-dato dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: #16181d;
+  overflow-wrap: anywhere;
+}
+
+.dr-productos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.dr-productos li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dr-productos small {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.dr-productos small.dr-retenida {
+  color: #991b1b;
+}
+
+.dr-aviso {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.dr-aviso-anulada {
+  margin-bottom: 12px;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.dr-nota {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+.pt-acciones.dr-acciones {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 480px) {
+  .dr-datos {
+    grid-template-columns: 1fr;
+  }
+}

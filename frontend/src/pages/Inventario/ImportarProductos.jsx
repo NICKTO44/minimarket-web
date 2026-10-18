@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { api } from '../../api/api';
 import { ErrorDeArchivo, TIPO_XLSX, escribirXlsx, leerHoja } from '../../utils/hojas';
-import { CAMPOS, armarFilas, columnasDe, filaDeTitulos, sugerirCampos } from '../../utils/importacion';
+import { armarFilas, camposImportacion, columnasDe, filaDeTitulos, sugerirCampos } from '../../utils/importacion';
 import { descargarArchivo } from '../../utils/pdfTicket';
 import { opcionesUnidad } from '../../utils/unidades';
 import './ImportarProductos.css';
@@ -13,13 +13,18 @@ import './ImportarProductos.css';
 
 const MAXIMO_FILAS = 5000;
 const FILAS_A_LA_VISTA = 200;
-const TITULOS_PLANTILLA = ['Código', 'Nombre', 'Descripción', 'Categoría', 'Unidad', 'Precio de venta', 'Precio de compra', 'Stock', 'Stock mínimo'];
-const OBLIGATORIOS = CAMPOS.filter((c) => c.obligatorio);
+const TITULOS_PLANTILLA = ['Código', 'Nombre', 'Descripción', 'Categoría', 'Unidad', 'Precio de venta', 'Precio de compra', 'Stock', 'Stock mínimo', 'Lote', 'Vencimiento'];
+// Farmacia: columnas de la ficha del medicamento al final de la plantilla.
+const TITULOS_FICHA = ['Principio activo', 'Concentración', 'Forma farmacéutica', 'Laboratorio', 'Registro sanitario', 'Condición de venta', 'Genérico'];
 
 const soles = (n) => (n == null ? '—' : `S/ ${n.toFixed(2)}`);
+// "2027-12-31" -> "31/12/2027"
+const fechaCorta = (iso) => (iso ? iso.split('-').reverse().join('/') : '—');
 const plural = (n, uno, varios) => `${n.toLocaleString('es-PE')} ${n === 1 ? uno : varios}`;
 
-export default function ImportarProductos({ categorias, unidadesActivas, onCerrar, onTerminado }) {
+export default function ImportarProductos({ categorias, unidadesActivas, onCerrar, onTerminado, fichaMedicamento = false }) {
+  const CAMPOS = camposImportacion({ ficha: fichaMedicamento });
+  const OBLIGATORIOS = CAMPOS.filter((c) => c.obligatorio);
   const [paso, setPaso] = useState('ARCHIVO');
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState(null);
@@ -63,7 +68,7 @@ export default function ImportarProductos({ categorias, unidadesActivas, onCerra
       const primera = titulos >= 0 ? titulos : filas.findIndex((f) => f.some((c) => c !== ''));
       if (primera < 0) throw new ErrorDeArchivo('El archivo no tiene datos.');
       const cols = columnasDe(filas, titulos);
-      const sugeridos = titulos >= 0 ? sugerirCampos(cols.map((c) => c.titulo)) : cols.map(() => '');
+      const sugeridos = titulos >= 0 ? sugerirCampos(cols.map((c) => c.titulo), CAMPOS) : cols.map(() => '');
       const nuevoMapa = {};
       const auto = {};
       cols.forEach((c, i) => {
@@ -147,21 +152,39 @@ export default function ImportarProductos({ categorias, unidadesActivas, onCerra
   const filasRevisadas = useMemo(() => {
     if (!revision) return [];
     const porFila = new Map(revision.filas.map((f) => [f.fila, f]));
-    return armado.filas.map((f) => ({ ...f, ...porFila.get(f.fila) }));
+    // vencimiento/lote: los que entendió el servidor; los del archivo quedan
+    // aparte para la descarga de errores.
+    return armado.filas.map((f) => ({ ...f, ...porFila.get(f.fila), loteArchivo: f.lote, vencimientoArchivo: f.vencimiento }));
   }, [revision, armado]);
-  const filasVisibles = soloProblemas ? filasRevisadas.filter((f) => f.estado !== 'LISTO') : filasRevisadas;
+  const filasVisibles = soloProblemas ? filasRevisadas.filter((f) => f.estado === 'ERROR' || f.estado === 'EXISTE') : filasRevisadas;
+  // El archivo trae lotes: se muestran sus columnas en la revisión.
+  const hayLotes = armado.filas.some((f) => f.vencimiento || f.lote);
 
   const descargarPlantilla = () => {
-    descargarArchivo(escribirXlsx([TITULOS_PLANTILLA], { anchos: [16, 36, 30, 18, 12, 15, 16, 10, 13] }), 'Plantilla-productos.xlsx', { tipo: TIPO_XLSX });
+    const titulos = fichaMedicamento ? [...TITULOS_PLANTILLA, ...TITULOS_FICHA] : TITULOS_PLANTILLA;
+    const anchos = [16, 36, 30, 18, 12, 15, 16, 10, 13, 12, 14, ...(fichaMedicamento ? [24, 14, 20, 20, 18, 22, 11] : [])];
+    descargarArchivo(escribirXlsx([titulos], { anchos }), 'Plantilla-productos.xlsx', { tipo: TIPO_XLSX });
   };
 
   const descargarErrores = () => {
     const conError = filasRevisadas.filter((f) => f.estado === 'ERROR');
     const filas = [
-      ['Fila', 'Código', 'Nombre', 'Precio de venta', 'Stock', 'Categoría', 'Problema'],
-      ...conError.map((f) => [f.fila, f.codigo, f.nombre, f.precio ?? '', f.stock ?? '', f.categoria || '', f.motivo || '']),
+      ['Fila', 'Código', 'Nombre', 'Precio de venta', 'Stock', 'Categoría', 'Lote', 'Vencimiento', 'Problema'],
+      ...conError.map((f) => [
+        f.fila,
+        f.codigo,
+        f.nombre,
+        f.precio ?? '',
+        f.stock ?? '',
+        f.categoria || '',
+        f.loteArchivo || '',
+        f.vencimientoArchivo || '',
+        f.motivo || '',
+      ]),
     ];
-    descargarArchivo(escribirXlsx(filas, { hoja: 'Con error', anchos: [7, 16, 36, 15, 10, 18, 44] }), 'Productos-con-error.xlsx', { tipo: TIPO_XLSX });
+    descargarArchivo(escribirXlsx(filas, { hoja: 'Con error', anchos: [7, 16, 36, 15, 10, 18, 12, 14, 44] }), 'Productos-con-error.xlsx', {
+      tipo: TIPO_XLSX,
+    });
   };
 
   const cerrar = () => {
@@ -210,6 +233,11 @@ export default function ImportarProductos({ categorias, unidadesActivas, onCerra
                 Descarga la plantilla
               </button>{' '}
               con las columnas listas para llenar.
+            </p>
+            <p className="imp-nota imp-nota-pie">
+              <strong>Productos con vencimiento:</strong> una fila por lote. Repite el código en cada fila con su n.° de lote, su
+              vencimiento y la cantidad de ese lote en Stock.
+              {fichaMedicamento && ' Los medicamentos con stock necesitan su vencimiento.'}
             </p>
             <div className="inv-modal-acciones">
               <button className="inv-boton-cancelar" onClick={cerrar}>
@@ -294,6 +322,18 @@ export default function ImportarProductos({ categorias, unidadesActivas, onCerra
               </label>
             </div>
 
+            {usados.has('vencimiento') && (
+              <p className="imp-nota imp-nota-lotes">
+                Con vencimiento, el <strong>Stock</strong> de cada fila es la cantidad de ese lote, y el mismo código en varias filas son
+                varios lotes del mismo producto (el nombre y el precio se toman de su primera fila). Las fechas pueden venir como 31/12/2027,
+                2027-12-31 o 12/2027 (= fin de mes).
+              </p>
+            )}
+            {usados.has('lote') && !usados.has('vencimiento') && (
+              <p className="inv-mensaje imp-mensaje-aviso">
+                Indicaste el n.° de lote pero ninguna columna de <strong>Fecha de vencimiento</strong>: los lotes necesitan su vencimiento.
+              </p>
+            )}
             {faltan.length > 0 && (
               <p className="inv-mensaje imp-mensaje-aviso">
                 Falta indicar qué columna es: <strong>{faltan.map((c) => c.label).join(', ')}</strong>.
@@ -335,8 +375,20 @@ export default function ImportarProductos({ categorias, unidadesActivas, onCerra
                 <span>con error (no se importan)</span>
               </div>
             </div>
-            {(revision.categorias_nuevas.length > 0 || armado.unidadesRaras > 0) && (
+            {(revision.categorias_nuevas.length > 0 || armado.unidadesRaras > 0 || revision.lotes_nuevos > 0 || revision.lotes_existentes > 0) && (
               <ul className="imp-avisos">
+                {revision.lotes_nuevos > 0 && (
+                  <li>
+                    Se {revision.lotes_nuevos === 1 ? 'registrará 1 lote' : `registrarán ${revision.lotes_nuevos.toLocaleString('es-PE')} lotes`} con su
+                    vencimiento; el stock de esos productos será la suma de sus lotes.
+                  </li>
+                )}
+                {revision.lotes_existentes > 0 && (
+                  <li>
+                    {plural(revision.lotes_existentes, 'lote es', 'lotes son')} de productos que ya existen: entran solo si eliges
+                    «Actualizar». Si el producto ya tiene ese lote con el mismo vencimiento, se corrige su cantidad (no se duplica).
+                  </li>
+                )}
                 {revision.categorias_nuevas.length > 0 && (
                   <li>
                     Se {revision.categorias_nuevas.length === 1 ? 'creará la categoría' : 'crearán las categorías'}:{' '}
@@ -362,12 +414,19 @@ export default function ImportarProductos({ categorias, unidadesActivas, onCerra
                     <th>Categoría</th>
                     <th className="imp-num">Precio</th>
                     <th className="imp-num">Stock</th>
+                    {hayLotes && <th>Lote</th>}
+                    {hayLotes && <th>Vence</th>}
                     <th>Estado</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filasVisibles.slice(0, FILAS_A_LA_VISTA).map((f) => (
-                    <tr key={f.fila} className={f.estado === 'ERROR' ? 'imp-fila-error' : f.estado === 'EXISTE' ? 'imp-fila-existe' : ''}>
+                    <tr
+                      key={f.fila}
+                      className={
+                        f.estado === 'ERROR' ? 'imp-fila-error' : f.estado === 'EXISTE' ? 'imp-fila-existe' : f.estado === 'LOTE' ? 'imp-fila-lote' : ''
+                      }
+                    >
                       <td>{f.fila}</td>
                       <td>{f.codigo || '—'}</td>
                       <td>{f.nombre || '—'}</td>
@@ -377,12 +436,14 @@ export default function ImportarProductos({ categorias, unidadesActivas, onCerra
                       </td>
                       <td className="imp-num">{soles(f.precio)}</td>
                       <td className="imp-num">{f.stock ?? '—'}</td>
+                      {hayLotes && <td>{f.lote || (f.estado === 'ERROR' ? f.loteArchivo : null) || '—'}</td>}
+                      {hayLotes && <td>{f.vencimiento ? fechaCorta(f.vencimiento) : f.vencimientoArchivo || '—'}</td>}
                       <td className="imp-estado">{f.estado === 'LISTO' ? 'Listo' : f.motivo}</td>
                     </tr>
                   ))}
                   {filasVisibles.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="imp-vacio">
+                      <td colSpan={hayLotes ? 9 : 7} className="imp-vacio">
                         Ninguna fila tiene problemas.
                       </td>
                     </tr>
@@ -407,7 +468,7 @@ export default function ImportarProductos({ categorias, unidadesActivas, onCerra
                 {revision.existentes === 1 ? 'El que ya existe:' : `Los ${revision.existentes.toLocaleString('es-PE')} que ya existen:`}
                 <select value={existentes} onChange={(e) => setExistentes(e.target.value)}>
                   <option value="SALTAR">No tocarlos (saltar)</option>
-                  <option value="ACTUALIZAR">Actualizar su precio y stock</option>
+                  <option value="ACTUALIZAR">{hayLotes ? 'Actualizar su precio, stock y lotes' : 'Actualizar su precio y stock'}</option>
                 </select>
               </label>
             )}
@@ -443,6 +504,9 @@ export default function ImportarProductos({ categorias, unidadesActivas, onCerra
             <ul className="imp-final">
               <li className="imp-ok">✓ {plural(resultado.creados, 'producto nuevo importado', 'productos nuevos importados')}.</li>
               {resultado.actualizados > 0 && <li className="imp-ok">✓ {plural(resultado.actualizados, 'producto actualizado', 'productos actualizados')}.</li>}
+              {resultado.lotes_guardados > 0 && (
+                <li className="imp-ok">✓ {plural(resultado.lotes_guardados, 'lote registrado', 'lotes registrados')} con su vencimiento.</li>
+              )}
               {resultado.categorias_nuevas.length > 0 && <li>Categorías creadas: {resultado.categorias_nuevas.join(', ')}.</li>}
               {resultado.existentes > resultado.actualizados && (
                 <li>{plural(resultado.existentes - resultado.actualizados, 'producto ya existía y no se tocó', 'productos ya existían y no se tocaron')}.</li>

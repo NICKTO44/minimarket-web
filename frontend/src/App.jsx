@@ -8,6 +8,7 @@ import Sidebar from './components/Sidebar';
 import NavegacionMovil from './components/NavegacionMovil';
 import './App.css';
 import Inventario from './pages/Inventario/Inventario';
+import LibroRecetas from './pages/Recetas/LibroRecetas';
 import StockLotes from './pages/StockLotes/StockLotes';
 import Proveedores from './pages/Proveedores/Proveedores';
 import Devoluciones from './pages/Devoluciones/Devoluciones';
@@ -51,6 +52,9 @@ import {
   MODULO_MESAS,
   MODULO_SERVICIOS,
   MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VARIANTES, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
+  MODULO_FICHA_MEDICAMENTO,
+  MODULO_RECETAS,
+  MODULO_ALTERNATIVAS,
   rubroDe,
 } from './utils/rubros';
 
@@ -65,6 +69,7 @@ const MODULO_DE_PANTALLA = {
   COTIZACIONES: MODULO_COTIZACIONES,
   CREDITOS: MODULO_CREDITO,
   GUIAS: MODULO_GUIAS,
+  RECETAS: MODULO_RECETAS,
 };
 
 function App() {
@@ -542,6 +547,9 @@ function App() {
               precioEditable={negocio.modulos.includes(MODULO_PRECIO_VENTA)}
               presentaciones={negocio.modulos.includes(MODULO_PRESENTACIONES)}
               precioMayor={negocio.modulos.includes(MODULO_PRECIO_MAYOR)}
+              fichaMedicamento={negocio.modulos.includes(MODULO_FICHA_MEDICAMENTO)}
+              recetas={negocio.modulos.includes(MODULO_RECETAS)}
+              alternativas={negocio.modulos.includes(MODULO_ALTERNATIVAS)}
               cambios={negocio.modulos.includes(MODULO_CAMBIOS)}
               cambioEnCurso={negocio.modulos.includes(MODULO_CAMBIOS) ? cambioEnCurso : null}
               onCambioTerminado={() => setCambioEnCurso(null)}
@@ -562,12 +570,13 @@ function App() {
             variantes={negocio.modulos.includes(MODULO_VARIANTES)}
             presentaciones={negocio.modulos.includes(MODULO_PRESENTACIONES)}
             precioMayor={negocio.modulos.includes(MODULO_PRECIO_MAYOR)}
+            fichaMedicamento={negocio.modulos.includes(MODULO_FICHA_MEDICAMENTO)}
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS)}
             verSinPrecio={productosSinPrecio}
             onSinPrecioVisto={() => setProductosSinPrecio(false)}
           />
         )}
-        {pantallaVisible === 'STOCK' && <StockLotes />}
+        {pantallaVisible === 'STOCK' && <StockLotes esAdmin={usuarioActual?.rol_id === 1} />}
         {pantallaVisible === 'PROVEEDORES' && <Proveedores />}
         {pantallaVisible === 'DEVOLUCIONES' && (
           <Devoluciones
@@ -633,6 +642,7 @@ function App() {
           />
         )}
         {pantallaVisible === 'GASTOS' && usuarioActual?.rol_id === 1 && <Gastos />}
+        {pantallaVisible === 'RECETAS' && usuarioActual?.rol_id === 1 && <LibroRecetas />}
         {pantallaVisible === 'SUSCRIPCION' && usuarioActual?.rol_id === 1 && (
           <Suscripcion
             estadoSuscripcion={estadoSuscripcion}

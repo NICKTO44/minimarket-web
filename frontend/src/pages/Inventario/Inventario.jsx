@@ -11,10 +11,21 @@ import FormularioModelo from './FormularioModelo';
 import ImportarProductos from './ImportarProductos';
 import { TIPO_XLSX, escribirXlsx } from '../../utils/hojas';
 import { descargarArchivo } from '../../utils/pdfTicket';
-import { hoyLima } from '../../utils/formato';
+import { fechaCorta, hoyLima } from '../../utils/formato';
 import { agruparPorModelo, etiquetaVariante, rangoPrecio } from '../../utils/variantes';
 import OpcionesDeVenta from '../../components/OpcionesDeVenta';
 import { OPCIONES_VACIAS, formularioAOpciones, opcionesAFormulario } from '../../utils/presentaciones';
+import FichaMedicamento from './FichaMedicamento';
+import {
+  FICHA_VACIA,
+  etiquetaCondicion,
+  fichaAFormulario,
+  fichaCoincide,
+  formularioAFicha,
+  mapaFichas,
+  resumenFicha,
+  textoPlano,
+} from '../../utils/medicamentos';
 
 const FORM_VACIO = {
   codigo: '',
@@ -120,8 +131,17 @@ export default function Inventario({
   // Módulos "Presentaciones" y "Precio por mayor": su sección en el formulario.
   presentaciones = false,
   precioMayor = false,
+  // Módulo "Ficha del medicamento" (farmacia): su sección en el formulario,
+  // el principio activo bajo el nombre y la búsqueda por principio activo.
+  fichaMedicamento = false,
 }) {
   const conOpcionesVenta = presentaciones || precioMayor;
+  // producto_id -> ficha (solo con el módulo).
+  const [fichas, setFichas] = useState(() => new Map());
+  // Campos de la ficha en el formulario y la ficha que tenía al abrirlo
+  // (JSON, para guardar solo si cambió; null = no se pudo leer).
+  const [fichaForm, setFichaForm] = useState(FICHA_VACIA);
+  const [fichaOriginal, setFichaOriginal] = useState(JSON.stringify(FICHA_VACIA));
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [busqueda, setBusqueda] = useState('');
@@ -154,11 +174,19 @@ export default function Inventario({
 
   const [loteInicialCantidad, setLoteInicialCantidad] = useState('');
   const [loteInicialFecha, setLoteInicialFecha] = useState('');
+  const [loteInicialNumero, setLoteInicialNumero] = useState('');
+  // Al editar: stock sin lote de un producto que aún no es perecible. Si se
+  // marca perecible, ese stock entra como un lote con su vencimiento (si no,
+  // dejaría de venderse: el stock de un perecible es la suma de sus lotes).
+  const [stockSinLote, setStockSinLote] = useState(0);
 
   const [lotesProducto, setLotesProducto] = useState([]);
   const [cargandoLotes, setCargandoLotes] = useState(false);
   const [nuevoLoteCantidad, setNuevoLoteCantidad] = useState('');
   const [nuevoLoteFecha, setNuevoLoteFecha] = useState('');
+  const [nuevoLoteNumero, setNuevoLoteNumero] = useState('');
+  // A quién se vendió un lote (solo administrador): { lote_id, cargando, datos, error }.
+  const [ventasLote, setVentasLote] = useState(null);
   const [agregandoLote, setAgregandoLote] = useState(false);
 
   // --- Crear categoría nueva, sin salir del formulario de producto ---
@@ -188,6 +216,12 @@ export default function Inventario({
     // Aparte y sin bloquear: si fallara, el inventario igual se muestra.
     api.productosDesactivados().then(setDesactivados).catch(() => setDesactivados([]));
     api.unidades().then((u) => setUnidadesActivas(u.activas)).catch(() => {});
+    if (fichaMedicamento) {
+      api
+        .medicamentosFichas()
+        .then((lista) => setFichas(mapaFichas(lista)))
+        .catch(() => {});
+    }
     if (ganancias) {
       api
         .gananciasCostos()
@@ -209,7 +243,14 @@ export default function Inventario({
       const q = busqueda.trim().toLowerCase();
       // El código también en minúsculas: antes "M63" no se encontraba (se
       // comparaba "M63" con "m63") y solo aparecían los códigos de puros números.
-      lista = lista.filter((p) => p.nombre.toLowerCase().includes(q) || String(p.codigo || '').toLowerCase().includes(q));
+      const plano = textoPlano(q);
+      lista = lista.filter(
+        (p) =>
+          p.nombre.toLowerCase().includes(q) ||
+          String(p.codigo || '').toLowerCase().includes(q) ||
+          // Farmacia: también por principio activo o laboratorio.
+          (fichaMedicamento && fichaCoincide(fichas.get(p.id), plano))
+      );
     }
     if (filtroCategoria) {
       lista = lista.filter((p) => String(p.categoria_id) === filtroCategoria);
@@ -221,7 +262,13 @@ export default function Inventario({
       lista = lista.filter(sinPrecioCompra);
     }
     return lista;
-  }, [productos, desactivados, verDesactivados, busqueda, filtroCategoria, soloStockBajo, soloSinPrecio]);
+  }, [productos, desactivados, verDesactivados, busqueda, filtroCategoria, soloStockBajo, soloSinPrecio, fichaMedicamento, fichas]);
+
+  // Principios activos ya usados, para sugerirlos al escribir una ficha.
+  const principiosUsados = useMemo(
+    () => [...new Set([...fichas.values()].map((f) => f.principio_activo))].sort((a, b) => a.localeCompare(b, 'es')),
+    [fichas]
+  );
 
   // Con tallas y colores, las tallas de un modelo van en una sola fila.
   const filasTabla = useMemo(
@@ -261,10 +308,15 @@ export default function Inventario({
   const abrirNuevo = () => {
     setEditandoId(null);
     setForm(FORM_VACIO);
+    setFichaForm(FICHA_VACIA);
+    setFichaOriginal(JSON.stringify(FICHA_VACIA));
     setOpcionesVenta(OPCIONES_VACIAS);
     setOpcionesVentaOriginal(JSON.stringify(OPCIONES_VACIAS));
     setLoteInicialCantidad('');
     setLoteInicialFecha('');
+    setLoteInicialNumero('');
+    setStockSinLote(0);
+    setVentasLote(null);
     setLotesProducto([]);
     setImagenArchivo(null);
     setImagenPreview(null);
@@ -290,6 +342,10 @@ export default function Inventario({
       controla_stock: p.controla_stock !== false,
       afectacion_igv: p.afectacion_propia || 'HEREDAR',
     });
+    setStockSinLote(!p.lleva_vencimiento && p.controla_stock !== false && p.stock > 0 ? p.stock : 0);
+    setLoteInicialCantidad('');
+    setLoteInicialFecha('');
+    setLoteInicialNumero('');
     setImagenArchivo(null);
     setImagenPreview(p.imagen_url ? `${API_URL}${p.imagen_url}?t=${Date.now()}` : null);
     setMensaje(null);
@@ -315,6 +371,11 @@ export default function Inventario({
         })
         .catch(() => setOpcionesVentaOriginal(null));
     }
+
+    // La ficha ya está en memoria (se cargó con la lista).
+    const campos = fichaAFormulario(fichas.get(p.id));
+    setFichaForm(campos);
+    setFichaOriginal(JSON.stringify(campos));
   };
 
   const cargarLotes = (productoId) => {
@@ -326,6 +387,18 @@ export default function Inventario({
       .finally(() => setCargandoLotes(false));
   };
 
+  const verVentasLote = (loteId) => {
+    if (ventasLote?.lote_id === loteId) {
+      setVentasLote(null);
+      return;
+    }
+    setVentasLote({ lote_id: loteId, cargando: true });
+    api
+      .lotesVentas(loteId)
+      .then((datos) => setVentasLote((v) => (v?.lote_id === loteId ? { lote_id: loteId, datos } : v)))
+      .catch((e) => setVentasLote((v) => (v?.lote_id === loteId ? { lote_id: loteId, error: e.message } : v)));
+  };
+
   const cerrarForm = () => {
     setMostrarForm(false);
     setEditandoId(null);
@@ -333,6 +406,8 @@ export default function Inventario({
     setLotesProducto([]);
     setLoteInicialCantidad('');
     setLoteInicialFecha('');
+    setLoteInicialNumero('');
+    setVentasLote(null);
     setImagenArchivo(null);
     setImagenPreview(null);
     setMostrarNuevaCategoria(false);
@@ -385,9 +460,11 @@ export default function Inventario({
         producto_id: editandoId,
         cantidad: parseFloat(nuevoLoteCantidad),
         fecha_vencimiento: nuevoLoteFecha,
+        numero_lote: nuevoLoteNumero.trim() || null,
       });
       setNuevoLoteCantidad('');
       setNuevoLoteFecha('');
+      setNuevoLoteNumero('');
       cargarLotes(editandoId);
       cargarTodo();
       setMensaje({ tipo: 'exito', texto: 'Lote agregado.' });
@@ -438,12 +515,34 @@ export default function Inventario({
         });
         return;
       }
+    } else if (stockSinLote > 0 && !loteInicialFecha) {
+      setMensaje({
+        tipo: 'error',
+        texto: `Ahora es perecible: indica el vencimiento de las ${stockSinLote} unidades que ya tiene en stock.`,
+      });
+      return;
+    }
+
+    // Un medicamento siempre lleva lote y vencimiento (no se vende vencido).
+    if (fichaMedicamento && fichaForm.es_medicamento && !sinControlStock && !form.lleva_vencimiento) {
+      setMensaje({
+        tipo: 'error',
+        texto: 'Es medicamento: marca "Es perecible" para controlar sus lotes y su vencimiento.',
+      });
+      return;
     }
 
     // Presentaciones y precio por mayor: se revisan antes de guardar nada.
     const opcionesAGuardar = conOpcionesVenta ? formularioAOpciones(opcionesVenta) : null;
     if (opcionesAGuardar?.error) {
       setMensaje({ tipo: 'error', texto: opcionesAGuardar.error });
+      return;
+    }
+    // Ficha del medicamento: también se revisa antes de guardar nada.
+    const fichaCambio = fichaMedicamento && JSON.stringify(fichaForm) !== fichaOriginal;
+    const fichaAGuardar = fichaCambio ? formularioAFicha(fichaForm) : null;
+    if (fichaAGuardar?.error) {
+      setMensaje({ tipo: 'error', texto: fichaAGuardar.error });
       return;
     }
 
@@ -469,6 +568,16 @@ export default function Inventario({
 
       if (editandoId) {
         await api.productoActualizar(editandoId, payload);
+        // Pasó a perecible con stock: ese stock entra como su primer lote.
+        if (form.lleva_vencimiento && !sinControlStock && stockSinLote > 0) {
+          await api.loteCrear({
+            producto_id: editandoId,
+            cantidad: stockSinLote,
+            fecha_vencimiento: loteInicialFecha,
+            numero_lote: loteInicialNumero.trim() || null,
+          });
+          setStockSinLote(0);
+        }
       } else {
         const creado = await api.productoCrear(payload);
         idParaImagen = creado.producto_id;
@@ -477,6 +586,7 @@ export default function Inventario({
             producto_id: creado.producto_id,
             cantidad: parseFloat(loteInicialCantidad),
             fecha_vencimiento: loteInicialFecha,
+            numero_lote: loteInicialNumero.trim() || null,
           });
         }
       }
@@ -511,6 +621,26 @@ export default function Inventario({
           setMensaje({
             tipo: 'error',
             texto: `Producto guardado, pero no se pudieron guardar sus presentaciones o precios por mayor (${e.message}). Toca Guardar para intentarlo de nuevo.`,
+          });
+          cargarTodo();
+          return;
+        }
+      }
+
+      // Ficha del medicamento (solo si cambió).
+      if (fichaAGuardar && idParaImagen) {
+        try {
+          if (fichaAGuardar.quitar) {
+            if (editandoId && fichas.has(editandoId)) await api.fichaQuitar(idParaImagen);
+          } else {
+            await api.fichaGuardar(idParaImagen, fichaAGuardar.ficha);
+          }
+          setFichaOriginal(JSON.stringify(fichaForm));
+        } catch (e) {
+          setEditandoId(idParaImagen);
+          setMensaje({
+            tipo: 'error',
+            texto: `Producto guardado, pero no se pudo guardar su ficha de medicamento (${e.message}). Toca Guardar para intentarlo de nuevo.`,
           });
           cargarTodo();
           return;
@@ -788,6 +918,14 @@ export default function Inventario({
                     <td>
                       {p.nombre}
                       {p.lleva_vencimiento && <span className="inv-badge-vencimiento">vence</span>}
+                      {fichaMedicamento && fichas.has(p.id) && etiquetaCondicion(fichas.get(p.id).condicion_venta) && (
+                        <span className={`inv-badge-receta inv-badge-receta-${fichas.get(p.id).condicion_venta.toLowerCase()}`}>
+                          {etiquetaCondicion(fichas.get(p.id).condicion_venta)}
+                        </span>
+                      )}
+                      {fichaMedicamento && fichas.has(p.id) && (
+                        <span className="inv-ficha-resumen">{resumenFicha(fichas.get(p.id))}</span>
+                      )}
                       {p.afectacion_igv && p.afectacion_igv !== 'GRAVADO' && (
                         <span className="inv-badge-sin-igv">{etiquetaAfectacion(p.afectacion_igv)}</span>
                       )}
@@ -839,6 +977,7 @@ export default function Inventario({
         <ImportarProductos
           categorias={categorias}
           unidadesActivas={unidadesActivas}
+          fichaMedicamento={fichaMedicamento}
           onCerrar={() => setImportando(false)}
           onTerminado={(resultado) => {
             setImportando(false);
@@ -1044,6 +1183,20 @@ export default function Inventario({
               )}
             </div>
 
+            {fichaMedicamento && (
+              <FichaMedicamento
+                campos={fichaForm}
+                onCambiar={(nueva) => {
+                  // Recién marcado como medicamento: pasa a perecible (lotes y vencimiento).
+                  if (nueva.es_medicamento && !fichaForm.es_medicamento && (!servicios || form.controla_stock)) {
+                    cambiarCampo('lleva_vencimiento', true);
+                  }
+                  setFichaForm(nueva);
+                }}
+                principios={principiosUsados}
+              />
+            )}
+
             {form.lleva_vencimiento && !editandoId && (!servicios || form.controla_stock) && (
               <div className="inv-lote-caja">
                 <p className="inv-lote-titulo">Primer lote de este producto</p>
@@ -1067,11 +1220,49 @@ export default function Inventario({
                       onChange={(e) => setLoteInicialFecha(e.target.value)}
                     />
                   </div>
+                  <div className="inv-campo inv-campo-lote-numero">
+                    <label>N.° de lote (opcional)</label>
+                    <input
+                      value={loteInicialNumero}
+                      maxLength={40}
+                      placeholder="El que viene en el empaque"
+                      onChange={(e) => setLoteInicialNumero(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
             )}
 
-            {form.lleva_vencimiento && editandoId && (
+            {form.lleva_vencimiento && editandoId && stockSinLote > 0 && (!servicios || form.controla_stock) && (
+              <div className="inv-lote-caja">
+                <p className="inv-lote-titulo">Vencimiento del stock que ya tiene</p>
+                <p className="inv-lote-nota">
+                  Tiene {stockSinLote} en stock sin lote. Al guardar, ese stock entra como su primer lote con este vencimiento; los
+                  siguientes los agregas abajo o al recibir una compra.
+                </p>
+                <div className="inv-lote-form">
+                  <div className="inv-campo">
+                    <label>Cantidad</label>
+                    <input type="number" value={stockSinLote} disabled />
+                  </div>
+                  <div className="inv-campo">
+                    <label>Fecha de vencimiento</label>
+                    <input type="date" value={loteInicialFecha} onChange={(e) => setLoteInicialFecha(e.target.value)} />
+                  </div>
+                  <div className="inv-campo inv-campo-lote-numero">
+                    <label>N.° de lote (opcional)</label>
+                    <input
+                      value={loteInicialNumero}
+                      maxLength={40}
+                      placeholder="El que viene en el empaque"
+                      onChange={(e) => setLoteInicialNumero(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {form.lleva_vencimiento && editandoId && stockSinLote === 0 && (
               <div className="inv-lote-caja">
                 <p className="inv-lote-titulo">Lotes de este producto</p>
                 {cargandoLotes ? (
@@ -1083,10 +1274,24 @@ export default function Inventario({
                     ) : (
                       <div className="inv-lote-lista">
                         {lotesProducto.map((l) => (
-                          <div key={l.id} className="inv-lote-item">
-                            <span>{l.cantidad} unid.</span>
-                            <span>Vence: {l.fecha_vencimiento}</span>
-                            {l.numero_lote && <span className="inv-lote-codigo">{l.numero_lote}</span>}
+                          <div key={l.id} className="inv-lote-fila">
+                            <div className={`inv-lote-item${l.vencido ? ' inv-lote-vencido' : ''}`}>
+                              <span>{l.cantidad} unid.</span>
+                              <span>Vence: {l.fecha_vencimiento}</span>
+                              {l.vencido && <span className="inv-lote-etiqueta-vencido">Vencido · no se vende</span>}
+                              {l.numero_lote && <span className="inv-lote-codigo">Lote {l.numero_lote}</span>}
+                              {esAdmin && (
+                                <button
+                                  type="button"
+                                  className="inv-lote-ver-ventas"
+                                  aria-expanded={ventasLote?.lote_id === l.id}
+                                  onClick={() => verVentasLote(l.id)}
+                                >
+                                  {ventasLote?.lote_id === l.id ? 'Ocultar ventas' : 'A quién se vendió'}
+                                </button>
+                              )}
+                            </div>
+                            {ventasLote?.lote_id === l.id && <VentasDelLote estado={ventasLote} />}
                           </div>
                         ))}
                       </div>
@@ -1108,6 +1313,15 @@ export default function Inventario({
                           type="date"
                           value={nuevoLoteFecha}
                           onChange={(e) => setNuevoLoteFecha(e.target.value)}
+                        />
+                      </div>
+                      <div className="inv-campo inv-campo-lote-numero">
+                        <label>N.° de lote (opcional)</label>
+                        <input
+                          value={nuevoLoteNumero}
+                          maxLength={40}
+                          placeholder="El que viene en el empaque"
+                          onChange={(e) => setNuevoLoteNumero(e.target.value)}
                         />
                       </div>
                     </div>
@@ -1177,6 +1391,46 @@ export default function Inventario({
           onCerrar={() => setEscanerCodigoAbierto(false)}
         />
       )}
+    </div>
+  );
+}
+// Ventas en las que salió un lote, con el cliente si se registró.
+function VentasDelLote({ estado }) {
+  if (estado.cargando) return <p className="inv-lote-ventas-nota">Buscando ventas…</p>;
+  if (estado.error) return <p className="inv-lote-ventas-nota inv-lote-ventas-error">{estado.error}</p>;
+  const { datos } = estado;
+  if (!datos.disponible) {
+    return <p className="inv-lote-ventas-nota">Disponible después de la próxima actualización del sistema.</p>;
+  }
+  if (datos.ventas.length === 0) {
+    return (
+      <p className="inv-lote-ventas-nota">
+        Todavía no hay ventas registradas de este lote. Las ventas anteriores a esta función no quedaron anotadas.
+      </p>
+    );
+  }
+  return (
+    <div className="inv-lote-ventas">
+      <p className="inv-lote-ventas-nota">
+        {datos.total_vendido} unid. vendidas en {datos.ventas.length} venta(s). Las anteriores a esta función no aparecen.
+      </p>
+      <ul>
+        {datos.ventas.map((v) => (
+          <li key={v.venta_id} className={v.estado !== 'COMPLETADA' ? 'inv-lote-venta-anulada' : ''}>
+            <span className="inv-lote-venta-folio">{v.folio}</span>
+            <span>
+              {fechaCorta(v.fecha_hora)} {v.fecha_hora.slice(11, 16)}
+            </span>
+            <span>{v.cantidad} unid.</span>
+            <span className="inv-lote-venta-cliente">
+              {v.cliente_nombre || 'Cliente varios'}
+              {v.cliente_documento && ` · ${v.cliente_documento}`}
+              {v.cliente_telefono && ` · ${v.cliente_telefono}`}
+            </span>
+            {v.estado !== 'COMPLETADA' && <span>({v.estado.toLowerCase()})</span>}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

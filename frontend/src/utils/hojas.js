@@ -82,6 +82,40 @@ function columnaDe(referencia) {
   return n - 1;
 }
 
+// Formatos de número de Excel que son fechas (los de fábrica y los propios
+// que tienen día o año, como "dd/mm/yyyy" o "[$-280A]d-mmm-yy").
+const FORMATOS_FECHA = new Set([14, 15, 16, 17, 22, 27, 28, 29, 30, 31, 34, 35, 36, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
+function esFormatoFecha(codigo) {
+  return /[dy]/.test(String(codigo).replace(/"[^"]*"|\[[^\]]*\]|\\./g, '').toLowerCase());
+}
+
+/** Número de fecha de Excel -> "2027-12-31". */
+function textoDeFecha(crudo, base1904) {
+  const n = Number(crudo);
+  if (!Number.isFinite(n) || n < 1 || n > 2958465) return textoDeNumero(crudo);
+  const inicio = base1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30);
+  return new Date(inicio + Math.floor(n) * 86400000).toISOString().slice(0, 10);
+}
+
+/**
+ * Qué estilos de celda (atributo s) muestran una fecha. Excel guarda las
+ * fechas como números; sin esto, "31/12/2027" llegaría como 46752.
+ */
+async function estilosDeFecha(leer) {
+  const estilos = await leer('xl/styles.xml');
+  const conFecha = new Set();
+  if (!estilos) return conFecha;
+  const doc = xml(estilos);
+  const propios = new Map(hijos(doc, 'numFmt').map((f) => [Number(f.getAttribute('numFmtId')), f.getAttribute('formatCode') || '']));
+  const celdas = hijos(doc, 'cellXfs')[0];
+  if (!celdas) return conFecha;
+  [...celdas.children].filter((x) => x.localName === 'xf').forEach((xf, i) => {
+    const id = Number(xf.getAttribute('numFmtId'));
+    if (FORMATOS_FECHA.has(id) || (propios.has(id) && esFormatoFecha(propios.get(id)))) conFecha.add(i);
+  });
+  return conFecha;
+}
+
 async function leerXlsx(bytes) {
   const zip = entradasZip(bytes);
   const leer = async (nombre) => (zip.has(nombre) ? zip.get(nombre)() : null);
@@ -90,6 +124,9 @@ async function leerXlsx(bytes) {
   let ruta = 'xl/worksheets/sheet1.xml';
   const libro = await leer('xl/workbook.xml');
   const relaciones = await leer('xl/_rels/workbook.xml.rels');
+  const propiedades = libro ? hijos(xml(libro), 'workbookPr')[0] : null;
+  const base1904 = ['1', 'true'].includes(propiedades?.getAttribute('date1904'));
+  const conFecha = await estilosDeFecha(leer);
   if (libro && relaciones) {
     const primera = hijos(xml(libro), 'sheet')[0];
     const idRelacion = primera && [...primera.attributes].find((a) => a.localName === 'id')?.value;
@@ -130,7 +167,8 @@ async function leerXlsx(bytes) {
       else if (tipo === 'inlineStr') valor = hijos(c, 't').map((t) => t.textContent).join('');
       else if (tipo === 'str' || tipo === 'e') valor = tipo === 'e' ? '' : v;
       else if (tipo === 'b') valor = v === '1' ? 'SI' : 'NO';
-      else valor = v === '' ? '' : textoDeNumero(v);
+      else if (v === '') valor = '';
+      else valor = conFecha.has(Number(c.getAttribute('s'))) ? textoDeFecha(v, base1904) : textoDeNumero(v);
       fila[columna] = String(valor).trim();
     }
     filas[Number.isFinite(indice) && indice >= 0 ? indice : filas.length] = fila;

@@ -14,7 +14,27 @@ export const CAMPOS = [
   { valor: 'precio_compra', label: 'Precio de compra' },
   { valor: 'stock_minimo', label: 'Stock mínimo' },
   { valor: 'descripcion', label: 'Descripción' },
+  // Perecibles: con vencimiento, el Stock de la fila es la cantidad de ese
+  // lote y el mismo código en varias filas son varios lotes.
+  { valor: 'lote', label: 'N.° de lote' },
+  { valor: 'vencimiento', label: 'Fecha de vencimiento' },
 ];
+
+/** Datos del medicamento (solo con el módulo "Ficha del medicamento"). */
+export const CAMPOS_FICHA = [
+  { valor: 'principio_activo', label: 'Principio activo (DCI)', ficha: true },
+  { valor: 'concentracion', label: 'Concentración', ficha: true },
+  { valor: 'forma_farmaceutica', label: 'Forma farmacéutica', ficha: true },
+  { valor: 'laboratorio', label: 'Laboratorio', ficha: true },
+  { valor: 'registro_sanitario', label: 'Registro sanitario', ficha: true },
+  { valor: 'condicion_venta', label: 'Condición de venta (receta)', ficha: true },
+  { valor: 'es_generico', label: 'Genérico (Sí/No)', ficha: true },
+];
+
+/** Los campos que se pueden elegir en este negocio. */
+export function camposImportacion({ ficha = false } = {}) {
+  return ficha ? [...CAMPOS, ...CAMPOS_FICHA] : CAMPOS;
+}
 
 /** "Categoría:", " CATEGORIA " y "categoria" -> "categoria" */
 export function normalizar(texto) {
@@ -37,6 +57,17 @@ const NOMBRES = {
   categoria: ['categoria', 'categorias', 'familia', 'linea', 'rubro', 'grupo', 'clase', 'seccion', 'departamento', 'tipo'],
   unidad: ['unidad', 'unidadmedida', 'unidaddemedida', 'um', 'umedida', 'und', 'medida', 'unidadventa'],
   stock_minimo: ['stockminimo', 'minimo', 'stockmin', 'stockalerta', 'alerta'],
+  lote: ['lote', 'numerolote', 'numerodelote', 'nrolote', 'nrodelote', 'nlote', 'numlote', 'lotes', 'lot', 'batch'],
+  vencimiento: ['vencimiento', 'fechavencimiento', 'fechadevencimiento', 'fvencimiento', 'fvenc', 'fecvenc', 'fechavenc', 'vence', 'venc',
+    'vto', 'vcto', 'fvto', 'fechavcto', 'fechadevcto', 'caducidad', 'fechacaducidad', 'fechadecaducidad', 'expiracion', 'fechaexpiracion', 'expira', 'fv'],
+  // Farmacia (solo se usan si el negocio tiene la ficha del medicamento).
+  principio_activo: ['principioactivo', 'principio', 'dci', 'nombregenerico', 'denominacioncomuninternacional', 'sustancia', 'compuesto'],
+  concentracion: ['concentracion', 'conc', 'dosis', 'potencia', 'mg'],
+  forma_farmaceutica: ['formafarmaceutica', 'forma', 'formafarm', 'presentacionfarmaceutica', 'ff'],
+  laboratorio: ['laboratorio', 'lab', 'fabricante', 'marca', 'titular'],
+  registro_sanitario: ['registrosanitario', 'registro', 'rs', 'regsanitario', 'nregistro', 'registrodigemid'],
+  condicion_venta: ['condicionventa', 'condiciondeventa', 'condicion', 'receta', 'conreceta', 'tiporeceta'],
+  es_generico: ['generico', 'esgenerico', 'genericoono', 'genericosino', 'genericomarca', 'marcaogenerico', 'tipogenerico'],
 };
 // Sirven de nombre si no hay otra columna de nombre; si la hay, son la descripción.
 const NOMBRE_O_DESCRIPCION = ['descripcion', 'detalle', 'descripciondelproducto', 'descripcionproducto', 'glosa', 'concepto'];
@@ -45,6 +76,15 @@ const SOLO_DESCRIPCION = ['observacion', 'observaciones', 'nota', 'notas', 'come
 // Si el nombre no es exacto ("precioventasoles", "stock tienda 1"), por lo que contiene.
 function campoParecido(clave) {
   if (!clave) return null;
+  if (clave.includes('venc') || clave.includes('vcto') || clave.includes('caduc') || clave.includes('expir')) return 'vencimiento';
+  if (clave.includes('lote') && !clave.includes('cant') && !clave.includes('stock')) return 'lote';
+  if (clave.includes('principio') || clave.includes('dci')) return 'principio_activo';
+  if (clave.includes('concentracion')) return 'concentracion';
+  if (clave.includes('farmaceutica')) return 'forma_farmaceutica';
+  if (clave.includes('laboratorio')) return 'laboratorio';
+  if (clave.includes('registrosanitario') || clave.includes('digemid')) return 'registro_sanitario';
+  if (clave.includes('receta') || clave.includes('condicion')) return 'condicion_venta';
+  if (clave.includes('generic') && !clave.includes('nombre')) return 'es_generico';
   if (clave.includes('minim')) return 'stock_minimo';
   if (clave.includes('compra') || clave.includes('costo')) return 'precio_compra';
   if (clave.includes('precio') || clave.includes('pventa')) return 'precio';
@@ -61,12 +101,13 @@ function campoParecido(clave) {
  * Qué campo es cada columna, según su título. Devuelve una lista del mismo
  * largo: el campo, o '' si no se reconoció. Ningún campo se repite.
  */
-export function sugerirCampos(titulos) {
+export function sugerirCampos(titulos, campos = CAMPOS) {
+  const permitidos = new Set(campos.map((c) => c.valor));
   const claves = titulos.map(normalizar);
   const mapa = claves.map(() => '');
   const usados = new Set();
   const asignar = (i, campo) => {
-    if (!campo || mapa[i] || usados.has(campo)) return;
+    if (!campo || !permitidos.has(campo) || mapa[i] || usados.has(campo)) return;
     mapa[i] = campo;
     usados.add(campo);
   };
@@ -185,6 +226,15 @@ export function columnasDe(filas, filaTitulos) {
   return columnas;
 }
 
+// Ficha del medicamento de una fila: solo si el archivo trae alguna de sus
+// columnas y la fila tiene algo escrito en ellas. Los textos van tal cual
+// ("Tableta", "con receta"): el servidor los reconoce.
+function fichaDeFila(fila, texto, columna) {
+  if (!CAMPOS_FICHA.some((c) => columna[c.valor] !== undefined)) return {};
+  const ficha = Object.fromEntries(CAMPOS_FICHA.map((c) => [c.valor, texto(fila, c.valor) || null]));
+  return Object.values(ficha).some(Boolean) ? { ficha } : {};
+}
+
 /**
  * Las filas que se mandan al servidor. mapa: { indiceDeColumna: campo }.
  * Devuelve también cuántas unidades no se reconocieron (entran con la unidad
@@ -214,6 +264,10 @@ export function armarFilas(filas, filaTitulos, mapa) {
       precio_compra: numero(fila, 'precio_compra'),
       stock_minimo: numero(fila, 'stock_minimo'),
       descripcion: texto(fila, 'descripcion') || null,
+      lote: texto(fila, 'lote') || null,
+      // Tal como viene ("31/12/2027", "12/2027"): el servidor la lee.
+      vencimiento: texto(fila, 'vencimiento') || null,
+      ...fichaDeFila(fila, texto, columna),
     });
   });
   return { filas: salida, unidadesRaras };

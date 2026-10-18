@@ -4,7 +4,7 @@
 // arrancan encendidos, qué unidades se sugieren y cómo se llaman algunas
 // pantallas ("Carta" en vez de "Productos" en un restaurante).
 // Debe coincidir con backend/src/handlers/rubros.rs.
-import { Axe, Hammer, Shirt, ShoppingBasket, Store, UtensilsCrossed } from 'lucide-react';
+import { Axe, Hammer, Pill, Shirt, ShoppingBasket, Store, UtensilsCrossed } from 'lucide-react';
 import { UNIDADES_CLASICAS } from './unidades';
 
 export const MODULO_MESAS = 'MESAS';
@@ -22,6 +22,32 @@ export const MODULO_PRECIO_VENTA = 'PRECIO_VENTA';
 // Ferretería: el mismo producto en rollo, caja o ciento, y precio por mayor.
 export const MODULO_PRESENTACIONES = 'PRESENTACIONES';
 export const MODULO_PRECIO_MAYOR = 'PRECIO_MAYOR';
+// Farmacia / Botica: datos del medicamento (principio activo, receta...).
+export const MODULO_FICHA_MEDICAMENTO = 'FICHA_MEDICAMENTO';
+// Farmacia: receta obligatoria al cobrar y libro de recetas. Necesita la ficha.
+export const MODULO_RECETAS = 'RECETAS';
+// Farmacia: productos con el mismo principio activo, concentración y forma.
+export const MODULO_ALTERNATIVAS = 'ALTERNATIVAS';
+// Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
+export const DEPENDENCIAS = {
+  [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
+  [MODULO_ALTERNATIVAS]: MODULO_FICHA_MEDICAMENTO,
+};
+
+/**
+ * Módulos al encender o apagar uno, respetando las dependencias: encender
+ * Recetas enciende la Ficha; apagar la Ficha apaga Recetas.
+ */
+export function alternarConDependencias(modulos, valor) {
+  if (modulos.includes(valor)) {
+    const apagados = new Set([valor]);
+    for (const [modulo, necesita] of Object.entries(DEPENDENCIAS)) if (apagados.has(necesita)) apagados.add(modulo);
+    return modulos.filter((m) => !apagados.has(m));
+  }
+  const nuevos = [...modulos, valor];
+  const necesita = DEPENDENCIAS[valor];
+  return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
+}
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
 export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA];
 
@@ -96,6 +122,24 @@ export const MODULOS = [
     descripcion:
       'Un precio menor desde cierta cantidad (desde 50 unidades, S/ 0.80 c/u). Al vender se aplica solo cuando el cliente lleva esa cantidad.',
   },
+  {
+    valor: MODULO_FICHA_MEDICAMENTO,
+    label: 'Ficha del medicamento',
+    descripcion:
+      'Principio activo, concentración, forma farmacéutica, laboratorio, registro sanitario y condición de venta de cada medicamento. Se busca por principio activo y el punto de venta avisa cuál pide receta.',
+  },
+  {
+    valor: MODULO_RECETAS,
+    label: 'Control de recetas',
+    descripcion:
+      'No se cobra un medicamento "con receta" sin confirmar que el cliente la presentó, ni uno de receta retenida sin médico, CMP, paciente y N.° de receta. Todo queda en el libro de recetas. Enciende también la ficha del medicamento.',
+  },
+  {
+    valor: MODULO_ALTERNATIVAS,
+    label: 'Alternativas de medicamentos',
+    descripcion:
+      'En el punto de venta, si un medicamento no tiene stock (o el cliente busca algo más barato), muestra los que tienen el mismo principio activo, concentración y forma, con su precio y stock. Enciende también la ficha del medicamento.',
+  },
 ];
 
 export const RUBRO_GENERAL = 'GENERAL';
@@ -154,6 +198,18 @@ export const RUBROS = [
     Icono: Shirt,
     modulos: [MODULO_CREDITO, MODULO_VARIANTES, MODULO_CAMBIOS],
     unidades: ['UNIDAD', 'PAR', 'DOCENA', 'PAQUETE', 'CAJA', 'JUEGO'],
+    etiquetas: {},
+  },
+  {
+    valor: 'FARMACIA',
+    label: 'Farmacia / Botica',
+    descripcion: 'Medicamentos por principio activo, con lotes y vencimientos, venta por tableta, blíster o caja y control de recetas.',
+    Icono: Pill,
+    modulos: [MODULO_FICHA_MEDICAMENTO, MODULO_RECETAS, MODULO_ALTERNATIVAS, MODULO_PRESENTACIONES],
+    unidades: [
+      'UNIDAD', 'TABLETA', 'CAPSULA', 'BLISTER', 'CAJA', 'FRASCO', 'AMPOLLA', 'VIAL', 'SOBRE', 'TUBO',
+      'SUPOSITORIO', 'OVULO', 'PARCHE', 'ML', 'GRAMO', 'PAQUETE',
+    ],
     etiquetas: {},
   },
   {

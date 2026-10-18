@@ -1,0 +1,101 @@
+/* Alternativas de un medicamento (usa la base de CalculadoraPieTablar.css). */
+.am-modal {
+  max-width: 480px;
+}
+
+.am-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.am-opcion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 13px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  color: #16181d;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.am-opcion:hover:not(:disabled),
+.am-opcion:focus-visible {
+  border-color: var(--color-primario);
+  background: var(--color-primario-suave);
+  outline: none;
+}
+
+.am-opcion:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.am-nombre {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.am-nombre small {
+  margin-top: 2px;
+  font-weight: 400;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.am-derecha {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.am-precio {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.am-precio small {
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.am-stock {
+  font-size: 11.5px;
+  color: #15803d;
+  font-weight: 600;
+}
+
+.am-sin-stock {
+  color: #b91c1c;
+}
+
+.am-barata {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.am-vacio,
+.am-nota {
+  font-size: 12.5px;
+  color: #6b7280;
+  margin: 6px 0;
+}
+
+.am-acciones {
+  grid-template-columns: 1fr;
+}

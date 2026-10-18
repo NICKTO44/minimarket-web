@@ -1900,3 +1900,44 @@
 .pos-precio-original:hover {
   color: var(--pos-texto);
 }
+
+/* Farmacia: principio activo bajo el nombre, con el aviso de receta. Una
+   sola línea para no cambiar el alto de la tarjeta. */
+.pos-producto-ficha {
+  font-size: 11.5px;
+  color: var(--pos-texto-tenue);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.pos-receta {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pos-receta-receta_retenida {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Farmacia: cambiar un medicamento del carrito por uno equivalente. */
+.pos-ver-alternativas {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primario);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}

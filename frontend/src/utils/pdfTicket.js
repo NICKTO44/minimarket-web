@@ -11,6 +11,9 @@ import { desgloseDeComprobante, etiquetaTasa } from './igv';
 import { formatoCantidad, formatoPrecio, subtotalLinea } from './medidas';
 import { montoEnLetras } from './numeroALetras';
 import { construirCadenaQrSunat } from './qrSunat';
+import { NOMBRE_DOCUMENTO, lugarDeGuia, motivoDeGuia, numeroConCeros } from './guiaTexto';
+import { fechaCorta } from './formato';
+import { abreviaturaUnidad } from './unidades';
 
 const ANCHO = 226.77; // 80 mm en puntos
 const MARGEN = 11;
@@ -134,6 +137,11 @@ function crearLienzo() {
       trazos.push({ tipo: 'qr', modulos, lado, x: (ANCHO - lado) / 2, y: y + 2 });
       y += lado + 6;
     },
+    /** Imagen centrada (ya en escala de grises, ver grisesDeImagen). Una por PDF. */
+    imagen(imagen, lado) {
+      trazos.push({ tipo: 'imagen', imagen, lado, x: (ANCHO - lado) / 2, y: y + 2 });
+      y += lado + 6;
+    },
     terminar() {
       return { trazos, alto: y + MARGEN };
     },
@@ -165,22 +173,35 @@ function contenido(trazos, alto) {
         }
       }
       ops.push('f');
+    } else if (t.tipo === 'imagen') {
+      ops.push(`q ${n(t.lado)} 0 0 ${n(t.lado)} ${n(t.x)} ${n(alto - t.y - t.lado)} cm /Im1 Do Q`);
     }
   }
   return ops.join('\n');
 }
 
-/** Arma el archivo PDF (una página) a partir de las instrucciones de dibujo. */
-function armarPdf(dibujo, alto, titulo) {
+/**
+ * Arma el archivo PDF (una página) a partir de las instrucciones de dibujo.
+ * `imagen` (opcional): { ancho, alto, hex } en escala de grises, que el
+ * dibujo usa como /Im1.
+ */
+function armarPdf(dibujo, alto, titulo, imagen = null) {
+  const recursoImagen = imagen ? ' /XObject << /Im1 8 0 R >>' : '';
   const objetos = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(ANCHO)} ${n(alto)}] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>`,
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(ANCHO)} ${n(alto)}] /Resources << /Font << /F1 4 0 R /F2 5 0 R >>${recursoImagen} >> /Contents 6 0 R >>`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>',
     `<< /Length ${dibujo.length} >>\nstream\n${dibujo}\nendstream`,
     `<< /Title ${literal(aBytes(titulo))} /Producer (Monspeet POS) >>`,
   ];
+  if (imagen) {
+    const datos = `${imagen.hex}>`;
+    objetos.push(
+      `<< /Type /XObject /Subtype /Image /Width ${imagen.ancho} /Height ${imagen.alto} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /ASCIIHexDecode /Length ${datos.length} >>\nstream\n${datos}\nendstream`
+    );
+  }
   let pdf = '%PDF-1.4\n';
   const posiciones = [];
   objetos.forEach((objeto, i) => {
@@ -323,6 +344,142 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
   const titulo = `${tipo} ${numeroDocumento || venta.folio}`;
   return {
     bytes: armarPdf(contenido(trazos, alto), alto, titulo),
+    nombre: `${titulo.replace(/\s+/g, '-')}.pdf`,
+  };
+}
+
+/**
+ * Imagen (data:image/...) -> sus píxeles en escala de grises, en hexadecimal,
+ * para meterla en el PDF. Lo transparente cuenta como blanco.
+ */
+async function grisesDeImagen(dataUrl) {
+  const img = new Image();
+  await new Promise((listo, fallo) => {
+    img.onload = listo;
+    img.onerror = () => fallo(new Error('No se pudo leer la imagen del QR.'));
+    img.src = dataUrl;
+  });
+  const ancho = img.naturalWidth;
+  const alto = img.naturalHeight;
+  if (!ancho || !alto || ancho * alto > 1200 * 1200) throw new Error('La imagen del QR no es válida.');
+  const lienzo = document.createElement('canvas');
+  lienzo.width = ancho;
+  lienzo.height = alto;
+  const ctx = lienzo.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, ancho, alto);
+  ctx.drawImage(img, 0, 0);
+  const { data } = ctx.getImageData(0, 0, ancho, alto);
+  let hex = '';
+  for (let i = 0; i < data.length; i += 4) {
+    const gris = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+    hex += gris.toString(16).padStart(2, '0');
+  }
+  return { ancho, alto, hex };
+}
+
+/**
+ * PDF de una guía de remisión aceptada: el mismo contenido que su ticket de
+ * 80 mm (components/GuiaImprimible.jsx). Si cambia uno, hay que cambiar el
+ * otro. `guia` es la guía abierta (con `datos`, el formulario con que se
+ * emitió, y `qr` si SUNAT o FacturaLibre lo entregó).
+ * Devuelve { bytes, nombre }.
+ */
+export async function pdfDeGuia({ guia, motivos, nombreTienda, direccion, telefono, ruc }) {
+  const datos = guia?.datos;
+  if (!datos) throw new Error('Esta guía no tiene sus datos guardados para armar el PDF.');
+  if (guia.estado !== 'ACEPTADA') throw new Error('Solo una guía aceptada por SUNAT tiene representación impresa.');
+  // Los distritos, para escribir "Wanchaq - Cusco - Cusco" junto a la dirección.
+  const ubigeos = await import('../data/ubigeos').then((m) => m.UBIGEOS).catch(() => null);
+  const lugar = (punto) => lugarDeGuia(punto, ubigeos);
+  const motivo = motivoDeGuia(datos, motivos);
+  const privado = datos.modo !== 'PUBLICO';
+  const items = datos.items || [];
+  const numero = numeroConCeros(guia.numero);
+  const centro = { alinear: 'centro' };
+
+  const l = crearLienzo();
+  for (const linea of partir(String(nombreTienda || '').toUpperCase(), 12)) l.texto(linea, { tam: 12, negrita: true, ...centro });
+  if (direccion) for (const linea of partir(direccion, TAM)) l.texto(linea, centro);
+  if (telefono) l.texto(`Tel: ${telefono}`, centro);
+  if (ruc) l.texto(`RUC ${ruc}`, { negrita: true, ...centro });
+
+  l.linea();
+  l.texto('GUÍA DE REMISIÓN ELECTRÓNICA', { tam: 9.5, negrita: true, ...centro });
+  l.texto('REMITENTE', { tam: 9.5, negrita: true, ...centro });
+  l.texto(numero, { tam: 11, negrita: true, ...centro });
+  l.linea();
+
+  l.texto('DESTINATARIO', { negrita: true });
+  l.fila(NOMBRE_DOCUMENTO[datos.destinatario_tipo] || 'Doc.', datos.destinatario_documento);
+  l.parrafo(datos.destinatario_nombre);
+
+  l.linea();
+  l.fila('Emisión', fechaCorta(guia.fecha));
+  l.fila('Inicio de traslado', fechaCorta(datos.fecha_traslado));
+  if (motivo) l.fila('Motivo', motivo);
+  l.fila('Modalidad', privado ? 'Transporte privado' : 'Transporte público');
+  l.fila('Peso bruto total', `${formatoCantidad(datos.peso_total)} kg`);
+  l.fila('Bultos', String(datos.bultos ?? ''));
+  if (guia.comprobante) l.fila('Comprobante', numeroConCeros(guia.comprobante));
+  else if (guia.folio_venta) l.fila('Venta', guia.folio_venta);
+
+  l.linea();
+  l.texto('PUNTO DE PARTIDA', { negrita: true });
+  l.parrafo(lugar(datos.partida));
+  l.espacio(3);
+  l.texto('PUNTO DE LLEGADA', { negrita: true });
+  l.parrafo(lugar(datos.llegada));
+
+  l.linea();
+  l.texto('TRANSPORTE', { negrita: true });
+  if (privado) {
+    if (datos.placa) l.fila('Placa', datos.placa);
+    if (datos.chofer) {
+      l.fila('Conductor', `${datos.chofer.nombres || ''} ${datos.chofer.apellidos || ''}`.trim());
+      l.fila('DNI', datos.chofer.documento);
+      l.fila('Licencia', datos.chofer.licencia);
+    }
+  } else if (datos.transportista) {
+    l.parrafo(datos.transportista.nombre);
+    l.fila('RUC', datos.transportista.ruc);
+    if (datos.transportista.mtc) l.fila('Registro MTC', datos.transportista.mtc);
+  }
+
+  l.linea();
+  l.texto('BIENES A TRASLADAR', { negrita: true });
+  l.espacio(2);
+  for (const item of items) {
+    l.parrafo(item.descripcion, { negrita: true });
+    l.fila(item.codigo || '', `${formatoCantidad(item.cantidad)} ${abreviaturaUnidad(item.unidad)}`);
+    l.espacio(2);
+  }
+  l.linea();
+  l.fila('Ítems', String(items.length));
+  if (datos.observaciones) l.parrafo(`Obs.: ${datos.observaciones}`);
+
+  l.linea({ doble: true });
+  // El QR de SUNAT, si llegó: un enlace (se dibuja) o la imagen ya hecha.
+  // Sin él, sale sin QR: no se inventa uno.
+  let imagen = null;
+  if (guia.qr && !guia.qr.startsWith('data:image/')) {
+    l.qr(QRCode.create(guia.qr, { errorCorrectionLevel: 'M' }).modules, 96);
+  } else if (guia.qr) {
+    imagen = await grisesDeImagen(guia.qr).catch(() => null);
+    if (imagen) l.imagen(imagen, 96);
+  }
+  for (const linea of partir('Representación impresa de la GUÍA DE REMISIÓN ELECTRÓNICA REMITENTE.', 7)) {
+    l.texto(linea, { tam: 7, ...centro });
+  }
+  const consulta = guia.qr && (imagen || !guia.qr.startsWith('data:image/'))
+    ? 'Consulte este documento en SUNAT escaneando el código QR.'
+    : 'Consulte este documento en SUNAT con el RUC del remitente y el número de la guía.';
+  for (const linea of partir(consulta, 7)) l.texto(linea, { tam: 7, ...centro });
+
+  const { trazos, alto } = l.terminar();
+  const titulo = `Guia ${numero}`;
+  return {
+    bytes: armarPdf(contenido(trazos, alto), alto, `Guía de remisión ${numero}`, imagen),
     nombre: `${titulo.replace(/\s+/g, '-')}.pdf`,
   };
 }

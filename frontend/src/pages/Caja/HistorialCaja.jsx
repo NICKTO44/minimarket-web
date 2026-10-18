@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Eye } from 'lucide-react';
 import { api } from '../../api/api';
 import DetalleCaja from './DetalleCaja';
-import { diaLima, horaLima } from '../../utils/formato';
+import { diaLima, horaLima, textoDiferencia } from '../../utils/formato';
 import './HistorialCaja.css';
 
 const MESES = [
@@ -126,7 +126,7 @@ export default function HistorialCaja() {
                   <td>
                     {c.diferencia !== null && c.diferencia !== undefined ? (
                       <span className={`hcaja-diferencia hcaja-diferencia-${estadoDiferencia(c.diferencia)}`}>
-                        {c.diferencia >= 0 ? '+' : ''}S/ {c.diferencia.toFixed(2)}
+                        {textoDiferencia(c.diferencia)}
                       </span>
                     ) : (
                       <span className="hcaja-diferencia hcaja-diferencia-sin-cerrar">—</span>
