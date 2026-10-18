@@ -29,6 +29,9 @@ import Cotizaciones from './pages/Cotizaciones/Cotizaciones';
 import Creditos from './pages/Creditos/Creditos';
 import Guias from './pages/Guias/Guias';
 import Gastos from './pages/Gastos/Gastos';
+import Vehiculos from './pages/Vehiculos/Vehiculos';
+import Ordenes from './pages/Ordenes/Ordenes';
+import Paquetes from './pages/Paquetes/Paquetes';
 import AvisosListos from './components/AvisosListos';
 import DireccionNegocio from './components/DireccionNegocio';
 import { irADireccion, leerDireccion } from './utils/direccion';
@@ -55,6 +58,11 @@ import {
   MODULO_FICHA_MEDICAMENTO,
   MODULO_RECETAS,
   MODULO_ALTERNATIVAS,
+  MODULO_FICHA_REPUESTO,
+  MODULO_COMPATIBILIDAD,
+  MODULO_VEHICULOS,
+  MODULO_ORDENES_SERVICIO,
+  MODULO_PAQUETES,
   rubroDe,
 } from './utils/rubros';
 
@@ -70,6 +78,9 @@ const MODULO_DE_PANTALLA = {
   CREDITOS: MODULO_CREDITO,
   GUIAS: MODULO_GUIAS,
   RECETAS: MODULO_RECETAS,
+  VEHICULOS: MODULO_VEHICULOS,
+  ORDENES: MODULO_ORDENES_SERVICIO,
+  PAQUETES: MODULO_PAQUETES,
 };
 
 function App() {
@@ -95,6 +106,8 @@ function App() {
   const [pedidoACobrar, setPedidoACobrar] = useState(null);
   // Cotización abierta desde su pantalla para venderla en el punto de venta.
   const [cotizacionACargar, setCotizacionACargar] = useState(null);
+  // Lubricentro: orden de servicio que se va a cobrar en el punto de venta.
+  const [ordenACargar, setOrdenACargar] = useState(null);
   // Cambio de prenda en curso: lo que el cliente devuelve; lo que se lleva
   // se elige en el punto de venta.
   const [cambioEnCurso, setCambioEnCurso] = useState(null);
@@ -550,6 +563,12 @@ function App() {
               fichaMedicamento={negocio.modulos.includes(MODULO_FICHA_MEDICAMENTO)}
               recetas={negocio.modulos.includes(MODULO_RECETAS)}
               alternativas={negocio.modulos.includes(MODULO_ALTERNATIVAS)}
+              fichaRepuesto={negocio.modulos.includes(MODULO_FICHA_REPUESTO)}
+              compatibilidad={negocio.modulos.includes(MODULO_COMPATIBILIDAD)}
+              vehiculos={negocio.modulos.includes(MODULO_VEHICULOS)}
+              paquetes={negocio.modulos.includes(MODULO_PAQUETES)}
+              ordenACargar={negocio.modulos.includes(MODULO_ORDENES_SERVICIO) ? ordenACargar : null}
+              onOrdenUsada={() => setOrdenACargar(null)}
               cambios={negocio.modulos.includes(MODULO_CAMBIOS)}
               cambioEnCurso={negocio.modulos.includes(MODULO_CAMBIOS) ? cambioEnCurso : null}
               onCambioTerminado={() => setCambioEnCurso(null)}
@@ -571,6 +590,8 @@ function App() {
             presentaciones={negocio.modulos.includes(MODULO_PRESENTACIONES)}
             precioMayor={negocio.modulos.includes(MODULO_PRECIO_MAYOR)}
             fichaMedicamento={negocio.modulos.includes(MODULO_FICHA_MEDICAMENTO)}
+            fichaRepuesto={negocio.modulos.includes(MODULO_FICHA_REPUESTO)}
+            compatibilidad={negocio.modulos.includes(MODULO_COMPATIBILIDAD)}
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS)}
             verSinPrecio={productosSinPrecio}
             onSinPrecioVisto={() => setProductosSinPrecio(false)}
@@ -605,6 +626,23 @@ function App() {
             onIrAVender={() => setPantalla('POS')}
           />
         )}
+        {pantallaVisible === 'VEHICULOS' && <Vehiculos nombreTienda={nombreTienda} />}
+        {pantallaVisible === 'ORDENES' && (
+          <Ordenes
+            esAdmin={usuarioActual?.rol_id === 1}
+            conPaquetes={negocio.modulos.includes(MODULO_PAQUETES)}
+            nombreTienda={nombreTienda}
+            direccion={configuracionTienda?.direccion}
+            telefono={configuracionTienda?.telefono}
+            onCobrar={(orden) => {
+              setPedidoACobrar(null);
+              setCotizacionACargar(null);
+              setOrdenACargar(orden);
+              setPantalla('POS');
+            }}
+          />
+        )}
+        {pantallaVisible === 'PAQUETES' && usuarioActual?.rol_id === 1 && <Paquetes />}
         {pantallaVisible === 'CREDITOS' && (
           <Creditos
             nombreTienda={nombreTienda}

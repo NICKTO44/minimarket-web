@@ -57,6 +57,13 @@ pub struct FilaImportada {
     /// lote; el mismo código en varias filas = varios lotes.
     #[serde(default)]
     pub vencimiento: Option<String>,
+    /// Ficha del repuesto (solo con el módulo FICHA_REPUESTO).
+    #[serde(default)]
+    pub repuesto: Option<crate::handlers::repuestos::RepuestoImportado>,
+    /// Columna "Compatible con" (solo con el módulo COMPATIBILIDAD):
+    /// "Toyota Hilux 2005-2015; Nissan Frontier 2010".
+    #[serde(default)]
+    pub compatible: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -549,6 +556,81 @@ pub async fn guardar_lotes(conn: &libsql::Connection, lotes: &[LoteImportado]) -
 }
 
 /// POST /productos/importar
+/// Lubricentro: lee la ficha del repuesto y la compatibilidad de cada fila
+/// (una por fila, en el mismo orden que `revisadas`). Una fila con esos
+/// datos mal escritos pasa a ERROR, como cualquier otro error del archivo.
+/// Una fila vacía en esas columnas queda en None: no toca lo que ya había.
+pub fn revisar_lubricentro(
+    filas: &[FilaImportada],
+    revisadas: &mut [Revisada],
+    con_repuesto: bool,
+    con_compatibilidad: bool,
+) -> (
+    Vec<Option<crate::handlers::repuestos::FichaRepuesto>>,
+    Vec<Option<Vec<crate::handlers::compatibilidad::Compatibilidad>>>,
+) {
+    let mut fichas = vec![None; revisadas.len()];
+    let mut listas = vec![None; revisadas.len()];
+    if !con_repuesto && !con_compatibilidad {
+        return (fichas, listas);
+    }
+    for (i, (f, r)) in filas.iter().zip(revisadas.iter_mut()).enumerate() {
+        if r.padre.is_some() {
+            continue;
+        }
+        let mut error: Option<String> = None;
+        if con_repuesto {
+            match f.repuesto.as_ref().map(crate::handlers::repuestos::ficha_desde_importada).unwrap_or(Ok(None)) {
+                Ok(ficha) => fichas[i] = ficha,
+                Err(e) => error = Some(e),
+            }
+        }
+        if con_compatibilidad && error.is_none() {
+            let texto = f.compatible.as_deref().unwrap_or("").trim();
+            if !texto.is_empty() {
+                match crate::handlers::compatibilidad::desde_texto(texto) {
+                    Ok(lista) => listas[i] = Some(lista),
+                    Err(e) => error = Some(e),
+                }
+            }
+        }
+        if let (Some(e), true) = (error, r.estado != "ERROR") {
+            r.estado = "ERROR";
+            r.motivo = Some(e);
+        }
+    }
+    // Un lote extra entra solo si entra su producto.
+    for i in 0..revisadas.len() {
+        if let Some(padre) = revisadas[i].padre {
+            if revisadas[i].estado == "LOTE" && revisadas[padre].estado == "ERROR" {
+                let fila = revisadas[padre].fila;
+                revisadas[i].estado = "ERROR";
+                revisadas[i].motivo = Some(format!("El producto de la fila {} tiene un error", fila));
+            }
+        }
+    }
+    (fichas, listas)
+}
+
+/// código (en minúsculas) -> id, de los productos con esos códigos.
+async fn ids_por_codigo(conn: &libsql::Connection, codigos: Vec<String>) -> Result<HashMap<String, i64>, String> {
+    let mut ids = HashMap::new();
+    for tanda in codigos.chunks(200) {
+        let marcas: Vec<String> = (1..=tanda.len()).map(|n| format!("?{}", n)).collect();
+        let mut filas = conn
+            .query(
+                &format!("SELECT id, codigo FROM productos WHERE codigo IN ({})", marcas.join(",")),
+                libsql::params_from_iter(tanda.iter().cloned().map(libsql::Value::Text)),
+            )
+            .await
+            .map_err(|e| format!("no se pudieron leer los productos nuevos: {}", e))?;
+        while let Some(f) = filas.next().await.map_err(|e| e.to_string())? {
+            ids.insert(f.get::<String>(1).unwrap_or_default().to_lowercase(), f.get::<i64>(0).unwrap_or_default());
+        }
+    }
+    Ok(ids)
+}
+
 pub async fn importar_productos(
     Extension(tenant): Extension<Arc<TenantDb>>,
     Extension(claims): Extension<Claims>,
@@ -627,7 +709,25 @@ pub async fn importar_productos(
     }
 
     let hoy = tiempo::hoy_lima();
-    let revisadas = revisar(&payload.filas, &existentes, &nombres_categorias, &categoria_defecto, &unidad_defecto, con_ganancias, con_ficha, &hoy);
+    let mut revisadas = revisar(&payload.filas, &existentes, &nombres_categorias, &categoria_defecto, &unidad_defecto, con_ganancias, con_ficha, &hoy);
+
+    // Lubricentro / Repuestos: ficha del repuesto y compatibilidades. Solo
+    // con el módulo encendido y si el archivo trae esas columnas; si no, la
+    // importación es exactamente la de siempre.
+    let modulos = crate::handlers::rubros::negocio(&conn).await.modulos;
+    let con_repuesto = modulos.iter().any(|m| m == crate::handlers::rubros::MODULO_FICHA_REPUESTO)
+        && payload.filas.iter().any(|f| f.repuesto.is_some());
+    let con_compatibilidad = modulos.iter().any(|m| m == crate::handlers::rubros::MODULO_COMPATIBILIDAD)
+        && payload.filas.iter().any(|f| f.compatible.is_some());
+    for (tabla, usar) in [("producto_repuesto", con_repuesto), ("producto_compatibilidad", con_compatibilidad)] {
+        if usar && conn.query(&format!("SELECT 1 FROM {} LIMIT 1", tabla), ()).await.is_err() {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Los datos de repuestos aún no están listos en este negocio. Intenta en unos minutos.".to_string(),
+            ));
+        }
+    }
+    let (fichas_repuesto, compatibilidades) = revisar_lubricentro(&payload.filas, &mut revisadas, con_repuesto, con_compatibilidad);
 
     let nuevos: Vec<&Revisada> = revisadas.iter().filter(|r| r.estado == "LISTO").collect();
     let a_actualizar: Vec<&Revisada> = if actualizar { revisadas.iter().filter(|r| r.estado == "EXISTE").collect() } else { Vec::new() };
@@ -795,6 +895,33 @@ pub async fn importar_productos(
             medicamentos::guardar_varias(&tx, &fichas).await?;
         }
 
+        // 4b. Lubricentro: ficha del repuesto y compatibilidades de los
+        //     nuevos y, al actualizar, de los que ya existían. Una fila que no
+        //     trae esos datos no toca lo que el producto ya tenía.
+        if con_repuesto || con_compatibilidad {
+            let guardar_fila = |r: &Revisada| r.padre.is_none() && (r.estado == "LISTO" || (actualizar && r.estado == "EXISTE"));
+            let ids = ids_por_codigo(&tx, revisadas.iter().filter(|r| guardar_fila(r) && r.existente.is_none()).map(|r| r.codigo.clone()).collect()).await?;
+            let id_de = |r: &Revisada| r.existente.map(|e| e.id).or_else(|| ids.get(&r.codigo.to_lowercase()).copied());
+            let fichas: Vec<(i64, crate::handlers::repuestos::FichaRepuesto)> = revisadas
+                .iter()
+                .zip(fichas_repuesto.iter())
+                .filter(|(r, _)| guardar_fila(r))
+                .filter_map(|(r, f)| Some((id_de(r)?, f.clone()?)))
+                .collect();
+            if !fichas.is_empty() {
+                crate::handlers::repuestos::guardar_en(&tx, &fichas).await?;
+            }
+            let listas: Vec<(i64, Vec<crate::handlers::compatibilidad::Compatibilidad>)> = revisadas
+                .iter()
+                .zip(compatibilidades.iter())
+                .filter(|(r, _)| guardar_fila(r))
+                .filter_map(|(r, l)| Some((id_de(r)?, l.clone()?)))
+                .collect();
+            if !listas.is_empty() {
+                crate::handlers::compatibilidad::guardar_en(&tx, &listas).await?;
+            }
+        }
+
         // 5. Lotes con su vencimiento (el stock lo recalculan los triggers).
         //    Un lote que el producto ya tiene (mismo n.° y vencimiento) toma
         //    la cantidad del archivo en vez de duplicarse: importar dos veces
@@ -901,7 +1028,37 @@ mod pruebas {
             ficha: None,
             lote: lote.map(Into::into),
             vencimiento: vence.map(Into::into),
+            repuesto: None,
+            compatible: None,
         }
+    }
+
+    #[test]
+    fn repuesto_y_compatibilidad_del_archivo() {
+        use crate::handlers::repuestos::RepuestoImportado;
+        let mut a = fila(2, "FIL-1", Some(4.0), None, None);
+        a.repuesto = Some(RepuestoImportado { marca: Some("Wix".into()), codigos_alternos: Some("PH3614".into()), ..Default::default() });
+        a.compatible = Some("Toyota Hilux 2005-2015".into());
+        let mut b = fila(3, "FIL-2", None, None, None);
+        b.repuesto = Some(RepuestoImportado { garantia: Some("para siempre".into()), ..Default::default() });
+        let mut c = fila(4, "FIL-3", None, None, None);
+        c.compatible = Some("Toyota Corolla 1800".into());
+        let d = fila(5, "ACE-1", None, None, None);
+        let filas = vec![a, b, c, d];
+        let mut r = revisar_simple(&filas, &HashMap::new(), false);
+        let (fichas, listas) = revisar_lubricentro(&filas, &mut r, true, true);
+        assert_eq!(r[0].estado, "LISTO");
+        assert_eq!(fichas[0].as_ref().unwrap().codigos.len(), 1);
+        assert_eq!(listas[0].as_ref().unwrap()[0].modelo.as_deref(), Some("Hilux"));
+        assert_eq!(r[1].estado, "ERROR");
+        assert!(r[1].motivo.as_deref().unwrap().starts_with("Garantía"));
+        assert_eq!(r[2].estado, "ERROR");
+        // Sin datos de repuesto: producto común, nada que tocar.
+        assert_eq!((r[3].estado, fichas[3].is_none(), listas[3].is_none()), ("LISTO", true, true));
+        // Sin los módulos, el archivo se revisa como siempre.
+        let mut r2 = revisar_simple(&filas, &HashMap::new(), false);
+        let (f2, l2) = revisar_lubricentro(&filas, &mut r2, false, false);
+        assert!(r2.iter().all(|x| x.estado == "LISTO") && f2.iter().all(Option::is_none) && l2.iter().all(Option::is_none));
     }
 
     fn revisar_simple(filas: &[FilaImportada], existentes: &HashMap<String, Existente>, con_ficha: bool) -> Vec<Revisada> {

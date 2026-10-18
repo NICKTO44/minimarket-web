@@ -219,6 +219,31 @@ async fn main() {
         .route("/productos/opciones-venta", get(handlers::presentaciones::todas))
         .route("/medicamentos/fichas", get(handlers::medicamentos::todas))
         .route("/recetas", get(handlers::recetas::libro))
+        // Lubricentro / Repuestos (handlers/repuestos.rs).
+        .route("/repuestos/fichas", get(handlers::repuestos::todas))
+        .route("/repuestos/compatibilidades", get(handlers::compatibilidad::todas))
+        .route("/productos/:id/compatibilidad", axum::routing::put(handlers::compatibilidad::guardar))
+        .route("/vehiculos", get(handlers::vehiculos::listar).post(handlers::vehiculos::crear))
+        .route("/vehiculos/recordatorios", get(handlers::vehiculos::recordatorios))
+        .route("/vehiculos/placa/:placa", get(handlers::vehiculos::por_placa))
+        .route("/vehiculos/:id", axum::routing::put(handlers::vehiculos::actualizar))
+        .route("/vehiculos/:id/historial", get(handlers::vehiculos::historial))
+        .route("/ordenes", get(handlers::ordenes::listar).post(handlers::ordenes::crear))
+        .route("/ordenes/comisiones", get(handlers::ordenes::comisiones))
+        .route("/ordenes/:id", get(handlers::ordenes::obtener).put(handlers::ordenes::actualizar))
+        .route("/ordenes/:id/items", axum::routing::put(handlers::ordenes::guardar_items))
+        .route("/ordenes/:id/estado", post(handlers::ordenes::cambiar_estado))
+        .route("/mecanicos", get(handlers::ordenes::mecanicos).post(handlers::ordenes::crear_mecanico))
+        .route("/mecanicos/:id", axum::routing::put(handlers::ordenes::actualizar_mecanico))
+        .route("/paquetes", get(handlers::paquetes::listar).post(handlers::paquetes::crear))
+        .route(
+            "/paquetes/:id",
+            axum::routing::put(handlers::paquetes::actualizar).delete(handlers::paquetes::quitar),
+        )
+        .route(
+            "/productos/:id/repuesto",
+            axum::routing::put(handlers::repuestos::guardar).delete(handlers::repuestos::quitar),
+        )
         .route(
             "/productos/:id/ficha",
             axum::routing::put(handlers::medicamentos::guardar).delete(handlers::medicamentos::quitar),

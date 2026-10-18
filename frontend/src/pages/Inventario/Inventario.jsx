@@ -26,6 +26,21 @@ import {
   resumenFicha,
   textoPlano,
 } from '../../utils/medicamentos';
+import FichaRepuesto from './FichaRepuesto';
+import {
+  FICHA_REPUESTO_VACIA,
+  compatibilidadCoincide,
+  compatibilidadesAFormulario,
+  fichaRepuestoCoincide,
+  formularioACompatibilidades,
+  formularioARepuesto,
+  mapaCompatibilidades,
+  mapaPorProducto,
+  marcasYModelos,
+  repuestoAFormulario,
+  resumenRepuesto,
+  textoCompatibilidad,
+} from '../../utils/repuestos';
 
 const FORM_VACIO = {
   codigo: '',
@@ -134,8 +149,20 @@ export default function Inventario({
   // Módulo "Ficha del medicamento" (farmacia): su sección en el formulario,
   // el principio activo bajo el nombre y la búsqueda por principio activo.
   fichaMedicamento = false,
+  // Lubricentro / Repuestos: ficha del repuesto (marca, n.° de parte,
+  // códigos alternos, ubicación, garantía) y vehículos compatibles.
+  fichaRepuesto = false,
+  compatibilidad = false,
 }) {
   const conOpcionesVenta = presentaciones || precioMayor;
+  // producto_id -> ficha del repuesto / [compatibilidades] (solo con sus módulos).
+  const [repuestos, setRepuestos] = useState(() => new Map());
+  const [compatibilidades, setCompatibilidades] = useState(() => new Map());
+  // Campos del formulario y cómo estaban al abrirlo (JSON), para guardar solo si cambiaron.
+  const [repuestoForm, setRepuestoForm] = useState(FICHA_REPUESTO_VACIA);
+  const [repuestoOriginal, setRepuestoOriginal] = useState(JSON.stringify(FICHA_REPUESTO_VACIA));
+  const [compatForm, setCompatForm] = useState([]);
+  const [compatOriginal, setCompatOriginal] = useState('[]');
   // producto_id -> ficha (solo con el módulo).
   const [fichas, setFichas] = useState(() => new Map());
   // Campos de la ficha en el formulario y la ficha que tenía al abrirlo
@@ -222,6 +249,18 @@ export default function Inventario({
         .then((lista) => setFichas(mapaFichas(lista)))
         .catch(() => {});
     }
+    if (fichaRepuesto) {
+      api
+        .repuestosFichas()
+        .then((lista) => setRepuestos(mapaPorProducto(lista)))
+        .catch(() => {});
+    }
+    if (compatibilidad) {
+      api
+        .compatibilidades()
+        .then((lista) => setCompatibilidades(mapaCompatibilidades(lista)))
+        .catch(() => {});
+    }
     if (ganancias) {
       api
         .gananciasCostos()
@@ -249,7 +288,10 @@ export default function Inventario({
           p.nombre.toLowerCase().includes(q) ||
           String(p.codigo || '').toLowerCase().includes(q) ||
           // Farmacia: también por principio activo o laboratorio.
-          (fichaMedicamento && fichaCoincide(fichas.get(p.id), plano))
+          (fichaMedicamento && fichaCoincide(fichas.get(p.id), plano)) ||
+          // Lubricentro: por marca, n.° de parte, código alterno o vehículo.
+          (fichaRepuesto && fichaRepuestoCoincide(repuestos.get(p.id), plano)) ||
+          (compatibilidad && compatibilidadCoincide(compatibilidades.get(p.id), plano))
       );
     }
     if (filtroCategoria) {
@@ -262,7 +304,15 @@ export default function Inventario({
       lista = lista.filter(sinPrecioCompra);
     }
     return lista;
-  }, [productos, desactivados, verDesactivados, busqueda, filtroCategoria, soloStockBajo, soloSinPrecio, fichaMedicamento, fichas]);
+  }, [productos, desactivados, verDesactivados, busqueda, filtroCategoria, soloStockBajo, soloSinPrecio, fichaMedicamento, fichas,
+      fichaRepuesto, repuestos, compatibilidad, compatibilidades]);
+
+  // Marcas de repuesto y vehículos ya usados, para sugerirlos al escribir.
+  const marcasRepuesto = useMemo(
+    () => [...new Set([...repuestos.values()].map((f) => f.marca).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')),
+    [repuestos]
+  );
+  const vehiculosUsados = useMemo(() => marcasYModelos(compatibilidades), [compatibilidades]);
 
   // Principios activos ya usados, para sugerirlos al escribir una ficha.
   const principiosUsados = useMemo(
@@ -310,6 +360,10 @@ export default function Inventario({
     setForm(FORM_VACIO);
     setFichaForm(FICHA_VACIA);
     setFichaOriginal(JSON.stringify(FICHA_VACIA));
+    setRepuestoForm(FICHA_REPUESTO_VACIA);
+    setRepuestoOriginal(JSON.stringify(FICHA_REPUESTO_VACIA));
+    setCompatForm([]);
+    setCompatOriginal('[]');
     setOpcionesVenta(OPCIONES_VACIAS);
     setOpcionesVentaOriginal(JSON.stringify(OPCIONES_VACIAS));
     setLoteInicialCantidad('');
@@ -376,6 +430,13 @@ export default function Inventario({
     const campos = fichaAFormulario(fichas.get(p.id));
     setFichaForm(campos);
     setFichaOriginal(JSON.stringify(campos));
+    // Lubricentro: también en memoria.
+    const camposRepuesto = repuestoAFormulario(repuestos.get(p.id));
+    setRepuestoForm(camposRepuesto);
+    setRepuestoOriginal(JSON.stringify(camposRepuesto));
+    const filasCompat = compatibilidadesAFormulario(compatibilidades.get(p.id));
+    setCompatForm(filasCompat);
+    setCompatOriginal(JSON.stringify(filasCompat));
   };
 
   const cargarLotes = (productoId) => {
@@ -545,6 +606,19 @@ export default function Inventario({
       setMensaje({ tipo: 'error', texto: fichaAGuardar.error });
       return;
     }
+    // Ficha del repuesto y vehículos compatibles: igual, antes de guardar nada.
+    const repuestoAGuardar =
+      fichaRepuesto && JSON.stringify(repuestoForm) !== repuestoOriginal ? formularioARepuesto(repuestoForm) : null;
+    if (repuestoAGuardar?.error) {
+      setMensaje({ tipo: 'error', texto: repuestoAGuardar.error });
+      return;
+    }
+    const compatAGuardar =
+      compatibilidad && JSON.stringify(compatForm) !== compatOriginal ? formularioACompatibilidades(compatForm) : null;
+    if (compatAGuardar?.error) {
+      setMensaje({ tipo: 'error', texto: compatAGuardar.error });
+      return;
+    }
 
     const payload = {
       codigo: form.codigo.trim(),
@@ -641,6 +715,30 @@ export default function Inventario({
           setMensaje({
             tipo: 'error',
             texto: `Producto guardado, pero no se pudo guardar su ficha de medicamento (${e.message}). Toca Guardar para intentarlo de nuevo.`,
+          });
+          cargarTodo();
+          return;
+        }
+      }
+
+      // Ficha del repuesto y vehículos compatibles (solo si cambiaron).
+      if ((repuestoAGuardar || compatAGuardar) && idParaImagen) {
+        try {
+          if (repuestoAGuardar?.quitar) {
+            if (editandoId && repuestos.has(editandoId)) await api.repuestoQuitar(idParaImagen);
+          } else if (repuestoAGuardar) {
+            await api.repuestoGuardar(idParaImagen, repuestoAGuardar.ficha);
+          }
+          if (repuestoAGuardar) setRepuestoOriginal(JSON.stringify(repuestoForm));
+          if (compatAGuardar) {
+            await api.compatibilidadGuardar(idParaImagen, compatAGuardar.lista);
+            setCompatOriginal(JSON.stringify(compatForm));
+          }
+        } catch (e) {
+          setEditandoId(idParaImagen);
+          setMensaje({
+            tipo: 'error',
+            texto: `Producto guardado, pero no se pudo guardar su ficha de repuesto o sus vehículos compatibles (${e.message}). Toca Guardar para intentarlo de nuevo.`,
           });
           cargarTodo();
           return;
@@ -926,6 +1024,15 @@ export default function Inventario({
                       {fichaMedicamento && fichas.has(p.id) && (
                         <span className="inv-ficha-resumen">{resumenFicha(fichas.get(p.id))}</span>
                       )}
+                      {fichaRepuesto && repuestos.has(p.id) && (
+                        <span className="inv-ficha-resumen">{resumenRepuesto(repuestos.get(p.id))}</span>
+                      )}
+                      {compatibilidad && compatibilidades.get(p.id)?.length > 0 && (
+                        <span className="inv-ficha-resumen" title={compatibilidades.get(p.id).map(textoCompatibilidad).join('\n')}>
+                          🚗 {textoCompatibilidad(compatibilidades.get(p.id)[0])}
+                          {compatibilidades.get(p.id).length > 1 && ` y ${compatibilidades.get(p.id).length - 1} más`}
+                        </span>
+                      )}
                       {p.afectacion_igv && p.afectacion_igv !== 'GRAVADO' && (
                         <span className="inv-badge-sin-igv">{etiquetaAfectacion(p.afectacion_igv)}</span>
                       )}
@@ -978,6 +1085,8 @@ export default function Inventario({
           categorias={categorias}
           unidadesActivas={unidadesActivas}
           fichaMedicamento={fichaMedicamento}
+          fichaRepuesto={fichaRepuesto}
+          compatibilidad={compatibilidad}
           onCerrar={() => setImportando(false)}
           onTerminado={(resultado) => {
             setImportando(false);
@@ -1194,6 +1303,19 @@ export default function Inventario({
                   setFichaForm(nueva);
                 }}
                 principios={principiosUsados}
+              />
+            )}
+
+            {(fichaRepuesto || compatibilidad) && (
+              <FichaRepuesto
+                conFicha={fichaRepuesto}
+                conCompatibilidad={compatibilidad}
+                campos={repuestoForm}
+                onCambiar={setRepuestoForm}
+                filas={compatForm}
+                onCambiarFilas={setCompatForm}
+                marcas={marcasRepuesto}
+                vehiculos={vehiculosUsados}
               />
             )}
 

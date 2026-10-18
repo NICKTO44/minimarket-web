@@ -26,6 +26,23 @@ import { enlaceComprobantePublico } from '../../utils/enlacePublico';
 import { imprimirTicket } from '../../utils/imprimirTicket';
 import { alternativasDe, etiquetaCondicion, fichaCoincide, mapaFichas, resumenFicha, textoPlano } from '../../utils/medicamentos';
 import AlternativasMedicamento from '../../components/AlternativasMedicamento';
+import EquivalentesRepuesto from '../../components/EquivalentesRepuesto';
+import VehiculoVenta from '../../components/VehiculoVenta';
+import ElegirPaquete from '../../components/ElegirPaquete';
+import { VEHICULO_VACIO, lineasDePaquete, vehiculoParaEnviar } from '../../utils/vehiculos';
+import {
+  claveCodigo,
+  compatibilidadCoincide,
+  compatibleCon,
+  equivalentesDe,
+  fichaRepuestoCoincide,
+  indiceCodigos,
+  mapaCompatibilidades,
+  mapaPorProducto,
+  marcasYModelos,
+  resumenRepuesto,
+  textoGarantia,
+} from '../../utils/repuestos';
 import RecetaVenta, { RECETA_VACIA, recetaParaEnviar } from '../../components/RecetaVenta';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -170,6 +187,37 @@ function carritoDePedido(pedido) {
   }));
 }
 
+// Líneas de una orden de servicio (lubricentro) convertidas en carrito: con
+// el precio con que se agregó cada cosa, su descuento (de un paquete) y su
+// cantidad fija (clave "medida-...", como las de una cotización).
+function carritoDeOrden(orden) {
+  return (orden.items || []).map((i, idx) => ({
+    id: i.producto_id,
+    clave: `medida-ord-${orden.id}-${idx}`,
+    nombre: i.nombre,
+    precio: i.precio_unitario,
+    cantidad: i.cantidad,
+    descuentoMonto: i.descuento || 0,
+    unidad_medida: i.unidad_medida,
+    controla_stock: i.controla_stock,
+  }));
+}
+
+// Placa y kilometraje de una orden, como los pide la venta.
+function vehiculoDeOrden(orden) {
+  return {
+    ...VEHICULO_VACIO,
+    placa: orden.placa,
+    marca: orden.marca || '',
+    modelo: orden.modelo || '',
+    anio: orden.anio || '',
+    km: orden.km != null ? String(orden.km) : '',
+    proximo_km: orden.proximo_km != null ? String(orden.proximo_km) : '',
+    proxima_fecha: orden.proxima_fecha || '',
+    encontrado: { placa: orden.placa, marca: orden.marca, modelo: orden.modelo, anio: orden.anio },
+  };
+}
+
 // Líneas de una cotización convertidas en carrito: van con el precio que
 // se le ofreció al cliente y su cantidad fija (clave "medida-...").
 function carritoDeCotizacion(cotizacion) {
@@ -238,6 +286,16 @@ export default function POS({
   // Módulo "Alternativas" (farmacia): mismo principio activo, concentración
   // y forma, para un agotado o para cambiar una línea del carrito.
   alternativas = false,
+  // Lubricentro / Repuestos: buscar por marca, n.° de parte o código alterno,
+  // equivalentes cuando no hay stock, y búsqueda por vehículo compatible.
+  fichaRepuesto = false,
+  compatibilidad = false,
+  // Lubricentro: placa y kilometraje en la venta, paquetes y el cobro de
+  // una orden de servicio (viene de Órdenes de servicio).
+  vehiculos = false,
+  paquetes = false,
+  ordenACargar = null,
+  onOrdenUsada,
   // Cambio de prenda en curso (viene de Devoluciones): lo que el cliente
   // devuelve; lo que se agregue al carrito es lo que se lleva.
   cambioEnCurso = null,
@@ -265,7 +323,13 @@ export default function POS({
   const [categoriaFiltro, setCategoriaFiltro] = useState(null);
   const buscadorRef = useRef(null);
   const [carrito, setCarritoCrudo] = useState(() =>
-    pedidoACobrar ? carritoDePedido(pedidoACobrar) : cotizacionACargar ? carritoDeCotizacion(cotizacionACargar) : []
+    pedidoACobrar
+      ? carritoDePedido(pedidoACobrar)
+      : cotizacionACargar
+        ? carritoDeCotizacion(cotizacionACargar)
+        : ordenACargar
+          ? carritoDeOrden(ordenACargar)
+          : []
   );
   // Presentaciones y precios por mayor de cada producto (Map producto_id ->
   // { presentaciones, mayor }). Solo se cargan con alguno de los dos módulos.
@@ -307,7 +371,31 @@ export default function POS({
       .then((lista) => setFichas(mapaFichas(lista)))
       .catch(() => {});
   }, [fichaMedicamento, recetas, alternativas]);
-  // Ventana de alternativas: { producto, motivo: 'SIN_STOCK' | 'CAMBIAR', linea? }.
+  // Lubricentro: fichas de repuesto y compatibilidades (solo con sus módulos).
+  const [repuestos, setRepuestos] = useState(() => new Map());
+  const [compatibilidades, setCompatibilidades] = useState(() => new Map());
+  useEffect(() => {
+    if (fichaRepuesto) {
+      api
+        .repuestosFichas()
+        .then((lista) => setRepuestos(mapaPorProducto(lista)))
+        .catch(() => {});
+    }
+    if (compatibilidad) {
+      api
+        .compatibilidades()
+        .then((lista) => setCompatibilidades(mapaCompatibilidades(lista)))
+        .catch(() => {});
+    }
+  }, [fichaRepuesto, compatibilidad]);
+  // clave de código alterno -> [producto_id], para el lector y el Enter.
+  const porCodigoAlterno = useMemo(() => (fichaRepuesto ? indiceCodigos(repuestos) : new Map()), [fichaRepuesto, repuestos]);
+  // Búsqueda por vehículo: { marca, modelo, anio } (null = sin filtro) y si la barra está abierta.
+  const [vehiculoFiltro, setVehiculoFiltro] = useState(null);
+  const [barraVehiculo, setBarraVehiculo] = useState(false);
+  const vehiculosConocidos = useMemo(() => (compatibilidad ? marcasYModelos(compatibilidades) : []), [compatibilidad, compatibilidades]);
+  // Ventana de alternativas: { producto, motivo: 'SIN_STOCK' | 'CAMBIAR', linea?, tipo? }.
+  // tipo 'REPUESTO': equivalentes por código (lubricentro); sin tipo, farmacia.
   const [alternativasAbiertas, setAlternativasAbiertas] = useState(null);
   // Datos de la receta de esta venta y si la ventana está abierta.
   const [recetaDatos, setRecetaDatos] = useState(RECETA_VACIA);
@@ -341,8 +429,26 @@ export default function POS({
           nombre_razon_social: cotizacionACargar.cliente_nombre,
           numero_documento: cotizacionACargar.cliente_documento,
         }
-      : null
+      : !pedidoACobrar && !cotizacionACargar && ordenACargar?.cliente_id
+        ? {
+            id: ordenACargar.cliente_id,
+            nombre_razon_social: ordenACargar.cliente_nombre,
+            numero_documento: ordenACargar.cliente_documento,
+          }
+        : null
   );
+  // Lubricentro: la orden que se está cobrando, y la placa y el kilometraje de la venta.
+  const [ordenEnVenta, setOrdenEnVenta] = useState(() =>
+    !pedidoACobrar && !cotizacionACargar && ordenACargar ? { id: ordenACargar.id, numero: ordenACargar.numero, placa: ordenACargar.placa } : null
+  );
+  const [vehiculoDatos, setVehiculoDatos] = useState(() =>
+    !pedidoACobrar && !cotizacionACargar && ordenACargar ? vehiculoDeOrden(ordenACargar) : VEHICULO_VACIO
+  );
+  // Paquetes (se leen al abrir la ventana) y si la ventana está abierta.
+  const [listaPaquetes, setListaPaquetes] = useState([]);
+  // Sube con cada venta: el panel de la placa vuelve a empezar cerrado.
+  const [ventasHechas, setVentasHechas] = useState(0);
+  const [eligiendoPaquete, setEligiendoPaquete] = useState(false);
   const [mostrarBusquedaCliente, setMostrarBusquedaCliente] = useState(false);
   const [busquedaCliente, setBusquedaCliente] = useState('');
   const [resultadosCliente, setResultadosCliente] = useState([]);
@@ -634,16 +740,31 @@ export default function POS({
   const productosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     const deCategoria = categoriaActiva == null ? productos : productos.filter((p) => p.categoria_id === categoriaActiva);
-    const plano = fichaMedicamento ? textoPlano(q) : '';
+    const plano = fichaMedicamento || fichaRepuesto || compatibilidad ? textoPlano(q) : '';
+    // Lubricentro: con un vehículo elegido, solo lo que le sirve.
+    const filtroVehiculo =
+      compatibilidad && vehiculoFiltro?.marca
+        ? {
+            marca: textoPlano(vehiculoFiltro.marca.trim()),
+            modelo: textoPlano(vehiculoFiltro.modelo.trim()),
+            anio: Number(vehiculoFiltro.anio) || null,
+          }
+        : null;
+    const paraVehiculo = filtroVehiculo
+      ? deCategoria.filter((p) => (compatibilidades.get(p.id) || []).some((c) => compatibleCon(c, filtroVehiculo)))
+      : deCategoria;
     const base = q
-      ? deCategoria.filter(
+      ? paraVehiculo.filter(
           (p) =>
             p.nombre.toLowerCase().includes(q) ||
             p.codigo.toLowerCase().includes(q) ||
             // Farmacia: también por principio activo o laboratorio.
-            (fichaMedicamento && fichaCoincide(fichas.get(p.id), plano))
+            (fichaMedicamento && fichaCoincide(fichas.get(p.id), plano)) ||
+            // Lubricentro: por marca, n.° de parte, código alterno o vehículo.
+            (fichaRepuesto && fichaRepuestoCoincide(repuestos.get(p.id), plano)) ||
+            (compatibilidad && compatibilidadCoincide(compatibilidades.get(p.id), plano))
         )
-      : deCategoria;
+      : paraVehiculo;
 
     // El orden por nombre ya viene del backend (ORDER BY p.nombre), así
     // que para esa opción no hace falta reordenar en el frontend -- solo
@@ -659,7 +780,8 @@ export default function POS({
       return [...base].sort((a, b) => Number(!!b.carta_dia) - Number(!!a.carta_dia));
     }
     return base;
-  }, [productos, busqueda, ordenPrecio, categoriaActiva, fichaMedicamento, fichas]);
+  }, [productos, busqueda, ordenPrecio, categoriaActiva, fichaMedicamento, fichas, fichaRepuesto, repuestos, compatibilidad,
+      compatibilidades, vehiculoFiltro]);
 
   // Tallas y colores: una tarjeta por modelo (con las tallas que pasaron el
   // buscador). Sin el módulo, una tarjeta por producto, como siempre.
@@ -705,11 +827,69 @@ export default function POS({
   const alternativasPara = (id) => alternativasDe(id, fichas, productos, (p) => disponibleDe(p.id));
   // Sin stock (o ya todo en el carrito): si hay otro con el mismo principio
   // activo, concentración y forma, se ofrece en vez de solo avisar.
+  // Lubricentro: equivalentes por código con lo que queda para vender.
+  const equivalentesPara = (id) => (fichaRepuesto ? equivalentesDe(id, repuestos, productos, (p) => disponibleDe(p.id)) : []);
   const ofrecerAlternativas = (producto) => {
-    if (!alternativas || !alternativasPara(producto.id).some((a) => a.conStock)) return false;
-    setAvisoStock(null);
-    setAlternativasAbiertas({ producto: productos.find((p) => p.id === producto.id) || producto, motivo: 'SIN_STOCK' });
-    return true;
+    const elegido = productos.find((p) => p.id === producto.id) || producto;
+    if (alternativas && alternativasPara(producto.id).some((a) => a.conStock)) {
+      setAvisoStock(null);
+      setAlternativasAbiertas({ producto: elegido, motivo: 'SIN_STOCK' });
+      return true;
+    }
+    if (fichaRepuesto && equivalentesPara(producto.id).some((a) => a.conStock)) {
+      setAvisoStock(null);
+      setAlternativasAbiertas({ producto: elegido, motivo: 'SIN_STOCK', tipo: 'REPUESTO' });
+      return true;
+    }
+    return false;
+  };
+  // Paquetes: qué falta para poder venderlo (null si alcanza todo).
+  const faltaParaPaquete = (paquete) => {
+    for (const i of paquete.items) {
+      const producto = productos.find((p) => p.id === i.producto_id);
+      if (!producto || !i.activo) return `${i.nombre || 'Un producto'} ya no está a la venta.`;
+      if (disponibleDe(i.producto_id) + 1e-6 < i.cantidad) return `No alcanza el stock de ${producto.nombre}.`;
+    }
+    return null;
+  };
+  const abrirPaquetes = () => {
+    setEligiendoPaquete(true);
+    api
+      .paquetes()
+      .then(setListaPaquetes)
+      .catch((e) => {
+        setEligiendoPaquete(false);
+        setMensaje({ tipo: 'error', texto: e.message });
+      });
+  };
+  // El paquete entra como sus productos, cada uno con su parte del descuento.
+  const agregarPaquete = (paquete) => {
+    setEligiendoPaquete(false);
+    const falta = faltaParaPaquete(paquete);
+    if (falta) {
+      setAvisoStock({ texto: falta });
+      return;
+    }
+    const grupo = `${paquete.id}-${Date.now()}`;
+    const lineas = lineasDePaquete(paquete).map((l, idx) => {
+      const producto = productos.find((p) => p.id === l.producto_id);
+      return {
+        ...producto,
+        clave: `medida-paq-${grupo}-${idx}`,
+        cantidad: l.cantidad,
+        descuentoMonto: l.descuento,
+        paquete: { grupo, nombre: paquete.nombre },
+      };
+    });
+    setCarrito((prev) => [...prev, ...lineas]);
+  };
+  const quitarPaquete = (grupo) => setCarrito((prev) => prev.filter((i) => i.paquete?.grupo !== grupo));
+
+  // Producto por código alterno o n.° de parte (lubricentro): solo si es uno solo.
+  const porCodigoDeRepuesto = (texto) => {
+    const ids = porCodigoAlterno.get(claveCodigo(texto)) || [];
+    const encontrados = ids.map((id) => productos.find((p) => p.id === id)).filter(Boolean);
+    return encontrados.length === 1 ? encontrados[0] : null;
   };
 
   // Texto de "no hay" o "solo quedan N" para un producto con stock.
@@ -852,7 +1032,8 @@ export default function POS({
     const texto = busqueda.trim();
     if (!texto) return;
 
-    const porCodigoExacto = productos.find((p) => p.codigo.toLowerCase() === texto.toLowerCase());
+    const porCodigoExacto =
+      productos.find((p) => p.codigo.toLowerCase() === texto.toLowerCase()) || (fichaRepuesto ? porCodigoDeRepuesto(texto) : null);
     if (porCodigoExacto) {
       agregarAlCarrito(porCodigoExacto);
       setBusqueda('');
@@ -885,7 +1066,8 @@ export default function POS({
   const alEscanear = useRef(null);
   useEffect(() => {
     alEscanear.current = (codigo) => {
-      const producto = productos.find((p) => p.codigo.toLowerCase() === codigo.toLowerCase());
+      const producto =
+        productos.find((p) => p.codigo.toLowerCase() === codigo.toLowerCase()) || (fichaRepuesto ? porCodigoDeRepuesto(codigo) : null);
       if (!producto) {
         setUltimoEscaneo({ tipo: 'error', texto: `Código "${codigo}" no encontrado` });
       } else if (agregarAlCarrito(producto)) {
@@ -1163,6 +1345,12 @@ export default function POS({
   };
 
   const procesarVenta = async (receta) => {
+    // Lubricentro: la placa y el kilometraje se revisan antes de cobrar.
+    const placaVenta = vehiculos ? vehiculoParaEnviar(vehiculoDatos) : null;
+    if (placaVenta?.error) {
+      setMensaje({ tipo: 'error', texto: placaVenta.error });
+      return;
+    }
     if (tipoComprobante !== 'NINGUNO' && !facturacionConfigurada) {
       setMensaje({
         tipo: 'error',
@@ -1211,6 +1399,9 @@ export default function POS({
         pago_efectivo_metodo: esMixto ? mixtoSegundoMetodo : null,
         pedido_id: pedidoACobrar?.id || null,
         ...(receta ? { receta } : {}),
+        // Solo con placa o al cobrar una orden: si no, la venta va como siempre.
+        ...(placaVenta?.vehiculo ? { vehiculo: placaVenta.vehiculo } : {}),
+        ...(ordenEnVenta ? { orden_servicio_id: ordenEnVenta.id } : {}),
       });
       // La receta era de esta venta: la siguiente empieza en blanco.
       setRecetaDatos(RECETA_VACIA);
@@ -1272,7 +1463,18 @@ export default function POS({
           nombre: i.detalle ? `${i.nombre} (${i.detalle})` : i.nombre,
           cantidad: i.cantidad,
           precio: i.precio,
+          // Solo las líneas con descuento (p. ej. de un paquete) lo muestran.
+          ...(i.descuentoMonto > 0 ? { descuento: i.descuentoMonto, motivoDescuento: i.paquete ? `Desc. ${i.paquete.nombre}` : null } : {}),
         })),
+        // Lubricentro: garantía de cada repuesto que la tiene (una vez por producto).
+        garantias: fichaRepuesto
+          ? [...new Map(carrito.filter((i) => repuestos.get(i.id)?.garantia_dias > 0).map((i) => [i.id, i])).values()].map((i) => ({
+              nombre: i.nombre,
+              texto: textoGarantia(repuestos.get(i.id).garantia_dias),
+            }))
+          : [],
+        // Lubricentro: placa, kilometraje y próximo servicio para el ticket.
+        vehiculo: placaVenta?.vehiculo || null,
         comprobante: null,
         // true mientras la boleta/factura se está emitiendo en segundo plano.
         comprobantePendiente: emiteComprobante,
@@ -1307,6 +1509,13 @@ export default function POS({
         setCotizacionEnVenta(null);
         onCotizacionUsada?.();
       }
+      // La orden quedó cobrada; la placa era de esta venta.
+      if (ordenEnVenta) {
+        setOrdenEnVenta(null);
+        onOrdenUsada?.();
+      }
+      setVehiculoDatos(VEHICULO_VACIO);
+      setVentasHechas((n) => n + 1);
       setCliente(null);
       setMostrarBusquedaCliente(false);
       setBusquedaCliente('');
@@ -1481,7 +1690,7 @@ export default function POS({
   return (
     <div className="pos-layout">
       <div className="pos-productos">
-        <div className="pos-buscador-fila">
+        <div className={`pos-buscador-fila${(paquetes && !cobrandoPedido) || compatibilidad ? ' pos-buscador-fila-extras' : ''}`}>
           <input
             ref={buscadorRef}
             className="pos-buscador"
@@ -1509,7 +1718,75 @@ export default function POS({
           >
             📷
           </button>
+          {paquetes && !cobrandoPedido && (
+            <button type="button" className="pos-boton-escanear" onClick={abrirPaquetes} aria-label="Paquetes" title="Paquetes">
+              📦
+            </button>
+          )}
+          {compatibilidad && (
+            <button
+              type="button"
+              className={`pos-boton-escanear${vehiculoFiltro?.marca ? ' pos-boton-vehiculo-activo' : ''}`}
+              onClick={() => setBarraVehiculo((v) => !v)}
+              aria-label="Buscar por vehículo"
+              title="Buscar por vehículo"
+            >
+              🚗
+            </button>
+          )}
         </div>
+        {compatibilidad && (barraVehiculo || vehiculoFiltro?.marca) && (
+          <div className="pos-vehiculo-barra" role="group" aria-label="Buscar por vehículo">
+            <select
+              value={vehiculoFiltro?.marca || ''}
+              onChange={(e) =>
+                setVehiculoFiltro(e.target.value ? { marca: e.target.value, modelo: '', anio: vehiculoFiltro?.anio || '' } : null)
+              }
+              aria-label="Marca del vehículo"
+            >
+              <option value="">Marca del vehículo…</option>
+              {vehiculosConocidos.map((v) => (
+                <option key={v.marca} value={v.marca}>
+                  {v.marca}
+                </option>
+              ))}
+            </select>
+            <select
+              value={vehiculoFiltro?.modelo || ''}
+              disabled={!vehiculoFiltro?.marca}
+              onChange={(e) => setVehiculoFiltro((f) => ({ ...f, modelo: e.target.value }))}
+              aria-label="Modelo"
+            >
+              <option value="">Todos los modelos</option>
+              {(vehiculosConocidos.find((v) => v.marca === vehiculoFiltro?.marca)?.modelos || []).map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="Año"
+              value={vehiculoFiltro?.anio || ''}
+              disabled={!vehiculoFiltro?.marca}
+              onChange={(e) => setVehiculoFiltro((f) => ({ ...f, anio: e.target.value }))}
+              aria-label="Año del vehículo"
+            />
+            {vehiculoFiltro?.marca && (
+              <button
+                type="button"
+                className="pos-vehiculo-quitar"
+                onClick={() => {
+                  setVehiculoFiltro(null);
+                  setBarraVehiculo(false);
+                }}
+              >
+                Quitar filtro
+              </button>
+            )}
+          </div>
+        )}
         <div className={`pos-orden-fila${categoriasPos.length > 1 ? ' pos-orden-fila-categorias' : ''}`}>
           {/* Filtro por categoría: solo si el negocio tiene más de una. */}
           {categoriasPos.length > 1 && (
@@ -1615,6 +1892,11 @@ export default function POS({
                     {resumenFicha(fichas.get(p.id))}
                   </span>
                 )}
+                {fichaRepuesto && repuestos.has(p.id) && resumenRepuesto(repuestos.get(p.id)) && (
+                  <span className="pos-producto-ficha" title={resumenRepuesto(repuestos.get(p.id))}>
+                    {resumenRepuesto(repuestos.get(p.id))}
+                  </span>
+                )}
                 <span className="pos-producto-fila">
                   <span className="pos-producto-precio">S/ {p.precio.toFixed(2)}</span>
                   {p.agotado && <span className="pos-producto-stock pos-producto-stock-bajo">Agotado</span>}
@@ -1683,6 +1965,29 @@ export default function POS({
               <strong>Cotización N° {numeroCotizacion(cotizacionEnVenta.numero)}</strong>
             </div>
             <button type="button" onClick={quitarCotizacion}>
+              Quitar
+            </button>
+          </div>
+        )}
+
+        {ordenEnVenta && !cobrandoPedido && (
+          <div className="pos-cobro-pedido">
+            <div>
+              <span className="pos-cobro-pedido-etiqueta">Cobrando</span>
+              <strong>
+                Orden N° {ordenEnVenta.numero} · {ordenEnVenta.placa}
+              </strong>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setOrdenEnVenta(null);
+                setCarrito([]);
+                setCliente(null);
+                setVehiculoDatos(VEHICULO_VACIO);
+                onOrdenUsada?.();
+              }}
+            >
               Quitar
             </button>
           </div>
@@ -1884,6 +2189,17 @@ export default function POS({
           </div>
         )}
 
+        {vehiculos && !cobrandoPedido && !enCambio && (
+          <VehiculoVenta
+            // Una venta nueva (o una orden cargada) arma el panel de cero.
+            key={ordenEnVenta ? `orden-${ordenEnVenta.id}` : `venta-${ventasHechas}`}
+            datos={vehiculoDatos}
+            onCambiar={setVehiculoDatos}
+            onDueno={(dueno) => setCliente((actual) => actual || dueno)}
+            fija={!!ordenEnVenta}
+          />
+        )}
+
         <div className="pos-carrito-items">
           {carrito.length === 0 && <p className="pos-carrito-vacio">{enCambio ? 'Elige la prenda nueva' : 'Carrito vacío'}</p>}
           {carrito.map((item) => (
@@ -1891,6 +2207,12 @@ export default function POS({
               <div className="pos-carrito-item-info">
                 <span className="pos-carrito-item-nombre">{item.nombre}</span>
                 {item.detalle && <span className="pos-carrito-item-detalle">{item.detalle}</span>}
+                {item.descuentoMonto > 0 && (
+                  <span className="pos-carrito-item-detalle">
+                    {item.paquete ? `Paquete ${item.paquete.nombre}` : 'Descuento'} · −S/{' '}
+                    {item.descuentoMonto.toFixed(2)}
+                  </span>
+                )}
                 {alternativas &&
                   !item.presentacion &&
                   !cobrandoPedido &&
@@ -1901,6 +2223,19 @@ export default function POS({
                       onClick={() => setAlternativasAbiertas({ producto: item, motivo: 'CAMBIAR', linea: item })}
                     >
                       Ver alternativas
+                    </button>
+                  )}
+                {fichaRepuesto &&
+                  !item.presentacion &&
+                  !esLineaMedida(item) &&
+                  !cobrandoPedido &&
+                  equivalentesPara(item.id).some((a) => a.conStock) && (
+                    <button
+                      type="button"
+                      className="pos-ver-alternativas"
+                      onClick={() => setAlternativasAbiertas({ producto: item, motivo: 'CAMBIAR', linea: item, tipo: 'REPUESTO' })}
+                    >
+                      Ver equivalentes
                     </button>
                   )}
                 {item.porMayor && (
@@ -1959,7 +2294,14 @@ export default function POS({
                     <span>
                       {formatoCantidad(item.cantidad)} {abreviaturaUnidad(item.unidad_medida)}
                     </span>
-                    <button className="pos-quitar" onClick={() => quitarDelCarrito(claveDe(item))}>🗑</button>
+                    {/* Una línea de paquete se quita con todo su paquete (el descuento es del conjunto). */}
+                    <button
+                      className="pos-quitar"
+                      onClick={() => (item.paquete ? quitarPaquete(item.paquete.grupo) : quitarDelCarrito(claveDe(item)))}
+                      title={item.paquete ? 'Quitar el paquete completo' : undefined}
+                    >
+                      🗑
+                    </button>
                   </div>
                 ) : (
                   <div
@@ -2406,7 +2748,27 @@ export default function POS({
         />
       )}
 
-      {alternativasAbiertas && (
+      {eligiendoPaquete && (
+        <ElegirPaquete
+          paquetes={listaPaquetes}
+          faltante={faltaParaPaquete}
+          onElegir={agregarPaquete}
+          onCerrar={() => setEligiendoPaquete(false)}
+        />
+      )}
+
+      {alternativasAbiertas?.tipo === 'REPUESTO' && (
+        <EquivalentesRepuesto
+          producto={alternativasAbiertas.producto}
+          ficha={repuestos.get(alternativasAbiertas.producto.id)}
+          equivalentes={equivalentesPara(alternativasAbiertas.producto.id)}
+          motivo={alternativasAbiertas.motivo}
+          onElegir={elegirAlternativa}
+          onCerrar={() => setAlternativasAbiertas(null)}
+        />
+      )}
+
+      {alternativasAbiertas && alternativasAbiertas.tipo !== 'REPUESTO' && (
         <AlternativasMedicamento
           producto={alternativasAbiertas.producto}
           ficha={fichas.get(alternativasAbiertas.producto.id)}
@@ -2684,6 +3046,8 @@ export default function POS({
           cajero={usuario.nombre}
           diasCambio={cambios ? diasCambio : 0}
           logo={logoNegocio}
+          garantias={ultimaVentaParaImprimir.garantias || []}
+          vehiculo={ultimaVentaParaImprimir.vehiculo || null}
         />
       )}
     </div>

@@ -31,9 +31,26 @@ export const CAMPOS_FICHA = [
   { valor: 'es_generico', label: 'Genérico (Sí/No)', ficha: true },
 ];
 
+/** Lubricentro: ficha del repuesto (módulo "Ficha del repuesto"). */
+export const CAMPOS_REPUESTO = [
+  { valor: 'marca_repuesto', label: 'Marca del repuesto', repuesto: true },
+  { valor: 'numero_parte', label: 'N.° de parte / código del fabricante', repuesto: true },
+  { valor: 'codigos_alternos', label: 'Códigos alternos (equivalencias)', repuesto: true },
+  { valor: 'ubicacion', label: 'Ubicación en el almacén', repuesto: true },
+  { valor: 'garantia', label: 'Garantía (días)', repuesto: true },
+];
+
+/** Lubricentro: vehículos compatibles (módulo "Compatibilidad con vehículos"). */
+export const CAMPOS_COMPATIBILIDAD = [{ valor: 'compatible', label: 'Compatible con (vehículos)', compatibilidad: true }];
+
 /** Los campos que se pueden elegir en este negocio. */
-export function camposImportacion({ ficha = false } = {}) {
-  return ficha ? [...CAMPOS, ...CAMPOS_FICHA] : CAMPOS;
+export function camposImportacion({ ficha = false, repuesto = false, compatibilidad = false } = {}) {
+  return [
+    ...CAMPOS,
+    ...(ficha ? CAMPOS_FICHA : []),
+    ...(repuesto ? CAMPOS_REPUESTO : []),
+    ...(compatibilidad ? CAMPOS_COMPATIBILIDAD : []),
+  ];
 }
 
 /** "Categoría:", " CATEGORIA " y "categoria" -> "categoria" */
@@ -60,6 +77,17 @@ const NOMBRES = {
   lote: ['lote', 'numerolote', 'numerodelote', 'nrolote', 'nrodelote', 'nlote', 'numlote', 'lotes', 'lot', 'batch'],
   vencimiento: ['vencimiento', 'fechavencimiento', 'fechadevencimiento', 'fvencimiento', 'fvenc', 'fecvenc', 'fechavenc', 'vence', 'venc',
     'vto', 'vcto', 'fvto', 'fechavcto', 'fechadevcto', 'caducidad', 'fechacaducidad', 'fechadecaducidad', 'expiracion', 'fechaexpiracion', 'expira', 'fv'],
+  // Lubricentro (solo si el negocio tiene la ficha del repuesto o la
+  // compatibilidad). Van antes que farmacia: "Marca" es la del repuesto.
+  marca_repuesto: ['marca', 'marcarepuesto', 'marcadelrepuesto', 'brand', 'fabricante'],
+  numero_parte: ['numerodeparte', 'numeroparte', 'ndeparte', 'nodeparte', 'nparte', 'nrodeparte', 'nroparte', 'partnumber', 'pn', 'codigofabricante',
+    'codigooem', 'oem', 'codigooriginal', 'codfabricante', 'npieza', 'numerodepieza'],
+  codigos_alternos: ['codigosalternos', 'codigoalterno', 'alternos', 'alterno', 'equivalencias', 'equivalentes', 'equivalencia',
+    'referenciascruzadas', 'crossreference', 'reemplazos', 'reemplaza', 'otroscodigos'],
+  ubicacion: ['ubicacion', 'ubic', 'estante', 'anaquel', 'percha', 'casillero', 'posicion', 'ubicacionalmacen'],
+  garantia: ['garantia', 'garantiadias', 'diasgarantia', 'garantiaendias', 'diasdegarantia'],
+  compatible: ['compatiblecon', 'compatible', 'compatibilidad', 'aplicacion', 'aplicaciones', 'vehiculos', 'vehiculo',
+    'modelos', 'paravehiculo', 'usoen', 'vehiculoscompatibles'],
   // Farmacia (solo se usan si el negocio tiene la ficha del medicamento).
   principio_activo: ['principioactivo', 'principio', 'dci', 'nombregenerico', 'denominacioncomuninternacional', 'sustancia', 'compuesto'],
   concentracion: ['concentracion', 'conc', 'dosis', 'potencia', 'mg'],
@@ -74,10 +102,19 @@ const NOMBRE_O_DESCRIPCION = ['descripcion', 'detalle', 'descripciondelproducto'
 const SOLO_DESCRIPCION = ['observacion', 'observaciones', 'nota', 'notas', 'comentario'];
 
 // Si el nombre no es exacto ("precioventasoles", "stock tienda 1"), por lo que contiene.
-function campoParecido(clave) {
+function campoParecido(clave, permitidos = new Set()) {
   if (!clave) return null;
+  // Lubricentro: solo si el negocio tiene esos campos (así, en otro rubro,
+  // una columna "Código alterno" sigue leyéndose como antes).
+  const lubricentro = (campo) => (permitidos.has(campo) ? campo : null);
   if (clave.includes('venc') || clave.includes('vcto') || clave.includes('caduc') || clave.includes('expir')) return 'vencimiento';
   if (clave.includes('lote') && !clave.includes('cant') && !clave.includes('stock')) return 'lote';
+  const alterno = clave.includes('alterno') || clave.includes('equivalen') || clave.includes('reemplaz');
+  if (alterno && lubricentro('codigos_alternos')) return 'codigos_alternos';
+  if ((clave.includes('compatib') || clave.includes('aplicacion') || clave.includes('vehicul')) && lubricentro('compatible')) return 'compatible';
+  if ((clave.includes('departe') || clave.includes('partnumber') || clave.includes('oem')) && lubricentro('numero_parte')) return 'numero_parte';
+  if (clave.includes('garantia') && lubricentro('garantia')) return 'garantia';
+  if ((clave.includes('ubicacion') || clave.includes('estante')) && lubricentro('ubicacion')) return 'ubicacion';
   if (clave.includes('principio') || clave.includes('dci')) return 'principio_activo';
   if (clave.includes('concentracion')) return 'concentracion';
   if (clave.includes('farmaceutica')) return 'forma_farmaceutica';
@@ -122,7 +159,7 @@ export function sugerirCampos(titulos, campos = CAMPOS) {
       }
     }
   }
-  claves.forEach((c, i) => asignar(i, campoParecido(c)));
+  claves.forEach((c, i) => asignar(i, campoParecido(c, permitidos)));
   // "Descripción": es el nombre si nadie más lo es; si no, la descripción.
   claves.forEach((c, i) => {
     if (NOMBRE_O_DESCRIPCION.includes(c)) asignar(i, usados.has('nombre') ? 'descripcion' : 'nombre');
@@ -235,6 +272,23 @@ function fichaDeFila(fila, texto, columna) {
   return Object.values(ficha).some(Boolean) ? { ficha } : {};
 }
 
+// Lubricentro: ficha del repuesto y compatibilidad de una fila. Solo si el
+// archivo trae esas columnas (si no, el producto queda como estaba).
+function repuestoDeFila(fila, texto, columna) {
+  const salida = {};
+  if (CAMPOS_REPUESTO.some((c) => columna[c.valor] !== undefined)) {
+    salida.repuesto = {
+      marca: texto(fila, 'marca_repuesto') || null,
+      numero_parte: texto(fila, 'numero_parte') || null,
+      codigos_alternos: texto(fila, 'codigos_alternos') || null,
+      ubicacion: texto(fila, 'ubicacion') || null,
+      garantia: texto(fila, 'garantia') || null,
+    };
+  }
+  if (columna.compatible !== undefined) salida.compatible = texto(fila, 'compatible') || '';
+  return salida;
+}
+
 /**
  * Las filas que se mandan al servidor. mapa: { indiceDeColumna: campo }.
  * Devuelve también cuántas unidades no se reconocieron (entran con la unidad
@@ -268,6 +322,7 @@ export function armarFilas(filas, filaTitulos, mapa) {
       // Tal como viene ("31/12/2027", "12/2027"): el servidor la lee.
       vencimiento: texto(fila, 'vencimiento') || null,
       ...fichaDeFila(fila, texto, columna),
+      ...repuestoDeFila(fila, texto, columna),
     });
   });
   return { filas: salida, unidadesRaras };

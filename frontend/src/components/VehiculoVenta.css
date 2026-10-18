@@ -1,0 +1,121 @@
+/* Placa y kilometraje en el carrito (módulo "Vehículos y kilometraje"). */
+.vv-abrir {
+  padding: 8px 10px;
+  border: 1.5px dashed var(--pos-borde, #e4e6eb);
+  border-radius: var(--pos-radio-sm, 8px);
+  background: none;
+  color: var(--pos-texto-tenue, #6b7280);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.vv-abrir:hover {
+  border-color: var(--pos-primario, #16a34a);
+  color: var(--pos-primario, #16a34a);
+}
+
+.vv-caja {
+  flex-shrink: 0;
+  border: 1.5px solid var(--pos-borde, #e4e6eb);
+  border-radius: var(--pos-radio-sm, 8px);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vv-fila {
+  display: flex;
+  gap: 6px;
+}
+
+.vv-fila input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1.5px solid var(--pos-borde, #e4e6eb);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--pos-superficie, #fff);
+  color: var(--pos-texto, #16181d);
+}
+
+.vv-placa {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vv-km {
+  max-width: 110px;
+}
+
+.vv-anio {
+  max-width: 64px;
+}
+
+.vv-quitar {
+  border: none;
+  background: none;
+  color: var(--pos-texto-tenue, #6b7280);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 6px;
+}
+
+.vv-nota {
+  margin: 0;
+  font-size: 12px;
+  color: var(--pos-texto-tenue, #6b7280);
+}
+
+.vv-titulo {
+  margin: 2px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--pos-texto-tenue, #6b7280);
+}
+
+.vv-atajos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.vv-atajos button {
+  border: 1px solid var(--pos-borde, #e4e6eb);
+  background: var(--pos-superficie, #fff);
+  color: var(--pos-texto, #16181d);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.vv-atajos button:hover {
+  border-color: var(--pos-primario, #16a34a);
+}
+
+.vv-listo {
+  border: 1.5px solid var(--pos-borde, #e4e6eb);
+  background: var(--pos-superficie, #fff);
+  color: var(--pos-texto, #16181d);
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vv-resumen {
+  border-style: solid;
+  color: var(--pos-texto, #16181d);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

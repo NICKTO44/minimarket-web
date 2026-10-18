@@ -467,6 +467,18 @@ pub async fn procesar_venta(
         let pedidos: Vec<(i64, f64)> = ids.iter().map(|id| (*id, pedido_por_producto[id])).collect();
         crate::handlers::recetas::preparar(&conn, modulos.as_deref(), payload.receta.as_ref(), &pedidos).await?
     };
+    // 2a-2. Placa y kilometraje (módulo VEHICULOS): se revisan antes de
+    // tocar nada. Una venta sin placa no hace nada aquí.
+    let vehiculo_listo = crate::handlers::vehiculos::preparar(modulos.as_deref(), payload.vehiculo.as_ref())?;
+    // 2a-3. Cobro de una orden de servicio (módulo ORDENES_SERVICIO): debe
+    // seguir abierta o terminada. Una venta normal no hace nada aquí.
+    if payload.orden_servicio_id.is_some()
+        && (payload.pedido_id.is_some() || payload.cotizacion_id.is_some() || payload.cambio_prenda.is_some())
+    {
+        return Err((StatusCode::BAD_REQUEST, "Una orden de servicio se cobra sola: sin pedido de mesa, cotización ni cambio de prenda.".into()));
+    }
+    let orden_cobro =
+        crate::handlers::ordenes::preparar_cobro(&conn, modulos.as_deref(), payload.orden_servicio_id).await?;
     let mut leidos = datos_productos_para_venta(&conn, &ids)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
@@ -530,6 +542,12 @@ pub async fn procesar_venta(
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
             while let Some(f) = filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
                 cotizados.entry(f.get::<i64>(0).unwrap_or_default()).or_default().push(f.get::<f64>(1).unwrap_or(-1.0));
+            }
+        }
+        // Una orden de servicio se cobra con los precios con que se agregó cada cosa.
+        if let Some((_, precios)) = &orden_cobro {
+            for (producto, lista) in precios {
+                cotizados.entry(*producto).or_default().extend(lista.iter().copied());
             }
         }
         for p in &payload.productos {
@@ -839,6 +857,17 @@ pub async fn procesar_venta(
             // 6e. Constancia de la receta (módulo RECETAS): entra con la venta o no entra.
             if let Some(lista) = &receta_lista {
                 crate::handlers::recetas::registrar(&conn, lista, venta_id, usuario_id, &claims.nombre_completo).await?;
+            }
+
+            // 6f-0. Orden de servicio cobrada: queda COBRADA con esta venta (si otra
+            //     caja la cobró antes, esta venta no entra).
+            if let Some((orden_id, _)) = &orden_cobro {
+                crate::handlers::ordenes::marcar_cobrada(&conn, *orden_id, venta_id).await?;
+            }
+
+            // 6f. Placa y kilometraje (módulo VEHICULOS): entran con la venta o no entra.
+            if let Some(v) = &vehiculo_listo {
+                crate::handlers::vehiculos::registrar(&conn, v, venta_id, payload.cliente_id).await?;
             }
 
             // 7. Si fue el cobro de un pedido de mesa: se cierra y la mesa queda libre.

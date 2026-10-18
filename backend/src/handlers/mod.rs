@@ -44,3 +44,8 @@ pub mod panel;
 pub mod gastos;
 pub mod medicamentos;
 pub mod recetas;
+pub mod repuestos;
+pub mod compatibilidad;
+pub mod vehiculos;
+pub mod ordenes;
+pub mod paquetes;

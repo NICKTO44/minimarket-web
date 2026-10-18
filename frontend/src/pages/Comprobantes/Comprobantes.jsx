@@ -339,7 +339,12 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
       fecha: fechaHoraLima(comp.fecha_emision),
       // metodoPago: para la "Forma de pago" de la factura (contado o crédito).
       venta: { folio: detalle.folio, total: detalle.total, montoRecibido: null, cambio: null, metodoPago: detalle.metodo_pago },
-      items: detalle.productos.map((p) => ({ nombre: p.nombre, cantidad: p.cantidad, precio: p.precio_unitario })),
+      items: detalle.productos.map((p) => {
+        // Descuento de la línea (un paquete): lo cobrado es `subtotal`. Sin
+        // descuento la diferencia es 0 y el ticket sale como siempre.
+        const descuento = Math.round((p.cantidad * p.precio_unitario - (p.subtotal ?? p.cantidad * p.precio_unitario)) * 100) / 100;
+        return { nombre: p.nombre, cantidad: p.cantidad, precio: p.precio_unitario, ...(descuento > 0.004 ? { descuento } : {}) };
+      }),
       comprobante: comp.id
         ? {
             tipo: comp.tipo,

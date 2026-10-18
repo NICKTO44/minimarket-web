@@ -59,6 +59,14 @@ pub struct NuevaVenta {
     /// Receta de los medicamentos que la piden (módulo RECETAS).
     #[serde(default)]
     pub receta: Option<crate::handlers::recetas::RecetaVenta>,
+    /// Placa, kilometraje y próximo servicio (módulo VEHICULOS, lubricentro).
+    /// None en una venta de siempre.
+    #[serde(default)]
+    pub vehiculo: Option<crate::handlers::vehiculos::VehiculoVenta>,
+    /// Orden de servicio que se está cobrando (módulo ORDENES_SERVICIO): al
+    /// cobrarla queda COBRADA con esta venta.
+    #[serde(default)]
+    pub orden_servicio_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]

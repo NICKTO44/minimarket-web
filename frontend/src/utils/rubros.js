@@ -4,7 +4,7 @@
 // arrancan encendidos, qué unidades se sugieren y cómo se llaman algunas
 // pantallas ("Carta" en vez de "Productos" en un restaurante).
 // Debe coincidir con backend/src/handlers/rubros.rs.
-import { Axe, Hammer, Pill, Shirt, ShoppingBasket, Store, UtensilsCrossed } from 'lucide-react';
+import { Axe, Hammer, Pill, Shirt, ShoppingBasket, Store, UtensilsCrossed, Wrench } from 'lucide-react';
 import { UNIDADES_CLASICAS } from './unidades';
 
 export const MODULO_MESAS = 'MESAS';
@@ -28,10 +28,22 @@ export const MODULO_FICHA_MEDICAMENTO = 'FICHA_MEDICAMENTO';
 export const MODULO_RECETAS = 'RECETAS';
 // Farmacia: productos con el mismo principio activo, concentración y forma.
 export const MODULO_ALTERNATIVAS = 'ALTERNATIVAS';
+// Lubricentro / Repuestos: marca, n.° de parte, códigos alternos (y
+// equivalencias), ubicación y garantía.
+export const MODULO_FICHA_REPUESTO = 'FICHA_REPUESTO';
+// Lubricentro / Repuestos: vehículos compatibles y búsqueda por vehículo.
+export const MODULO_COMPATIBILIDAD = 'COMPATIBILIDAD';
+// Lubricentro: vehículos de los clientes, placa y kilometraje en la venta.
+export const MODULO_VEHICULOS = 'VEHICULOS';
+// Lubricentro: órdenes de servicio, mecánicos y comisiones. Necesita Vehículos.
+export const MODULO_ORDENES_SERVICIO = 'ORDENES_SERVICIO';
+// Paquetes de productos a un precio ("Cambio de aceite completo").
+export const MODULO_PAQUETES = 'PAQUETES';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
   [MODULO_ALTERNATIVAS]: MODULO_FICHA_MEDICAMENTO,
+  [MODULO_ORDENES_SERVICIO]: MODULO_VEHICULOS,
 };
 
 /**
@@ -140,6 +152,36 @@ export const MODULOS = [
     descripcion:
       'En el punto de venta, si un medicamento no tiene stock (o el cliente busca algo más barato), muestra los que tienen el mismo principio activo, concentración y forma, con su precio y stock. Enciende también la ficha del medicamento.',
   },
+  {
+    valor: MODULO_FICHA_REPUESTO,
+    label: 'Ficha del repuesto',
+    descripcion:
+      'Marca, n.° de parte, códigos alternos (el del fabricante, el de Toyota, el de Wix...), ubicación en el almacén y garantía. El punto de venta encuentra el repuesto por cualquiera de sus códigos y muestra los equivalentes cuando no hay stock.',
+  },
+  {
+    valor: MODULO_COMPATIBILIDAD,
+    label: 'Compatibilidad con vehículos',
+    descripcion:
+      'Con qué vehículos va cada repuesto (marca, modelo, años y motor). En el punto de venta eliges el vehículo y ves solo lo que le sirve.',
+  },
+  {
+    valor: MODULO_VEHICULOS,
+    label: 'Vehículos y kilometraje',
+    descripcion:
+      'Vehículos de tus clientes por placa. En la venta anotas la placa, el kilometraje y el próximo cambio (salen en el ticket); el historial muestra qué se le puso cada vez, y los recordatorios avisan por WhatsApp cuando le toca.',
+  },
+  {
+    valor: MODULO_ORDENES_SERVICIO,
+    label: 'Órdenes de servicio',
+    descripcion:
+      'El vehículo entra al taller: abres una orden, vas agregando repuestos y mano de obra, asignas al mecánico y la cobras al terminar. Con comisión por mecánico. Enciende también Vehículos y kilometraje.',
+  },
+  {
+    valor: MODULO_PAQUETES,
+    label: 'Paquetes de productos',
+    descripcion:
+      'Varios productos a un solo precio ("Cambio de aceite completo": aceite + filtro + mano de obra). En la venta entra cada producto con su descuento y se descuenta el stock de cada uno.',
+  },
 ];
 
 export const RUBRO_GENERAL = 'GENERAL';
@@ -209,6 +251,21 @@ export const RUBROS = [
     unidades: [
       'UNIDAD', 'TABLETA', 'CAPSULA', 'BLISTER', 'CAJA', 'FRASCO', 'AMPOLLA', 'VIAL', 'SOBRE', 'TUBO',
       'SUPOSITORIO', 'OVULO', 'PARCHE', 'ML', 'GRAMO', 'PAQUETE',
+    ],
+    etiquetas: {},
+  },
+  {
+    valor: 'LUBRICENTRO',
+    label: 'Lubricentro / Repuestos',
+    descripcion: 'Aceites, filtros y repuestos por marca, código y vehículo compatible; placa y kilometraje, órdenes de servicio y paquetes.',
+    Icono: Wrench,
+    modulos: [
+      MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
+      MODULO_FICHA_REPUESTO, MODULO_COMPATIBILIDAD, MODULO_VEHICULOS, MODULO_ORDENES_SERVICIO, MODULO_PAQUETES,
+    ],
+    unidades: [
+      'UNIDAD', 'LITRO', 'GALON', 'ML', 'KG', 'PAR', 'JUEGO', 'CAJA', 'PAQUETE', 'BALDE', 'LATA', 'TUBO', 'BOTELLA',
+      'METRO', 'ROLLO', 'PIEZA',
     ],
     etiquetas: {},
   },

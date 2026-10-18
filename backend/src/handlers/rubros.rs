@@ -66,11 +66,30 @@ pub const MODULO_RECETAS: &str = "RECETAS";
 /// activo, concentración y forma (para un agotado o uno más barato). Se
 /// calcula en el navegador con las fichas. Necesita FICHA_MEDICAMENTO.
 pub const MODULO_ALTERNATIVAS: &str = "ALTERNATIVAS";
+/// Lubricentro / Repuestos: marca, n.° de parte, códigos alternos (y con
+/// ellos las equivalencias), ubicación y garantía (handlers/repuestos.rs).
+pub const MODULO_FICHA_REPUESTO: &str = "FICHA_REPUESTO";
+/// Lubricentro / Repuestos: con qué vehículos (marca, modelo, años, motor)
+/// es compatible cada repuesto, y búsqueda por vehículo en el punto de
+/// venta (handlers/compatibilidad.rs).
+pub const MODULO_COMPATIBILIDAD: &str = "COMPATIBILIDAD";
+/// Lubricentro: vehículos de los clientes (placa), kilometraje y próximo
+/// cambio en la venta, historial por placa y recordatorios
+/// (handlers/vehiculos.rs).
+pub const MODULO_VEHICULOS: &str = "VEHICULOS";
+/// Lubricentro: órdenes de servicio por vehículo con productos y mano de
+/// obra, mecánicos y comisiones (handlers/ordenes.rs). Necesita VEHICULOS.
+pub const MODULO_ORDENES_SERVICIO: &str = "ORDENES_SERVICIO";
+/// Paquetes: varios productos a un precio ("Cambio de aceite completo").
+/// En la venta entran sus productos con un descuento por línea
+/// (handlers/paquetes.rs). No cambia cómo se cobra.
+pub const MODULO_PAQUETES: &str = "PAQUETES";
 
 /// (módulo, el módulo que necesita encendido).
 const DEPENDENCIAS: &[(&str, &str)] = &[
     (MODULO_RECETAS, MODULO_FICHA_MEDICAMENTO),
     (MODULO_ALTERNATIVAS, MODULO_FICHA_MEDICAMENTO),
+    (MODULO_ORDENES_SERVICIO, MODULO_VEHICULOS),
 ];
 
 const MODULOS: &[&str] = &[
@@ -90,6 +109,11 @@ const MODULOS: &[&str] = &[
     MODULO_FICHA_MEDICAMENTO,
     MODULO_RECETAS,
     MODULO_ALTERNATIVAS,
+    MODULO_FICHA_REPUESTO,
+    MODULO_COMPATIBILIDAD,
+    MODULO_VEHICULOS,
+    MODULO_ORDENES_SERVICIO,
+    MODULO_PAQUETES,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
@@ -128,6 +152,17 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
         &[
             "UNIDAD", "TABLETA", "CAPSULA", "BLISTER", "CAJA", "FRASCO", "AMPOLLA", "VIAL", "SOBRE", "TUBO",
             "SUPOSITORIO", "OVULO", "PARCHE", "ML", "GRAMO", "PAQUETE",
+        ],
+    ),
+    (
+        "LUBRICENTRO",
+        &[
+            MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
+            MODULO_FICHA_REPUESTO, MODULO_COMPATIBILIDAD, MODULO_VEHICULOS, MODULO_ORDENES_SERVICIO, MODULO_PAQUETES,
+        ],
+        &[
+            "UNIDAD", "LITRO", "GALON", "ML", "KG", "PAR", "JUEGO", "CAJA", "PAQUETE", "BALDE", "LATA", "TUBO", "BOTELLA",
+            "METRO", "ROLLO", "PIEZA",
         ],
     ),
     (RUBRO_GENERAL, &[], &[]),

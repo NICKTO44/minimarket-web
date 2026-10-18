@@ -11,6 +11,9 @@ import { formatoCantidad, formatoPrecio, subtotalLinea } from '../utils/medidas'
 // 0 o sin el módulo = no se imprime nada.
 // fecha: fecha y hora de emisión ya escritas (al reimprimir); sin ella, la
 // de este momento (la venta se acaba de hacer).
+// vehiculo: { placa, marca, modelo, km, proximo_km, proxima_fecha } (módulo
+// "Vehículos y kilometraje"); garantías: [{ nombre, texto }] (módulo "Ficha
+// del repuesto"). Sin ellos el ticket es el de siempre.
 export default function Recibo({
   venta,
   items,
@@ -26,6 +29,8 @@ export default function Recibo({
   cliente,
   diasCambio = 0,
   fecha = null,
+  vehiculo = null,
+  garantias = [],
 }) {
   const esComprobanteReal = !!comprobante;
   // La factura también sale en ticket de 80 mm: lleva el RUC del cliente,
@@ -157,6 +162,23 @@ export default function Recibo({
         <span>Cajero</span>
         <span>{cajero}</span>
       </div>
+      {vehiculo?.placa && (
+        <>
+          <div className="recibo-fila-meta">
+            <span>Placa</span>
+            <span>
+              {vehiculo.placa}
+              {[vehiculo.marca, vehiculo.modelo].filter(Boolean).length > 0 && ` · ${[vehiculo.marca, vehiculo.modelo].filter(Boolean).join(' ')}`}
+            </span>
+          </div>
+          {vehiculo.km != null && (
+            <div className="recibo-fila-meta">
+              <span>Kilometraje</span>
+              <span>{Number(vehiculo.km).toLocaleString('es-PE')} km</span>
+            </div>
+          )}
+        </>
+      )}
 
       <div className="recibo-linea"></div>
 
@@ -167,6 +189,13 @@ export default function Recibo({
             <span>{formatoCantidad(item.cantidad)} x S/.{formatoPrecio(item.precio)}</span>
             <span>S/.{subtotalLinea(item.precio, item.cantidad).toFixed(2)}</span>
           </div>
+          {/* Descuento de la línea (p. ej. por un paquete); sin descuento no sale nada. */}
+          {item.descuento > 0 && (
+            <div className="recibo-item-detalle">
+              <span>{item.motivoDescuento || 'Descuento'}</span>
+              <span>-S/.{item.descuento.toFixed(2)}</span>
+            </div>
+          )}
         </div>
       ))}
 
@@ -330,6 +359,32 @@ export default function Recibo({
           Consulte este comprobante en el portal de SUNAT escaneando el
           código QR, o revise el documento oficial disponible en el
           sistema.
+        </div>
+      )}
+
+      {vehiculo && (vehiculo.proximo_km || vehiculo.proxima_fecha) && (
+        <div className="recibo-centro recibo-disclaimer">
+          <strong>PRÓXIMO SERVICIO</strong>
+          <br />
+          {[
+            vehiculo.proximo_km ? `${Number(vehiculo.proximo_km).toLocaleString('es-PE')} km` : null,
+            vehiculo.proxima_fecha ? vehiculo.proxima_fecha.split('-').reverse().join('/') : null,
+          ]
+            .filter(Boolean)
+            .join(' o el ')}
+          {vehiculo.proximo_km && vehiculo.proxima_fecha ? ', lo que llegue primero.' : ''}
+        </div>
+      )}
+
+      {garantias.length > 0 && (
+        <div className="recibo-centro recibo-disclaimer">
+          <strong>GARANTÍA</strong>
+          {garantias.map((g, i) => (
+            <div key={i}>
+              {g.nombre}: {g.texto}
+            </div>
+          ))}
+          Con este comprobante.
         </div>
       )}
 

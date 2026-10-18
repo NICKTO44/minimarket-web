@@ -23,6 +23,9 @@ import {
   Route,
   TrendingDown,
   FileCheck2,
+  Car,
+  Wrench,
+  PackageOpen,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
@@ -41,6 +44,9 @@ export const GRUPOS_MENU = [
       { id: 'COTIZACIONES', label: 'Cotizaciones', icono: FileText, modulo: 'COTIZACIONES' },
       { id: 'CREDITOS', label: 'Créditos', icono: HandCoins, modulo: 'CREDITO' },
       { id: 'GUIAS', label: 'Guías de remisión', icono: Route, modulo: 'GUIAS' },
+      // Lubricentro.
+      { id: 'ORDENES', label: 'Órdenes de servicio', icono: Wrench, modulo: 'ORDENES_SERVICIO' },
+      { id: 'VEHICULOS', label: 'Vehículos', icono: Car, modulo: 'VEHICULOS' },
     ],
   },
   {
@@ -50,6 +56,7 @@ export const GRUPOS_MENU = [
       { id: 'STOCK', label: 'Stock y Lotes', icono: Boxes },
       { id: 'PROVEEDORES', label: 'Proveedores', icono: Truck },
       { id: 'DEVOLUCIONES', label: 'Devoluciones', icono: Undo2 },
+      { id: 'PAQUETES', label: 'Paquetes', icono: PackageOpen, soloAdmin: true, modulo: 'PAQUETES' },
     ],
   },
   {

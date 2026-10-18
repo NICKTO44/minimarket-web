@@ -206,6 +206,9 @@ fn ruta_permitida(rol: &str, metodo: &Method, ruta: &str) -> bool {
                 // "/ganancias/costos": el costo promedio que muestra el
                 // formulario del producto (con el módulo de ganancias).
                 || (lectura && (matches!(ruta, "/unidades" | "/ganancias/costos") || es_de(ruta, "/reportes")))
+                // Fichas de repuesto y compatibilidades (lubricentro), para
+                // la lista de Productos.
+                || (lectura && es_de(ruta, "/repuestos"))
         }
         _ => true,
     }

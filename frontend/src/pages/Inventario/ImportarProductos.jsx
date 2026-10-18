@@ -16,14 +16,25 @@ const FILAS_A_LA_VISTA = 200;
 const TITULOS_PLANTILLA = ['Código', 'Nombre', 'Descripción', 'Categoría', 'Unidad', 'Precio de venta', 'Precio de compra', 'Stock', 'Stock mínimo', 'Lote', 'Vencimiento'];
 // Farmacia: columnas de la ficha del medicamento al final de la plantilla.
 const TITULOS_FICHA = ['Principio activo', 'Concentración', 'Forma farmacéutica', 'Laboratorio', 'Registro sanitario', 'Condición de venta', 'Genérico'];
+// Lubricentro: ficha del repuesto y vehículos compatibles.
+const TITULOS_REPUESTO = ['Marca', 'N.° de parte', 'Códigos alternos', 'Ubicación', 'Garantía (días)'];
+const TITULOS_COMPATIBILIDAD = ['Compatible con'];
 
 const soles = (n) => (n == null ? '—' : `S/ ${n.toFixed(2)}`);
 // "2027-12-31" -> "31/12/2027"
 const fechaCorta = (iso) => (iso ? iso.split('-').reverse().join('/') : '—');
 const plural = (n, uno, varios) => `${n.toLocaleString('es-PE')} ${n === 1 ? uno : varios}`;
 
-export default function ImportarProductos({ categorias, unidadesActivas, onCerrar, onTerminado, fichaMedicamento = false }) {
-  const CAMPOS = camposImportacion({ ficha: fichaMedicamento });
+export default function ImportarProductos({
+  categorias,
+  unidadesActivas,
+  onCerrar,
+  onTerminado,
+  fichaMedicamento = false,
+  fichaRepuesto = false,
+  compatibilidad = false,
+}) {
+  const CAMPOS = camposImportacion({ ficha: fichaMedicamento, repuesto: fichaRepuesto, compatibilidad });
   const OBLIGATORIOS = CAMPOS.filter((c) => c.obligatorio);
   const [paso, setPaso] = useState('ARCHIVO');
   const [ocupado, setOcupado] = useState(false);
@@ -161,8 +172,18 @@ export default function ImportarProductos({ categorias, unidadesActivas, onCerra
   const hayLotes = armado.filas.some((f) => f.vencimiento || f.lote);
 
   const descargarPlantilla = () => {
-    const titulos = fichaMedicamento ? [...TITULOS_PLANTILLA, ...TITULOS_FICHA] : TITULOS_PLANTILLA;
-    const anchos = [16, 36, 30, 18, 12, 15, 16, 10, 13, 12, 14, ...(fichaMedicamento ? [24, 14, 20, 20, 18, 22, 11] : [])];
+    const titulos = [
+      ...TITULOS_PLANTILLA,
+      ...(fichaMedicamento ? TITULOS_FICHA : []),
+      ...(fichaRepuesto ? TITULOS_REPUESTO : []),
+      ...(compatibilidad ? TITULOS_COMPATIBILIDAD : []),
+    ];
+    const anchos = [
+      16, 36, 30, 18, 12, 15, 16, 10, 13, 12, 14,
+      ...(fichaMedicamento ? [24, 14, 20, 20, 18, 22, 11] : []),
+      ...(fichaRepuesto ? [16, 18, 30, 16, 14] : []),
+      ...(compatibilidad ? [44] : []),
+    ];
     descargarArchivo(escribirXlsx([titulos], { anchos }), 'Plantilla-productos.xlsx', { tipo: TIPO_XLSX });
   };
 

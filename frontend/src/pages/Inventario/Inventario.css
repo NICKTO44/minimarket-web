@@ -856,3 +856,50 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Lubricentro / Repuestos: vehículos compatibles */
+.inv-compat-fila {
+  display: grid;
+  grid-template-columns: 1.1fr 1.3fr 0.7fr 0.7fr 1fr auto;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.inv-compat-fila input {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.inv-compat-quitar {
+  border: none;
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 8px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.inv-compat-agregar {
+  margin-top: 10px;
+  border: 1.5px dashed #c7cbd3;
+  background: transparent;
+  color: #374151;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .inv-compat-fila {
+    grid-template-columns: 1fr 1fr;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eef0f3;
+  }
+  .inv-compat-motor {
+    grid-column: 1 / 2;
+  }
+}
