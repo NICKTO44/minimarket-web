@@ -24,6 +24,7 @@ import { agruparPorModelo } from '../../utils/variantes';
 import AvisoNotaCredito from '../../components/AvisoNotaCredito';
 import { enlaceComprobantePublico } from '../../utils/enlacePublico';
 import { imprimirTicket } from '../../utils/imprimirTicket';
+import { etiquetaTicket, papelTicket } from '../../utils/papelTicket';
 import { alternativasDe, etiquetaCondicion, fichaCoincide, mapaFichas, resumenFicha, textoPlano } from '../../utils/medicamentos';
 import AlternativasMedicamento from '../../components/AlternativasMedicamento';
 import EquivalentesRepuesto from '../../components/EquivalentesRepuesto';
@@ -2605,7 +2606,7 @@ export default function POS({
               <span>Imprimir última {nombreUltimoComprobante} · {ultimaVentaParaImprimir.venta.folio}</span>
               <div className="pos-imprimir-dos">
                 <button className="pos-imprimir" onClick={() => imprimirComprobante('TICKET')}>
-                  🖨 Ticket 80 mm
+                  🖨 {etiquetaTicket()}
                 </button>
                 <button className="pos-imprimir" onClick={() => imprimirComprobante('A4')}>
                   📄 Hoja A4
@@ -2932,7 +2933,7 @@ export default function POS({
                   <div className="pos-imprimir-dos">
                     <button className="pos-venta-modal-imprimir" onClick={() => imprimirComprobante('TICKET')}>
                       🖨 Ticket
-                      <small>80 mm</small>
+                      <small>{papelTicket()} mm</small>
                     </button>
                     <button
                       className="pos-venta-modal-imprimir pos-venta-modal-imprimir-claro"

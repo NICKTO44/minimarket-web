@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
   ArrowRightLeft,
@@ -23,6 +24,7 @@ import { confirmar } from '../../utils/confirmar';
 import { esMesero } from '../../utils/menu';
 import { tiempoAbierto, tituloPedido } from '../../utils/mesas';
 import TicketMesa from '../../components/TicketMesa';
+import { imprimirTicket } from '../../utils/imprimirTicket';
 import ModalOpciones from './ModalOpciones';
 import DialogoTexto from './DialogoTexto';
 import { usePedidoOptimista } from './usePedidoOptimista';
@@ -102,10 +104,12 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
     return () => clearInterval(intervalo);
   }, [refrescar]);
 
-  // Imprime el ticket apenas se dibuja (comanda o precuenta).
+  // Imprime el ticket apenas se dibuja (comanda o precuenta). Solo el
+  // ticket: el resto del sistema no entra en la impresión (así la impresora
+  // no recibe la página entera ni Chrome achica el ticket).
   useEffect(() => {
     if (!ticket) return undefined;
-    const t = setTimeout(() => window.print(), 80);
+    const t = setTimeout(() => imprimirTicket(), 80);
     return () => clearTimeout(t);
   }, [ticket]);
 
@@ -621,15 +625,17 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
 
       {dialogo && <DialogoTexto {...dialogo} onCerrar={() => setDialogo(null)} />}
 
-      {ticket && (
-        <TicketMesa
-          key={ticket.clave}
-          tipo={ticket.tipo}
-          pedido={ticket.pedido}
-          items={ticket.items}
-          nombreTienda={nombreTienda}
-        />
-      )}
+      {ticket &&
+        createPortal(
+          <TicketMesa
+            key={ticket.clave}
+            tipo={ticket.tipo}
+            pedido={ticket.pedido}
+            items={ticket.items}
+            nombreTienda={nombreTienda}
+          />,
+          document.body
+        )}
     </div>
   );
 }

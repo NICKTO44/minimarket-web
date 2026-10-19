@@ -178,4 +178,53 @@
     margin: 0;
     size: 80mm auto; /* ancho fijo, alto automático según el contenido */
   }
+
+  /* Ticketera de 58 mm (Configuración → Impresora de tickets, se guarda en
+     cada equipo: utils/papelTicket.js). De los 58 mm imprime solo los 48 mm
+     del centro (384 puntos). Mismo diseño, un poco más compacto. El @page de
+     58 mm lo agrega utils/papelTicket.js. */
+  html.papel-58 .recibo-imprimible {
+    width: 48mm;
+    padding: 2.5mm 0.5mm 5mm;
+    font-size: 8pt;
+    line-height: 1.28;
+  }
+  html.papel-58 .recibo-nombre-tienda,
+  html.papel-58 .recibo-total {
+    font-size: 11pt;
+  }
+  html.papel-58 .recibo-comprobante-tipo {
+    font-size: 9pt;
+  }
+  html.papel-58 .recibo-comprobante-numero {
+    font-size: 10pt;
+  }
+  html.papel-58 .recibo-fila-meta,
+  html.papel-58 .recibo-item-detalle,
+  html.papel-58 .recibo-detalle-pago {
+    gap: 4pt;
+  }
+  /* La etiqueta ("Cliente:") no se parte; el dato largo de la derecha
+     baja de línea. */
+  html.papel-58 .recibo-fila-meta span:first-child,
+  html.papel-58 .recibo-detalle-pago span:first-child {
+    flex: none;
+    white-space: nowrap;
+  }
+  html.papel-58 .recibo-fila-meta span:last-child,
+  html.papel-58 .recibo-detalle-pago span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  html.papel-58 .recibo-item-nombre,
+  html.papel-58 .recibo-importe-letras {
+    overflow-wrap: anywhere;
+  }
+  html.papel-58 .recibo-disclaimer {
+    font-size: 6.5pt;
+  }
+  html.papel-58 .recibo-qr {
+    width: 80pt;
+    height: 80pt;
+  }
 }

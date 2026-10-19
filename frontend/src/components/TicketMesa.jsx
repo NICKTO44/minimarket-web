@@ -1,7 +1,7 @@
 import { tituloPedido as titulo } from '../utils/mesas';
 import './TicketMesa.css';
 
-// Ticket angosto (80 mm) para la ticketera, en dos versiones:
+// Ticket angosto (80 mm, o 58 mm según utils/papelTicket.js) para la ticketera, en dos versiones:
 //  - COMANDA: lo que se manda a preparar a barra/cocina. Sin precios,
 //    letra grande, con opciones y notas bien visibles.
 //  - PRECUENTA: la cuenta para mostrarle al cliente antes de cobrar. No es

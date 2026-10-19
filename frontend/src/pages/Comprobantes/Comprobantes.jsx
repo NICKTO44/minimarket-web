@@ -12,6 +12,7 @@ import { fechaHoraLima, hoyLima } from '../../utils/formato';
 import { descargarArchivo, pdfDeVenta } from '../../utils/pdfTicket';
 import { enlaceComprobantePublico } from '../../utils/enlacePublico';
 import { imprimirTicket as imprimirSoloTicket } from '../../utils/imprimirTicket';
+import { etiquetaTicket } from '../../utils/papelTicket';
 import './Comprobantes.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -415,7 +416,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     // La factura y la boleta se pueden imprimir en ticket de 80 mm o en A4: se pregunta.
     if (facturaConA4(comp)) {
       abrirMenu(evento, comp, [
-        { cual: 'ticket', titulo: 'Ticket 80 mm', detalle: 'Para la impresora térmica' },
+        { cual: 'ticket', titulo: etiquetaTicket(), detalle: 'Para la impresora térmica' },
         {
           cual: 'a4',
           titulo: 'Hoja A4',

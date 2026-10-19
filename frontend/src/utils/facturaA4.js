@@ -16,6 +16,7 @@ import QRCode from 'qrcode';
 import { montoEnLetras } from './numeroALetras';
 import { construirCadenaQrSunat } from './qrSunat';
 import { formatoPrecio } from './medidas';
+import { esPapel58 } from './papelTicket';
 
 const COLOR_POR_DEFECTO = '#0f7b37'; // verde Monspeet, versión oscura (imprime bien)
 
@@ -483,6 +484,21 @@ export async function datosA4DeDocumento(doc, extra = {}) {
  * El mismo comprobante (los mismos datos que el A4) en un ticket de 80 mm
  * para la impresora térmica: todo en negro, una columna.
  */
+// Ticketera de 58 mm (utils/papelTicket.js): imprime 48 mm. Va al final del
+// <style>, así su @page le gana al de 80 mm.
+const CSS_TICKET_58 = `
+  @page { size: 58mm auto; margin: 0; }
+  body { width: 48mm; padding: 3mm 0 6mm; font-size: 10px; }
+  .logo { max-width: 32mm; max-height: 18mm; }
+  .nombre { font-size: 15px; }
+  .tipo .numero { font-size: 13px; }
+  .datos b { width: 13mm; }
+  .datos span, .items td { overflow-wrap: anywhere; }
+  .items th:first-child, .items td:first-child { width: 7mm; padding-right: 1mm; }
+  .total { font-size: 12.5px; padding: 1.5mm 2mm; }
+  .qr { width: 24mm; height: 24mm; }
+`;
+
 export function htmlComprobanteTicket(datos) {
   const { emisor = {}, comprobante = {}, cliente, items = [], totales = {}, referencia, qr } = datos;
   const nombreTipo = nombreDelTipo(comprobante.tipo);
@@ -531,7 +547,7 @@ export function htmlComprobanteTicket(datos) {
   .qr { width: 28mm; height: 28mm; display: block; margin: 2mm auto 1mm; image-rendering: pixelated; }
   .pequeno { font-size: 9.5px; }
   .gracias { font-size: 12.5px; font-weight: 800; margin-top: 2mm; }
-  .hash { word-break: break-all; }
+  .hash { word-break: break-all; }${esPapel58() ? CSS_TICKET_58 : ''}
 </style>
 </head>
 <body>

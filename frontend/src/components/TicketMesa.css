@@ -4,6 +4,12 @@
 }
 
 @media print {
+  /* Se imprime con utils/imprimirTicket.js: el sistema (#root) no entra en
+     la impresión, solo el ticket (que va fuera de #root, ver PedidoMesa). */
+  html.imprimiendo-ticket #root {
+    display: none !important;
+  }
+
   body * {
     visibility: hidden;
   }
@@ -92,5 +98,49 @@
   }
   .ticket-mesa-pie {
     font-size: 11px;
+  }
+
+  /* Ticketera de 58 mm (utils/papelTicket.js): imprime 48 mm. La comanda
+     sigue con letra grande para la cocina; solo se ajustan márgenes. */
+  html.papel-58 .ticket-mesa {
+    width: 48mm;
+    padding: 2mm 0.5mm 4mm;
+    font-size: 12px;
+  }
+  html.papel-58 .ticket-mesa-destino {
+    font-size: 19px;
+  }
+  html.papel-58 .ticket-mesa-tienda,
+  html.papel-58 .ticket-mesa-comanda-fila {
+    font-size: 15px;
+  }
+  html.papel-58 .ticket-mesa-comanda-fila,
+  html.papel-58 .ticket-mesa-precuenta-fila {
+    gap: 4px;
+  }
+  html.papel-58 .ticket-mesa-cantidad {
+    min-width: 24px;
+    flex: none;
+  }
+  html.papel-58 .ticket-mesa-nombre,
+  html.papel-58 .ticket-mesa-opciones,
+  html.papel-58 .ticket-mesa-nota,
+  html.papel-58 .ticket-mesa-precuenta-fila span:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  html.papel-58 .ticket-mesa-precuenta-fila span:last-child {
+    white-space: nowrap;
+  }
+  html.papel-58 .ticket-mesa-opciones,
+  html.papel-58 .ticket-mesa-nota {
+    padding-left: 28px;
+  }
+  html.papel-58 .ticket-mesa-precuenta-item .ticket-mesa-opciones {
+    padding-left: 8px;
+    font-size: 11px;
+  }
+  html.papel-58 .ticket-mesa-total {
+    font-size: 14px;
   }
 }

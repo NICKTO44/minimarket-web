@@ -9,6 +9,7 @@ import ConfiguracionNegocio from './ConfiguracionNegocio';
 import SelectorTasaIgv from './SelectorTasaIgv';
 import ConfiguracionDetraccion from './ConfiguracionDetraccion';
 import ConfiguracionCambios from './ConfiguracionCambios';
+import ConfiguracionImpresora from './ConfiguracionImpresora';
 import UsoPlan from '../../components/UsoPlan';
 import { etiquetaTasa, TASA_GENERAL } from '../../utils/igv';
 import { datosNegocio, MODULO_CAMBIOS, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
@@ -278,6 +279,8 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
       {vista === 'NEGOCIO' && formConfig && negocio.modulos.includes(MODULO_CAMBIOS) && (
         <ConfiguracionCambios onMensaje={setMensaje} />
       )}
+
+      {vista === 'NEGOCIO' && formConfig && <ConfiguracionImpresora onMensaje={setMensaje} />}
 
       {vista === 'RESTAURANTE' && restaurante && <ConfiguracionRestaurante />}
       {vista === 'UNIDADES' && <ConfiguracionUnidades rubro={negocio.rubro} />}
