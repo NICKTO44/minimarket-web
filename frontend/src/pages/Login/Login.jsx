@@ -264,6 +264,70 @@ function MarcaMonspeet() {
 }
 
 // ============================================================
+// CABECERA MÓVIL/TABLET: bloque de color con líneas topográficas
+// y una ola blanca abajo. Solo se ve en pantallas ≤ 900px.
+// `color`: verde de Monspeet (paso 1) o el color del negocio (paso 2).
+// ============================================================
+const TOPO_CENTROS = [
+  { cx: 60, cy: 70, semilla: 1.3, anillos: 7 },
+  { cx: 330, cy: 40, semilla: 2.1, anillos: 8 },
+  { cx: 220, cy: 220, semilla: 0.4, anillos: 6 },
+  { cx: 10, cy: 300, semilla: 3.2, anillos: 5 },
+  { cx: 410, cy: 290, semilla: 4.7, anillos: 6 },
+];
+
+function curvaTopo(cx, cy, r, s) {
+  const pasos = 72;
+  let d = '';
+  for (let i = 0; i <= pasos; i++) {
+    const a = (i / pasos) * Math.PI * 2;
+    const k =
+      1 +
+      0.16 * Math.sin(3 * a + s) +
+      0.09 * Math.sin(5 * a + 2 * s) +
+      0.05 * Math.cos(7 * a - s + r / 30);
+    const x = cx + r * 1.2 * k * Math.cos(a);
+    const y = cy + r * k * Math.sin(a);
+    d += `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`;
+  }
+  return `${d}Z`;
+}
+
+const LINEAS_TOPO = TOPO_CENTROS.flatMap(({ cx, cy, semilla, anillos }) =>
+  Array.from({ length: anillos }, (_, i) =>
+    curvaTopo(cx, cy, 12 + i * 17, semilla + i * 0.35)
+  )
+);
+
+function HeroMovil({ color, children }) {
+  return (
+    <div className="login-hero-movil" style={{ '--hero-color': color }}>
+      <svg
+        className="login-hero-topo"
+        viewBox="0 0 400 340"
+        preserveAspectRatio="xMidYMid slice"
+        aria-hidden="true"
+      >
+        {LINEAS_TOPO.map((d, i) => (
+          <path key={i} d={d} vectorEffect="non-scaling-stroke" />
+        ))}
+      </svg>
+
+      <div className="login-hero-contenido">{children}</div>
+
+      <svg
+        className="login-hero-ola"
+        viewBox="0 0 400 90"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path d="M0 30C90 0 150 10 210 40S340 90 400 70V90H0Z" />
+      </svg>
+    </div>
+  );
+}
+
+// ============================================================
 // COMPONENTE LOGIN
 // ============================================================
 export default function Login({
@@ -343,6 +407,22 @@ export default function Login({
       <div className="login-tienda-container" style={{ '--acento-negocio': colorAcento }}>
         <EscenaCelular color={colorAcento} />
 
+        <HeroMovil color={colorAcento}>
+          <p className="login-hero-con">
+            con <b>MonspeetPOS</b>
+          </p>
+          <div className="login-hero-negocio">
+            {tiendaRecordada.logo_url ? (
+              <img
+                src={`${API_URL}${tiendaRecordada.logo_url}?t=${Date.now()}`}
+                alt=""
+              />
+            ) : (
+              <span>{inicial}</span>
+            )}
+          </div>
+        </HeroMovil>
+
         <p className="login-con-monspeet">
           con <MarcaMonspeet />
         </p>
@@ -355,11 +435,11 @@ export default function Login({
             <img
               src={`${API_URL}${tiendaRecordada.logo_url}?t=${Date.now()}`}
               alt={tiendaRecordada.nombre_negocio}
-              className="login-tienda-logo"
+              className="login-tienda-logo solo-escritorio"
             />
           ) : (
             <div
-              className="login-tienda-badge"
+              className="login-tienda-badge solo-escritorio"
               style={{
                 background: colorAcento,
                 color: '#fff',
@@ -542,6 +622,20 @@ export default function Login({
         ¿Dudas? Escríbenos
       </a>
 
+      <HeroMovil color="#16a34a">
+        <div className="login-hero-marca">
+          <IconoCarrito />
+          <span>
+            Monspeet<b>POS</b>
+          </span>
+        </div>
+        <p className="login-hero-lema">
+          Tu negocio, más simple,
+          <br />
+          más rentable.
+        </p>
+      </HeroMovil>
+
       <div className="login-general-flotante">
         <form
           className="login-general-form"
@@ -551,8 +645,9 @@ export default function Login({
             <span className="solo-movil">Ingresa a tu negocio</span>
             <span className="solo-escritorio">Bienvenido</span>
           </h1>
-          <p className="login-general-subtitulo solo-escritorio">
-            Ingresa tu usuario para continuar
+          <p className="login-general-subtitulo">
+            <span className="solo-movil">Escribe tu usuario y te llevamos a tu negocio</span>
+            <span className="solo-escritorio">Ingresa tu usuario para continuar</span>
           </p>
 
           <label className="login-etiqueta" htmlFor="login-usuario">Usuario</label>
@@ -584,7 +679,9 @@ export default function Login({
             className="login-enlace"
             onClick={onIrARegistro}
           >
-            <span className="solo-movil">¿Tu negocio no está registrado todavía? Regístrate</span>
+            <span className="solo-movil">
+              ¿Tu negocio aún no está registrado? <strong>Regístrate</strong>
+            </span>
             <span className="solo-escritorio">
               ¿Aún no tienes cuenta? <strong>Regístrate</strong>
             </span>

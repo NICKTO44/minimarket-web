@@ -823,3 +823,311 @@
 .login-tienda-form .login-toggle-password:hover {
   color: var(--color-primario-texto);
 }
+
+/* =========================================================
+   MÓVIL Y TABLET (≤ 900px) — cabecera de color con líneas
+   topográficas y ola, formulario limpio debajo.
+   Paso 1: verde Monspeet. Paso 2: color del negocio.
+   El escritorio no cambia.
+   ========================================================= */
+.login-hero-movil {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  /* ---------- Cabecera ---------- */
+  .login-hero-movil {
+    display: block;
+    position: relative;
+    order: 0;
+    flex: none;
+    height: clamp(250px, 40vh, 400px);
+    background: var(--hero-color, var(--mp-verde));
+    color: var(--mp-blanco);
+    overflow: hidden;
+  }
+
+  .login-hero-topo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.22);
+    stroke-width: 1.1;
+  }
+
+  .login-hero-ola {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    width: 100%;
+    height: clamp(56px, 11vh, 110px);
+    fill: var(--mp-blanco);
+  }
+
+  .login-hero-contenido {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    box-sizing: border-box;
+    padding: max(28px, env(safe-area-inset-top)) 24px 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .login-hero-marca {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    font-weight: 700;
+    font-size: 21px;
+  }
+
+  .login-hero-marca svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .login-hero-marca b {
+    color: #052e16;
+  }
+
+  .login-hero-lema {
+    margin: 22px 0 0;
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    font-weight: 700;
+    font-size: 26px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+
+  .login-hero-con {
+    margin: 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .login-hero-con b {
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    color: var(--mp-blanco);
+  }
+
+  .login-hero-negocio {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: clamp(48px, 9vh, 90px);
+  }
+
+  .login-hero-negocio img,
+  .login-hero-negocio span {
+    width: 92px;
+    height: 92px;
+    border-radius: 24px;
+    background: var(--mp-blanco);
+    box-shadow: 0 14px 30px -10px rgba(0, 0, 0, 0.35);
+  }
+
+  .login-hero-negocio img {
+    object-fit: cover;
+  }
+
+  .login-hero-negocio span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    font-size: 40px;
+    font-weight: 700;
+    color: var(--hero-color);
+  }
+
+  /* ---------- Contenedores ---------- */
+  .login-general-container {
+    background-color: var(--mp-blanco);
+    color: #16181d;
+  }
+
+  .login-general-marca-contenido {
+    display: none;
+  }
+
+  .login-general-flotante {
+    order: 1;
+    flex: 1;
+  }
+
+  .login-tienda-container {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 0;
+    background: var(--mp-blanco);
+  }
+
+  /* ---------- Formularios ---------- */
+  .login-general-form {
+    --acento: #15803d;
+  }
+
+  .login-tienda-form {
+    --acento: var(--acento-negocio, var(--color-primario));
+  }
+
+  .login-general-form,
+  .login-tienda-form {
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4px 24px 28px;
+    box-sizing: border-box;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .login-general-form h1,
+  .login-tienda-nombre {
+    margin: 0;
+    text-align: left;
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    color: #16181d;
+    text-decoration: underline;
+    text-decoration-color: var(--acento);
+    text-decoration-thickness: 3px;
+    text-underline-offset: 9px;
+  }
+
+  .login-general-subtitulo,
+  .login-tienda-subtitulo {
+    margin: 16px 0 6px;
+    text-align: left;
+    font-size: 14px;
+    color: var(--mp-gris-claro);
+  }
+
+  .login-etiqueta {
+    display: block;
+    margin: 22px 0 2px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #3a4048;
+  }
+
+  .login-general-form input,
+  .login-tienda-form input {
+    height: 46px;
+    padding: 0 4px 0 30px;
+    border: none;
+    border-bottom: 1.5px solid #e2e5e9;
+    border-radius: 0;
+    background: transparent no-repeat 2px center / 18px 18px;
+    font-size: 16px; /* 16px evita el zoom automático de iOS */
+    color: #16181d;
+  }
+
+  .login-general-form input:focus,
+  .login-tienda-form input:focus {
+    border-color: transparent;
+    border-bottom-color: var(--acento);
+  }
+
+  .login-tienda-form .login-campo-password input {
+    padding-right: 42px;
+  }
+
+  #login-usuario,
+  #login-tienda-usuario {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6'/%3E%3C/svg%3E");
+  }
+
+  #login-tienda-clave {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='1.8' stroke-linecap='round'%3E%3Crect x='4.5' y='10.5' width='15' height='10' rx='2.5'/%3E%3Cpath d='M8 10.5V7.5a4 4 0 0 1 8 0v3'/%3E%3C/svg%3E");
+  }
+
+  .login-general-form button[type='submit'],
+  .login-tienda-submit {
+    height: 50px;
+    margin-top: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 12px;
+    background: var(--acento);
+    color: var(--mp-blanco);
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 10px 22px -12px var(--acento);
+  }
+
+  .login-general-form button[type='submit'] svg,
+  .login-tienda-submit svg {
+    display: block;
+  }
+
+  .login-general-form button[type='submit']:hover:not(:disabled) {
+    background: #0f5f2e;
+    color: var(--mp-blanco);
+  }
+
+  .login-general-form button[type='submit']:disabled,
+  .login-tienda-submit:disabled {
+    box-shadow: none;
+  }
+
+  .login-general-form .login-mensaje-error,
+  .login-tienda-form .login-mensaje-error {
+    margin-top: 16px;
+  }
+
+  .login-enlace,
+  .login-tienda-cambiar {
+    align-self: center;
+    margin-top: 18px;
+    padding: 8px;
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--mp-gris-claro);
+  }
+
+  .login-enlace:hover,
+  .login-tienda-cambiar:hover {
+    color: var(--mp-gris-claro);
+    text-decoration: none;
+  }
+
+  .login-enlace strong,
+  .login-tienda-cambiar span {
+    color: var(--acento);
+    font-weight: 600;
+  }
+
+  .login-enlace:hover strong,
+  .login-tienda-cambiar:hover span {
+    text-decoration: underline;
+  }
+
+  /* WhatsApp: pastilla pequeña al final, debajo del formulario */
+  .login-whatsapp-chico {
+    display: inline-flex;
+    position: static;
+    order: 2;
+    align-self: center;
+    margin: 0 auto 28px;
+  }
+}
