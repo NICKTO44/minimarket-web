@@ -1,4 +1,5 @@
-// Guía de remisión en hoja A4, con el mismo diseño que la factura y la
+// Guía de remisión en hoja A4 para IMPRIMIR ("Imprimir A4"; el archivo PDF
+// lo arma utils/guiaPdfA4.js con el mismo diseño). Mismo diseño que la factura y la
 // boleta en A4 (utils/facturaA4.js): logo, recuadro del RUC, tarjetas y
 // tabla con el color de acento del negocio. Se imprime desde un iframe
 // oculto y en el diálogo de impresión se elige "Guardar como PDF", igual

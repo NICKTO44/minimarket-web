@@ -6,6 +6,7 @@ import SelectorUbigeo from '../../components/SelectorUbigeo';
 import { fechaCorta } from '../../utils/formato';
 import { descargarArchivo, pdfDeGuia } from '../../utils/pdfTicket';
 import { imprimirGuiaA4 } from '../../utils/guiaA4';
+import { pdfGuiaA4 } from '../../utils/guiaPdfA4';
 import { etiquetaTicket } from '../../utils/papelTicket';
 import { formatoCantidad } from '../../utils/medidas';
 import { abreviaturaUnidad } from '../../utils/unidades';
@@ -309,30 +310,44 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
     }
   };
 
-  // Nuestro A4 (como el de la factura): se abre el diálogo de impresión y
-  // ahí se imprime o se elige "Guardar como PDF".
+  // Nuestro A4 (como el de la factura), con el logo y el color del negocio.
+  const emisorA4 = () => ({
+    nombreComercial: cfgEmisor?.nombre_tienda || nombreTienda,
+    razonSocial: cfgEmisor?.razon_social,
+    ruc: cfgEmisor?.ruc || ruc,
+    direccion: cfgEmisor?.direccion || direccion,
+    telefono: cfgEmisor?.telefono || telefono,
+    email: cfgEmisor?.email,
+    logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,
+    color: cfgEmisor?.color_acento,
+  });
+
+  // "Imprimir A4": abre el diálogo de impresión con la hoja A4.
   const [armandoA4, setArmandoA4] = useState(false);
   const imprimirA4 = async (guia) => {
     setArmandoA4(true);
     try {
-      await imprimirGuiaA4({
-        guia,
-        motivos: config?.motivos,
-        emisor: {
-          nombreComercial: cfgEmisor?.nombre_tienda || nombreTienda,
-          razonSocial: cfgEmisor?.razon_social,
-          ruc: cfgEmisor?.ruc || ruc,
-          direccion: cfgEmisor?.direccion || direccion,
-          telefono: cfgEmisor?.telefono || telefono,
-          email: cfgEmisor?.email,
-          logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,
-          color: cfgEmisor?.color_acento,
-        },
-      });
+      await imprimirGuiaA4({ guia, motivos: config?.motivos, emisor: emisorA4() });
     } catch (e) {
       setMensaje({ tipo: 'error', texto: `No se pudo preparar la hoja A4: ${e.message}` });
     } finally {
       setArmandoA4(false);
+    }
+  };
+
+  // "PDF A4": descarga el archivo directo, sin diálogo de impresión. En el
+  // celular se abre en otra pestaña, igual que el PDF del ticket.
+  const [bajandoA4, setBajandoA4] = useState(false);
+  const bajarPdfA4 = async (guia) => {
+    setBajandoA4(true);
+    try {
+      const { bytes, nombre } = await pdfGuiaA4({ guia, motivos: config?.motivos, emisor: emisorA4() });
+      const enCelular = window.matchMedia('(pointer: coarse), (max-width: 899px)').matches;
+      descargarArchivo(bytes, nombre, { nuevaPestana: enCelular });
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: `No se pudo armar el PDF A4: ${e.message}` });
+    } finally {
+      setBajandoA4(false);
     }
   };
 
@@ -479,15 +494,16 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
                   <Printer size={15} /> {etiquetaTicket()}
                 </button>
               )}
-              {/* Sin PDF de FacturaLibre (emisión directa): nuestro A4, como la factura. */}
+              {/* Sin PDF de FacturaLibre (emisión directa): nuestro A4, como la
+                  factura. Como el ticket: un botón para imprimir y otro para descargar. */}
               {abierta.estado === 'ACEPTADA' && abierta.datos && !abierta.enlace_pdf && (
-                <button
-                  className="pm-boton-secundario"
-                  onClick={() => imprimirA4(abierta)}
-                  disabled={armandoA4}
-                  title="Se abre para imprimir: elige «Guardar como PDF»"
-                >
-                  <FileDown size={15} /> {armandoA4 ? 'Armando...' : 'PDF A4'}
+                <button className="pm-boton-secundario" onClick={() => imprimirA4(abierta)} disabled={armandoA4}>
+                  <Printer size={15} /> {armandoA4 ? 'Armando...' : 'Imprimir A4'}
+                </button>
+              )}
+              {abierta.estado === 'ACEPTADA' && abierta.datos && !abierta.enlace_pdf && (
+                <button className="pm-boton-secundario" onClick={() => bajarPdfA4(abierta)} disabled={bajandoA4}>
+                  <FileDown size={15} /> {bajandoA4 ? 'Armando...' : 'PDF A4'}
                 </button>
               )}
               {abierta.estado === 'ACEPTADA' && abierta.datos && (
