@@ -7,6 +7,8 @@
 // choca con el @page de 80 mm del ticket. Desde el diálogo de impresión
 // también se puede "Guardar como PDF".
 //
+// La guía de remisión en A4 (utils/guiaA4.js) usa estas mismas funciones.
+//
 // Diseño: logo del negocio (o un círculo con su inicial si no subió uno),
 // recuadro del RUC, cabecera de la tabla y caja del total con el color de
 // acento del negocio. El texto es oscuro, así que también se lee bien en una
@@ -20,7 +22,7 @@ import { esPapel58 } from './papelTicket';
 
 const COLOR_POR_DEFECTO = '#0f7b37'; // verde Monspeet, versión oscura (imprime bien)
 
-function escapar(texto) {
+export function escapar(texto) {
   return String(texto ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -42,7 +44,7 @@ const cantidad = (n) =>
   Number(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 
 /** Un color de acento legible sobre blanco: si es muy claro, se oscurece. */
-function acentoImprimible(hex) {
+export function acentoImprimible(hex) {
   // '#4338ca' es el índigo que la migración 0003 dejó por defecto: nadie lo
   // eligió (igual que en utils/tema.js), así que se usa el verde Monspeet.
   const elegido = /^#[0-9a-f]{6}$/i.test(hex || '') && hex.toLowerCase() !== '#4338ca';
@@ -55,7 +57,7 @@ function acentoImprimible(hex) {
 }
 
 /** El acento mezclado con blanco (f = cuánto acento queda, de 0 a 1): fondos suaves. */
-function aclarar(hex, f) {
+export function aclarar(hex, f) {
   return (
     '#' +
     [1, 3, 5]
@@ -68,7 +70,7 @@ function aclarar(hex, f) {
  * Iniciales para el círculo que reemplaza al logo cuando el negocio no subió
  * uno: "VERANE" -> "V", "Mi Minimarket" -> "MM".
  */
-function iniciales(nombre) {
+export function iniciales(nombre) {
   const palabras = String(nombre || '')
     .replace(/[^\p{L}\p{N} ]/gu, ' ')
     .split(/\s+/)
@@ -352,7 +354,7 @@ export function imprimirComprobanteTicket(datos) {
   imprimirHtml(htmlComprobanteTicket(datos));
 }
 
-function imprimirHtml(html) {
+export function imprimirHtml(html) {
   const marco = document.createElement('iframe');
   marco.setAttribute('aria-hidden', 'true');
   marco.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
