@@ -328,3 +328,44 @@
   font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
+
+/* Recetas: ver la receta completa desplegada en la tabla. */
+.prd-receta-acciones {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.prd-receta-acciones button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.prd-receta-detalle > td {
+  padding: 10px 14px 14px;
+  background: #f8faf9;
+}
+
+.prd-receta-detalle .pm-lineas {
+  background: #fff;
+}
+
+.prd-receta-detalle tfoot td {
+  border-bottom: none;
+  border-top: 1.5px solid #e4e6eb;
+}
+
+.prd-receta-titulo {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.prd-receta-notas {
+  margin: 10px 0 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+}

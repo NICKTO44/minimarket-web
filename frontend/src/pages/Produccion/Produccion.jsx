@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, PackageMinus, PackagePlus, Plus, Trash2, Wheat } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { BookOpen, ChevronDown, ChevronUp, PackageMinus, PackagePlus, Pencil, Plus, Trash2, Wheat } from 'lucide-react';
 import { api } from '../../api/api';
 import { fechaCorta, hoyLima } from '../../utils/formato';
 import { formatoCantidad } from '../../utils/medidas';
@@ -548,6 +548,8 @@ function Recetas() {
   const [formulas, setFormulas] = useState(null);
   const [productos, setProductos] = useState([]);
   const [editando, setEditando] = useState(null);
+  // Receta desplegada en la tabla (producto_id) para verla completa.
+  const [abierta, setAbierta] = useState(null);
   const [error, setError] = useState(null);
   const cargar = useCallback(() => {
     api
@@ -590,32 +592,112 @@ function Recetas() {
                   <th className="pm-num">Costo c/u</th>
                   <th className="pm-num">Precio</th>
                   <th className="pm-num">Ganancia c/u</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {formulas.map((f) => (
-                  <tr key={f.producto_id} className="prd-fila-click" onClick={() => setEditando({ formula: f })}>
-                    <td>
-                      {f.producto_nombre}
-                      <small>{f.insumos.map((i) => i.nombre).join(', ')}</small>
-                      {f.sin_costo.length > 0 && <small className="prd-rojo">Sin precio de compra: {f.sin_costo.join(', ')}</small>}
-                    </td>
-                    <td className="pm-num">
-                      {formatoCantidad(f.rinde)} {unidad(f.unidad_medida)}
-                    </td>
-                    <td className="pm-num">{f.costo_unitario != null ? soles(f.costo_unitario) : '—'}</td>
-                    <td className="pm-num">{soles(f.precio)}</td>
-                    <td className={`pm-num${f.margen != null && f.margen < 0 ? ' prd-rojo' : ''}`}>
-                      {f.margen != null ? (
-                        <>
-                          <strong>{soles(f.margen)}</strong>
-                          <small>{f.margen_porcentaje != null ? `${formatoCantidad(f.margen_porcentaje)} %` : ''}</small>
-                        </>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  </tr>
+                  <Fragment key={f.producto_id}>
+                    <tr className="prd-fila-click" onClick={() => setAbierta((a) => (a === f.producto_id ? null : f.producto_id))}>
+                      <td>
+                        {f.producto_nombre}
+                        <small>{f.insumos.map((i) => i.nombre).join(', ')}</small>
+                        {f.sin_costo.length > 0 && <small className="prd-rojo">Sin precio de compra: {f.sin_costo.join(', ')}</small>}
+                      </td>
+                      <td className="pm-num">
+                        {formatoCantidad(f.rinde)} {unidad(f.unidad_medida)}
+                      </td>
+                      <td className="pm-num">{f.costo_unitario != null ? soles(f.costo_unitario) : '—'}</td>
+                      <td className="pm-num">{soles(f.precio)}</td>
+                      <td className={`pm-num${f.margen != null && f.margen < 0 ? ' prd-rojo' : ''}`}>
+                        {f.margen != null ? (
+                          <>
+                            <strong>{soles(f.margen)}</strong>
+                            <small>{f.margen_porcentaje != null ? `${formatoCantidad(f.margen_porcentaje)} %` : ''}</small>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="prd-receta-acciones">
+                        <button
+                          type="button"
+                          className="pm-boton-secundario"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAbierta((a) => (a === f.producto_id ? null : f.producto_id));
+                          }}
+                          aria-expanded={abierta === f.producto_id}
+                        >
+                          {abierta === f.producto_id ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {abierta === f.producto_id ? 'Ocultar' : 'Ver receta'}
+                        </button>
+                        <button
+                          type="button"
+                          className="pm-boton-secundario"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditando({ formula: f });
+                          }}
+                          aria-label={`Editar receta de ${f.producto_nombre}`}
+                        >
+                          <Pencil size={14} /> Editar
+                        </button>
+                      </td>
+                    </tr>
+                    {abierta === f.producto_id && (
+                      <tr className="prd-receta-detalle">
+                        <td colSpan={6}>
+                          <p className="prd-receta-titulo">
+                            Para {formatoCantidad(f.rinde)} {unidad(f.unidad_medida)} de {f.producto_nombre}:
+                          </p>
+                          <table className="pm-lineas">
+                            <thead>
+                              <tr>
+                                <th>Insumo</th>
+                                <th className="pm-num">Cantidad</th>
+                                <th className="pm-num">Costo unit.</th>
+                                <th className="pm-num">Costo</th>
+                                <th className="pm-num">Stock</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {f.insumos.map((i) => (
+                                <tr key={i.insumo_id}>
+                                  <td>{i.nombre}</td>
+                                  <td className="pm-num">
+                                    {formatoCantidad(i.cantidad)} {unidad(i.unidad_medida)}
+                                  </td>
+                                  <td className="pm-num">{i.costo_unitario != null ? soles(i.costo_unitario) : '—'}</td>
+                                  <td className="pm-num">{i.costo != null ? soles(i.costo) : '—'}</td>
+                                  <td className={`pm-num${i.stock < i.cantidad ? ' prd-rojo' : ''}`}>
+                                    {formatoCantidad(i.stock)} {unidad(i.unidad_medida)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            {f.costo_total != null && (
+                              <tfoot>
+                                <tr>
+                                  <td colSpan={3}>
+                                    <strong>Costo de la receta</strong>
+                                  </td>
+                                  <td className="pm-num">
+                                    <strong>{soles(f.costo_total)}</strong>
+                                  </td>
+                                  <td />
+                                </tr>
+                              </tfoot>
+                            )}
+                          </table>
+                          {f.notas && (
+                            <p className="prd-receta-notas">
+                              <strong>Preparación:</strong> {f.notas}
+                            </p>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
