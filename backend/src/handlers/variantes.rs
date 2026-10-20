@@ -534,3 +534,74 @@ pub async fn compartir_imagen(
         .map_err(actualizando)?;
     Ok(Json(serde_json::json!({ "success": true, "actualizadas": cambiadas })))
 }
+
+#[derive(Debug, Deserialize)]
+pub struct DesdeProducto {
+    #[serde(default)]
+    pub talla: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
+}
+
+/// POST /modelos/desde-producto/:producto_id — un producto que se creó sin
+/// tallas pasa a ser la primera talla/color de un modelo nuevo (con su
+/// mismo nombre). Así se le pueden agregar más tallas sin crearlo de nuevo:
+/// conserva su id, código, precio, stock, ventas y compras.
+pub async fn modelo_desde_producto(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Path(producto_id): Path<i64>,
+    Json(payload): Json<DesdeProducto>,
+) -> Resultado<ModeloGuardado> {
+    let (talla, color) = (texto(&payload.talla).to_uppercase(), texto(&payload.color));
+    if talla.is_empty() && color.is_empty() {
+        return Err(malo("Escribe la talla (o el color) de lo que ya tienes de este producto."));
+    }
+    if talla.chars().count() > 20 || color.chars().count() > 30 {
+        return Err(malo("La talla admite hasta 20 letras y el color hasta 30."));
+    }
+    let conn = tenant.0.connect().map_err(e500)?;
+    exigir_modulo(&conn, MODULO_VARIANTES, NOMBRE_MODULO).await?;
+    let mut filas = conn
+        .query(
+            "SELECT nombre, categoria_id, modelo_id, COALESCE(activo, 1) FROM productos WHERE id = ?1",
+            libsql::params![producto_id],
+        )
+        .await
+        .map_err(actualizando)?;
+    let (nombre, categoria_id, modelo, activo): (String, i64, Option<i64>, i64) = match filas.next().await.map_err(e500)? {
+        Some(f) => (f.get(0).unwrap_or_default(), f.get(1).unwrap_or_default(), f.get(2).ok(), f.get(3).unwrap_or(1)),
+        None => return Err((StatusCode::NOT_FOUND, "El producto no existe.".into())),
+    };
+    drop(filas);
+    if activo != 1 {
+        return Err(malo("El producto está desactivado: reactívalo primero."));
+    }
+    if modelo.is_some() {
+        return Err((StatusCode::CONFLICT, "Este producto ya es parte de un modelo con tallas.".into()));
+    }
+    let nombre_modelo = nombre.split_whitespace().collect::<Vec<_>>().join(" ");
+    if nombre_modelo.chars().count() > 120 {
+        return Err(malo("El nombre del producto es demasiado largo para un modelo (máximo 120 letras)."));
+    }
+    revisar_modelo(&conn, &nombre_modelo, categoria_id, 0).await?;
+    let modelo_id: i64 = {
+        let mut filas = conn.query("SELECT COALESCE(MAX(modelo_id), 0) + 1 FROM productos", ()).await.map_err(actualizando)?;
+        match filas.next().await.map_err(e500)? {
+            Some(f) => f.get(0).unwrap_or(1),
+            None => 1,
+        }
+    };
+    let cambiados = conn
+        .execute(
+            "UPDATE productos SET modelo_id = ?1, modelo_nombre = ?2, talla = ?3, color = ?4, nombre = ?5,
+                    fecha_actualizacion = datetime('now','localtime')
+             WHERE id = ?6 AND modelo_id IS NULL",
+            libsql::params![modelo_id, nombre_modelo.clone(), talla.clone(), color.clone(), nombre_variante(&nombre_modelo, &talla, &color), producto_id],
+        )
+        .await
+        .map_err(e500)?;
+    if cambiados == 0 {
+        return Err((StatusCode::CONFLICT, "Este producto ya es parte de un modelo con tallas.".into()));
+    }
+    guardado(&conn, modelo_id, nombre_modelo).await
+}

@@ -48,4 +48,6 @@ pub mod repuestos;
 pub mod compatibilidad;
 pub mod vehiculos;
 pub mod ordenes;
+pub mod encargos;
+pub mod produccion;
 pub mod paquetes;

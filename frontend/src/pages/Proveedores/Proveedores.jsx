@@ -3,6 +3,9 @@ import { api } from '../../api/api';
 import { opcionesUnidad } from '../../utils/unidades';
 import { formatoCantidad } from '../../utils/medidas';
 import { fechaHoraLima, hoyLima } from '../../utils/formato';
+import { agruparPorModelo, rangoPrecio } from '../../utils/variantes';
+import FormularioModelo from '../Inventario/FormularioModelo';
+import '../Inventario/Inventario.css';
 import './Proveedores.css';
 
 
@@ -14,7 +17,9 @@ const MOTIVOS = [
   { value: 'OTRO', label: 'Otro' },
 ];
 
-export default function Proveedores() {
+// variantes: módulo "Tallas y colores" (ropa): las prendas se compran por
+// modelo, eligiendo cuánto llega de cada talla y color.
+export default function Proveedores({ variantes = false, ganancias = false }) {
   const [vista, setVista] = useState('COMPRAS');
   const [proveedores, setProveedores] = useState([]);
   const [compras, setCompras] = useState([]);
@@ -60,6 +65,11 @@ export default function Proveedores() {
   const [nuevoProdCantidadCompra, setNuevoProdCantidadCompra] = useState('');
   const [nuevoProdPrecioCompra, setNuevoProdPrecioCompra] = useState('');
   const [creandoProdEnCompra, setCreandoProdEnCompra] = useState(false);
+  // Ropa: elegir el modelo de la compra ({ buscar }) y el formulario del
+  // modelo en modo compra ({ grupo }: null = modelo nuevo).
+  const [eligiendoModelo, setEligiendoModelo] = useState(null);
+  const [modeloCompra, setModeloCompra] = useState(null);
+  const modelos = useMemo(() => (variantes ? agruparPorModelo(productos).filter((g) => g.esModelo) : []), [variantes, productos]);
 
   const [compraParaDevolver, setCompraParaDevolver] = useState(null);
   const [itemsDevolucion, setItemsDevolucion] = useState([]);
@@ -710,8 +720,13 @@ export default function Proveedores() {
               <input type="number" placeholder="Precio" value={compraPrecio} onChange={(e) => setCompraPrecio(e.target.value)} />
               <button onClick={agregarItemCompra}>+ Agregar</button>
             </div>
+            {variantes && (
+              <button className="prov-boton-producto-nuevo prov-boton-tallas" onClick={() => setEligiendoModelo({ buscar: '' })}>
+                👕 Agregar prendas por tallas y colores
+              </button>
+            )}
             <button className="prov-boton-producto-nuevo" onClick={() => setMostrarNuevoProductoEnCompra((v) => !v)}>
-              🆕 ¿No está en la lista? Crear producto nuevo
+              {variantes ? '🆕 Crear producto nuevo sin tallas' : '🆕 ¿No está en la lista? Crear producto nuevo'}
             </button>
             {mostrarNuevoProductoEnCompra && (
               <div className="prov-nuevo-prod-caja">
@@ -1099,6 +1114,76 @@ export default function Proveedores() {
             </div>
           </div>
         </div>
+      )}
+
+      {eligiendoModelo && (
+        <div className="prov-modal-overlay" onClick={() => setEligiendoModelo(null)}>
+          <div className="prov-modal" role="dialog" aria-modal="true" aria-label="Elegir modelo" onClick={(e) => e.stopPropagation()}>
+            <h2>¿Qué modelo llega?</h2>
+            <p className="prov-nota-caja">Elige el modelo para escribir cuánto llega de cada talla y color, o crea uno nuevo.</p>
+            <button
+              className="prov-boton-guardar prov-boton-modelo-nuevo"
+              onClick={() => {
+                setEligiendoModelo(null);
+                setModeloCompra({ grupo: null });
+              }}
+            >
+              + Modelo nuevo
+            </button>
+            <div className="prov-campo">
+              <input
+                autoFocus
+                placeholder="Buscar modelo..."
+                value={eligiendoModelo.buscar}
+                onChange={(e) => setEligiendoModelo({ buscar: e.target.value })}
+              />
+            </div>
+            <div className="prov-modelos-lista">
+              {modelos
+                .filter((g) => g.nombre.toLowerCase().includes(eligiendoModelo.buscar.trim().toLowerCase()))
+                .map((g) => (
+                  <button
+                    key={g.modelo_id}
+                    className="prov-modelo-opcion"
+                    onClick={() => {
+                      setEligiendoModelo(null);
+                      setModeloCompra({ grupo: g });
+                    }}
+                  >
+                    <strong>{g.nombre}</strong>
+                    <small>
+                      {[g.tallas.join(', '), g.colores.join(', ')].filter(Boolean).join(' · ')} · {rangoPrecio(g)} · stock {formatoCantidad(g.stockTotal)}
+                    </small>
+                  </button>
+                ))}
+              {modelos.length === 0 && <p className="prov-items-vacio">Todavía no hay modelos con tallas. Crea uno nuevo.</p>}
+            </div>
+            <div className="prov-modal-acciones">
+              <button className="prov-boton-cancelar" onClick={() => setEligiendoModelo(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modeloCompra && (
+        <FormularioModelo
+          modoCompra
+          grupo={modeloCompra.grupo}
+          ganancias={ganancias}
+          categorias={categorias}
+          unidadesActivas={unidadesActivas}
+          onCategorias={setCategorias}
+          onCerrar={() => setModeloCompra(null)}
+          onAgregarACompra={(items) => {
+            setCompraItems((prev) => [...prev, ...items]);
+            olvidarError();
+          }}
+          onGuardado={(aviso) => {
+            setModeloCompra(null);
+            setMensaje(aviso);
+            api.productos().then(setProductos).catch(() => {});
+          }}
+        />
       )}
     </div>
   );

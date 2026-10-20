@@ -4,7 +4,7 @@
 // arrancan encendidos, qué unidades se sugieren y cómo se llaman algunas
 // pantallas ("Carta" en vez de "Productos" en un restaurante).
 // Debe coincidir con backend/src/handlers/rubros.rs.
-import { Axe, Hammer, Pill, Shirt, ShoppingBasket, Store, UtensilsCrossed, Wrench } from 'lucide-react';
+import { Axe, CakeSlice, Hammer, Pill, Shirt, ShoppingBasket, Store, UtensilsCrossed, Wrench } from 'lucide-react';
 import { UNIDADES_CLASICAS } from './unidades';
 
 export const MODULO_MESAS = 'MESAS';
@@ -39,11 +39,17 @@ export const MODULO_VEHICULOS = 'VEHICULOS';
 export const MODULO_ORDENES_SERVICIO = 'ORDENES_SERVICIO';
 // Paquetes de productos a un precio ("Cambio de aceite completo").
 export const MODULO_PAQUETES = 'PAQUETES';
+// Pastelería: pedidos por encargo con fecha de entrega y adelanto.
+export const MODULO_ENCARGOS = 'ENCARGOS';
+// Producción del día y mermas; recetas de producción con insumos y costo.
+export const MODULO_PRODUCCION = 'PRODUCCION';
+export const MODULO_INSUMOS = 'INSUMOS';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
   [MODULO_ALTERNATIVAS]: MODULO_FICHA_MEDICAMENTO,
   [MODULO_ORDENES_SERVICIO]: MODULO_VEHICULOS,
+  [MODULO_INSUMOS]: MODULO_PRODUCCION,
 };
 
 /**
@@ -182,6 +188,24 @@ export const MODULOS = [
     descripcion:
       'Varios productos a un solo precio ("Cambio de aceite completo": aceite + filtro + mano de obra). En la venta entra cada producto con su descuento y se descuenta el stock de cada uno.',
   },
+  {
+    valor: MODULO_ENCARGOS,
+    label: 'Pedidos por encargo',
+    descripcion:
+      'Tortas y pedidos para una fecha: detalle (sabor, relleno, dedicatoria), foto del diseño y adelantos sin emitir comprobante. Al entregar se cobra el saldo en el punto de venta y sale la boleta completa.',
+  },
+  {
+    valor: MODULO_PRODUCCION,
+    label: 'Producción y mermas',
+    descripcion:
+      'Lo que se produce cada día entra al stock sin hacerlo como compra (con su lote si vence). Las mermas (lo que no se vendió o se malogró) salen con su costo. Resumen diario: producido, vendido y merma.',
+  },
+  {
+    valor: MODULO_INSUMOS,
+    label: 'Recetas e insumos',
+    descripcion:
+      'La receta de producción de cada producto (cuánto rinde y qué insumos lleva): cuánto cuesta hacerlo y cuánto ganas. Al registrar la producción se descuentan los insumos. Enciende también Producción y mermas.',
+  },
 ];
 
 export const RUBRO_GENERAL = 'GENERAL';
@@ -266,6 +290,22 @@ export const RUBROS = [
     unidades: [
       'UNIDAD', 'LITRO', 'GALON', 'ML', 'KG', 'PAR', 'JUEGO', 'CAJA', 'PAQUETE', 'BALDE', 'LATA', 'TUBO', 'BOTELLA',
       'METRO', 'ROLLO', 'PIEZA',
+    ],
+    etiquetas: {},
+  },
+  {
+    valor: 'PASTELERIA',
+    label: 'Pastelería / Panadería',
+    descripcion:
+      'Tortas, postres, pan y bocaditos: venta por unidad, porción o ciento, pedidos por encargo con adelanto, producción del día, mermas y costo por receta.',
+    Icono: CakeSlice,
+    modulos: [
+      MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_COTIZACIONES, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR, MODULO_ENCARGOS,
+      MODULO_PRODUCCION, MODULO_INSUMOS,
+    ],
+    unidades: [
+      'UNIDAD', 'PORCION', 'ENTERO', 'MEDIO', 'CUARTO', 'DOCENA', 'CIENTO', 'KG', 'GRAMO', 'PAQUETE', 'CAJA', 'BOLSA',
+      'TAZA', 'VASO', 'BOTELLA',
     ],
     etiquetas: {},
   },

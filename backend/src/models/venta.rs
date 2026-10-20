@@ -67,6 +67,11 @@ pub struct NuevaVenta {
     /// cobrarla queda COBRADA con esta venta.
     #[serde(default)]
     pub orden_servicio_id: Option<i64>,
+    /// Pedido por encargo que se entrega (módulo ENCARGOS): la venta es por
+    /// el total; lo ya adelantado no se vuelve a cobrar y el pedido queda
+    /// ENTREGADO con esta venta.
+    #[serde(default)]
+    pub encargo_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]

@@ -30,6 +30,8 @@ const NOMBRES = {
   YAPE_PLIN: 'Yape/Plin',
   MIXTO: 'Mixto',
   CREDITO: 'Crédito',
+  // Pedido por encargo: lo que el cliente ya adelantó (handlers/encargos.rs).
+  ADELANTO: 'Adelanto',
 };
 
 // Una venta al crédito se guarda como MIXTO con pago_otro_metodo =

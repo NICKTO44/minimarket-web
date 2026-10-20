@@ -204,6 +204,20 @@ function carritoDeOrden(orden) {
   }));
 }
 
+// Pastelería: lo que lleva un pedido por encargo, con el precio acordado.
+function carritoDeEncargo(encargo) {
+  return (encargo.items || []).map((i, idx) => ({
+    id: i.producto_id,
+    clave: `medida-enc-${encargo.id}-${idx}`,
+    nombre: i.nombre,
+    precio: i.precio_unitario,
+    cantidad: i.cantidad,
+    descuentoMonto: 0,
+    unidad_medida: i.unidad_medida,
+    controla_stock: i.controla_stock,
+  }));
+}
+
 // Placa y kilometraje de una orden, como los pide la venta.
 function vehiculoDeOrden(orden) {
   return {
@@ -297,6 +311,10 @@ export default function POS({
   paquetes = false,
   ordenACargar = null,
   onOrdenUsada,
+  // Pastelería: pedido por encargo que se entrega (viene de Pedidos por
+  // encargo). Se cobra el total menos lo ya adelantado.
+  encargoACargar = null,
+  onEncargoUsado,
   // Cambio de prenda en curso (viene de Devoluciones): lo que el cliente
   // devuelve; lo que se agregue al carrito es lo que se lleva.
   cambioEnCurso = null,
@@ -330,7 +348,9 @@ export default function POS({
         ? carritoDeCotizacion(cotizacionACargar)
         : ordenACargar
           ? carritoDeOrden(ordenACargar)
-          : []
+          : encargoACargar
+            ? carritoDeEncargo(encargoACargar)
+            : []
   );
   // Presentaciones y precios por mayor de cada producto (Map producto_id ->
   // { presentaciones, mayor }). Solo se cargan con alguno de los dos módulos.
@@ -436,7 +456,25 @@ export default function POS({
             nombre_razon_social: ordenACargar.cliente_nombre,
             numero_documento: ordenACargar.cliente_documento,
           }
-        : null
+        : !pedidoACobrar && !cotizacionACargar && !ordenACargar && encargoACargar?.cliente_id
+          ? {
+              id: encargoACargar.cliente_id,
+              nombre_razon_social: encargoACargar.cliente_nombre,
+              numero_documento: encargoACargar.cliente_documento,
+            }
+          : null
+  );
+  // Pastelería: el pedido por encargo que se está entregando y lo que el
+  // cliente ya adelantó (no se vuelve a cobrar).
+  const [encargoEnVenta, setEncargoEnVenta] = useState(() =>
+    !pedidoACobrar && !cotizacionACargar && !ordenACargar && encargoACargar
+      ? {
+          id: encargoACargar.id,
+          numero: encargoACargar.numero,
+          cliente_nombre: encargoACargar.cliente_nombre,
+          adelanto: Math.max(0, redondear2((encargoACargar.adelantado || 0) - (encargoACargar.devuelto || 0))),
+        }
+      : null
   );
   // Lubricentro: la orden que se está cobrando, y la placa y el kilometraje de la venta.
   const [ordenEnVenta, setOrdenEnVenta] = useState(() =>
@@ -1217,7 +1255,14 @@ export default function POS({
   // se devuelve) la diferencia. Sin cambio en curso, se cobra el total.
   const enCambio = !!cambioEnCurso && !cobrandoPedido;
   const aFavor = enCambio ? cambioEnCurso.valor : 0;
-  const aCobrar = enCambio ? redondear2(Math.max(0, total - aFavor)) : total;
+  // Entrega de un pedido por encargo: se cobra el total menos el adelanto.
+  const adelantoEncargo = encargoEnVenta && !enCambio ? encargoEnVenta.adelanto : 0;
+  const totalMenorQueAdelanto = adelantoEncargo > 0 && total + 0.005 < adelantoEncargo;
+  const aCobrar = enCambio
+    ? redondear2(Math.max(0, total - aFavor))
+    : adelantoEncargo > 0
+      ? redondear2(Math.max(0, total - adelantoEncargo))
+      : total;
   const aDevolver = enCambio ? redondear2(Math.max(0, aFavor - total)) : 0;
 
   const esMixto = metodoPago === 'MIXTO';
@@ -1285,7 +1330,9 @@ export default function POS({
     carrito.length > 0 &&
     !procesando &&
     (!clienteEsObligatorio || cliente) &&
-    (metodoPago !== 'EFECTIVO' || (enCambio && aCobrar === 0) || parseFloat(montoRecibido) >= aCobrar) &&
+    (metodoPago !== 'EFECTIVO' || ((enCambio || adelantoEncargo > 0) && aCobrar === 0) || parseFloat(montoRecibido) >= aCobrar) &&
+    !totalMenorQueAdelanto &&
+    (!encargoEnVenta || (!esMixto && !esCredito)) &&
     (!esCredito || adelantoValido) &&
     estadoMixto.listo;
 
@@ -1403,6 +1450,7 @@ export default function POS({
         // Solo con placa o al cobrar una orden: si no, la venta va como siempre.
         ...(placaVenta?.vehiculo ? { vehiculo: placaVenta.vehiculo } : {}),
         ...(ordenEnVenta ? { orden_servicio_id: ordenEnVenta.id } : {}),
+        ...(encargoEnVenta ? { encargo_id: encargoEnVenta.id } : {}),
       });
       // La receta era de esta venta: la siguiente empieza en blanco.
       setRecetaDatos(RECETA_VACIA);
@@ -1452,10 +1500,23 @@ export default function POS({
                 notaCredito: resultado.cambio_prenda?.nota_credito || null,
               }
             : null,
-          pagoOtro: esMixto ? mixtoOtro : null,
-          pagoOtroMetodo: esMixto ? mixtoOtroMetodo : null,
-          pagoSegundo: esMixto ? mixtoEfectivo : null,
-          pagoSegundoMetodo: esMixto ? mixtoSegundoMetodo : null,
+          // Pedido por encargo con adelanto: el ticket muestra lo ya
+          // adelantado y el saldo (así lo guarda el servidor).
+          ...(adelantoEncargo > 0
+            ? {
+                metodoPago: 'MIXTO',
+                pagoOtro: adelantoEncargo,
+                pagoOtroMetodo: 'ADELANTO',
+                pagoSegundo: aCobrar,
+                pagoSegundoMetodo: metodoPago,
+                encargo: { numero: encargoEnVenta.numero, adelanto: adelantoEncargo, saldo: aCobrar },
+              }
+            : {
+                pagoOtro: esMixto ? mixtoOtro : null,
+                pagoOtroMetodo: esMixto ? mixtoOtroMetodo : null,
+                pagoSegundo: esMixto ? mixtoEfectivo : null,
+                pagoSegundoMetodo: esMixto ? mixtoSegundoMetodo : null,
+              }),
           credito: esCredito
             ? { adelanto: adelantoNum, adelantoMetodo: creditoAdelantoMetodo, saldo: redondear2(total - adelantoNum), dias: creditoDias }
             : null,
@@ -1514,6 +1575,11 @@ export default function POS({
       if (ordenEnVenta) {
         setOrdenEnVenta(null);
         onOrdenUsada?.();
+      }
+      // El pedido quedó entregado.
+      if (encargoEnVenta) {
+        setEncargoEnVenta(null);
+        onEncargoUsado?.();
       }
       setVehiculoDatos(VEHICULO_VACIO);
       setVentasHechas((n) => n + 1);
@@ -1971,6 +2037,28 @@ export default function POS({
           </div>
         )}
 
+        {encargoEnVenta && !cobrandoPedido && (
+          <div className="pos-cobro-pedido">
+            <div>
+              <span className="pos-cobro-pedido-etiqueta">Entregando</span>
+              <strong>
+                Pedido N° {encargoEnVenta.numero} · {encargoEnVenta.cliente_nombre}
+              </strong>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setEncargoEnVenta(null);
+                setCarrito([]);
+                setCliente(null);
+                onEncargoUsado?.();
+              }}
+            >
+              Quitar
+            </button>
+          </div>
+        )}
+
         {ordenEnVenta && !cobrandoPedido && (
           <div className="pos-cobro-pedido">
             <div>
@@ -2347,6 +2435,24 @@ export default function POS({
                 </div>
               )}
             </div>
+          ) : adelantoEncargo > 0 ? (
+            <div className="pos-cambio-totales">
+              <div>
+                <span>Total del pedido</span>
+                <span>S/ {total.toFixed(2)}</span>
+              </div>
+              <div>
+                <span>Adelanto ya pagado</span>
+                <span>− S/ {adelantoEncargo.toFixed(2)}</span>
+              </div>
+              <div className="pos-total-row">
+                <span>Saldo a cobrar</span>
+                <span className="pos-total-monto">S/ {aCobrar.toFixed(2)}</span>
+              </div>
+              {totalMenorQueAdelanto && (
+                <p className="pos-mixto-error">El total no puede ser menor que lo que el cliente ya adelantó.</p>
+              )}
+            </div>
           ) : (
             <div className="pos-total-row">
               <span>Total</span>
@@ -2364,7 +2470,7 @@ export default function POS({
                 {m.replace('_', '/')}
               </button>
             ))}
-            {!enCambio && (
+            {!enCambio && !encargoEnVenta && (
               <button
                 className={`pos-metodo-mixto${esMixto ? ' activo' : ''}`}
                 onClick={() => setMetodoPago('MIXTO')}
@@ -2372,7 +2478,7 @@ export default function POS({
                 {esMixto ? 'MIXTO · DOS MEDIOS' : '+ MIXTO · DOS MEDIOS'}
               </button>
             )}
-            {credito && !enCambio && (
+            {credito && !enCambio && !encargoEnVenta && (
               <button className={`pos-metodo-mixto${esCredito ? ' activo' : ''}`} onClick={() => setMetodoPago('CREDITO')}>
                 {esCredito ? 'CRÉDITO · PAGA DESPUÉS' : '+ CRÉDITO · PAGA DESPUÉS'}
               </button>
@@ -2570,7 +2676,7 @@ export default function POS({
             </div>
           )}
 
-          {metodoPago === 'EFECTIVO' && !(enCambio && (aCobrar === 0 || carrito.length === 0)) && (
+          {metodoPago === 'EFECTIVO' && !(enCambio && (aCobrar === 0 || carrito.length === 0)) && !(adelantoEncargo > 0 && aCobrar === 0) && (
             <div className="pos-efectivo">
               <input
                 type="number"
@@ -2615,7 +2721,7 @@ export default function POS({
             </div>
           )}
 
-          {cotizaciones && carrito.length > 0 && !cobrandoPedido && !cotizacionEnVenta && !enCambio && (
+          {cotizaciones && carrito.length > 0 && !cobrandoPedido && !cotizacionEnVenta && !enCambio && !encargoEnVenta && (
             <button
               type="button"
               className="pos-cotizar"
@@ -2639,7 +2745,11 @@ export default function POS({
                     : 'Hacer el cambio'
                 : esCredito
                   ? `Registrar crédito S/ ${total.toFixed(2)}`
-                  : `Cobrar S/ ${total.toFixed(2)}`}
+                  : adelantoEncargo > 0
+                    ? aCobrar > 0
+                      ? `Entregar · cobrar saldo S/ ${aCobrar.toFixed(2)}`
+                      : 'Entregar pedido (ya pagado)'
+                    : `Cobrar S/ ${total.toFixed(2)}`}
           </button>
         </div>
       </div>

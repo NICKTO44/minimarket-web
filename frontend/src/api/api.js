@@ -34,7 +34,8 @@ async function request(path, options = {}) {
   const data = await leerRespuesta(res);
 
   if (!res.ok) {
-    const mensaje = typeof data === 'string' ? data : data?.message || 'Error en la solicitud';
+    // Si el servidor responde sin texto (ruta que aún no existe, 405...), igual se avisa.
+    const mensaje = (typeof data === 'string' ? data : data?.message) || `Error en la solicitud (${res.status})`;
     throw new Error(mensaje);
   }
   return data;
@@ -185,6 +186,51 @@ export const api = {
   ordenItems: (id, items) => request(`/ordenes/${id}/items`, { method: 'PUT', body: JSON.stringify({ items }) }),
   ordenEstado: (id, estado, motivo = null) =>
     request(`/ordenes/${id}/estado`, { method: 'POST', body: JSON.stringify({ estado, motivo }) }),
+  // Producción del día, mermas y recetas de producción (módulos PRODUCCION e INSUMOS).
+  produccion: (desde, hasta) => request(`/produccion?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`),
+  produccionRegistrar: (data) => request('/produccion', { method: 'POST', body: JSON.stringify(data) }),
+  produccionAnular: (id) => request(`/produccion/${id}/anular`, { method: 'POST' }),
+  produccionResumen: (desde, hasta) =>
+    request(`/produccion/resumen?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`),
+  mermas: (desde, hasta) => request(`/mermas?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`),
+  mermaRegistrar: (data) => request('/mermas', { method: 'POST', body: JSON.stringify(data) }),
+  mermaAnular: (id) => request(`/mermas/${id}/anular`, { method: 'POST' }),
+  formulas: () => request('/formulas'),
+  formulaGuardar: (productoId, data) => request(`/formulas/${productoId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  formulaBorrar: (productoId) => request(`/formulas/${productoId}`, { method: 'DELETE' }),
+  // Pastelería: pedidos por encargo (módulo ENCARGOS).
+  encargos: (estado = 'ACTIVOS', buscar = '', clienteId = null) =>
+    request(
+      `/encargos?estado=${encodeURIComponent(estado)}${buscar ? `&buscar=${encodeURIComponent(buscar)}` : ''}${
+        clienteId ? `&cliente_id=${clienteId}` : ''
+      }`
+    ),
+  encargo: (id) => request(`/encargos/${id}`),
+  encargoCrear: (data) => request('/encargos', { method: 'POST', body: JSON.stringify(data) }),
+  encargoActualizar: (id, data) => request(`/encargos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  encargoEstado: (id, estado) => request(`/encargos/${id}/estado`, { method: 'POST', body: JSON.stringify({ estado }) }),
+  encargoAdelanto: (id, data) => request(`/encargos/${id}/adelantos`, { method: 'POST', body: JSON.stringify(data) }),
+  encargoCancelar: (id, data) => request(`/encargos/${id}/cancelar`, { method: 'POST', body: JSON.stringify(data) }),
+  encargoQuitarFoto: (id) => request(`/encargos/${id}/foto`, { method: 'DELETE' }),
+  encargoSubirFoto: async (id, archivo) => {
+    const token = obtenerToken();
+    const formData = new FormData();
+    formData.append('imagen', archivo);
+    const res = await fetch(`${API_URL}/encargos/${id}/foto`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const texto = await res.text();
+    let data;
+    try {
+      data = JSON.parse(texto);
+    } catch {
+      data = null;
+    }
+    if (!res.ok) throw new Error(data?.message || texto || 'No se pudo subir la foto');
+    return data;
+  },
   ordenesComisiones: (desde, hasta) =>
     request(`/ordenes/comisiones?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`),
   mecanicos: () => request('/mecanicos'),
@@ -291,6 +337,9 @@ export const api = {
   modeloCrear: (datos) => request('/modelos', { method: 'POST', body: JSON.stringify(datos) }),
   modeloActualizar: (id, datos) => request(`/modelos/${id}`, { method: 'PUT', body: JSON.stringify(datos) }),
   modeloCompartirImagen: (id, productoId) => request(`/modelos/${id}/imagen/${productoId}`, { method: 'POST' }),
+  // Un producto creado sin tallas pasa a ser la primera talla de un modelo.
+  modeloDesdeProducto: (productoId, datos) =>
+    request(`/modelos/desde-producto/${productoId}`, { method: 'POST', body: JSON.stringify(datos) }),
   cambiosConfig: () => request('/cambios/config'),
   cambiosConfigGuardar: (dias) => request('/configuracion/cambios', { method: 'PUT', body: JSON.stringify({ dias }) }),
   cambioVenta: (identificador) => request(`/cambios/venta/${encodeURIComponent(identificador)}`),

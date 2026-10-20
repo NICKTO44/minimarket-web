@@ -406,6 +406,40 @@ pub async fn procesar_venta(
         Some(c) => Some(crate::handlers::creditos::validar_venta(&conn, c, payload.cliente_id, payload.total).await?),
         None => None,
     };
+    // 1b-0. Entrega de un pedido por encargo (módulo ENCARGOS): la venta es
+    // por el total y lo que el cliente ya adelantó no se vuelve a cobrar. Se
+    // guarda como MIXTO: la parte ya pagada en 'ADELANTO' (la caja no la
+    // cuenta: entró como ingreso el día del adelanto) y el saldo por el medio
+    // elegido. Una venta normal no hace nada aquí.
+    if payload.encargo_id.is_some()
+        && (credito.is_some()
+            || payload.pedido_id.is_some()
+            || payload.cotizacion_id.is_some()
+            || payload.cambio_prenda.is_some()
+            || payload.orden_servicio_id.is_some())
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Un pedido por encargo se entrega solo: sin crédito, pedido de mesa, cotización, cambio de prenda ni orden de servicio.".into(),
+        ));
+    }
+    let encargo_cobro = crate::handlers::encargos::preparar_cobro(&conn, modulos.as_deref(), payload.encargo_id).await?;
+    let adelanto_encargo = encargo_cobro.as_ref().map(|c| c.adelanto).filter(|a| *a > 0.0);
+    if let Some(adelanto) = adelanto_encargo {
+        if adelanto > payload.total + 0.005 {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "El total de la venta (S/ {:.2}) es menor que lo que el cliente ya adelantó (S/ {:.2}).",
+                    payload.total, adelanto
+                ),
+            ));
+        }
+        if !["EFECTIVO", "TARJETA", "TRANSFERENCIA", crate::handlers::billeteras::YAPE_PLIN].contains(&payload.metodo_pago.as_str()) {
+            return Err((StatusCode::BAD_REQUEST, "Cobra el saldo del pedido con un solo medio de pago.".into()));
+        }
+    }
+
     let (metodo_pago, pago_efectivo, pago_otro, pago_otro_metodo, pago_efectivo_metodo, monto_recibido, cambio) = if credito.is_some() {
         (
             "MIXTO".to_string(),
@@ -415,6 +449,36 @@ pub async fn procesar_venta(
             None,
             None,
             None,
+        )
+    } else if let Some(adelanto) = adelanto_encargo {
+        let saldo = redondear_2((payload.total - adelanto).max(0.0));
+        // El medio del saldo va en `pago_efectivo_metodo` (None = efectivo).
+        let medio_saldo = match payload.metodo_pago.as_str() {
+            "EFECTIVO" => None,
+            m if m == crate::handlers::billeteras::YAPE_PLIN => Some(billetera.unwrap_or("TRANSFERENCIA").to_string()),
+            otro => Some(otro.to_string()),
+        };
+        let (recibido, vuelto) = if medio_saldo.is_none() {
+            if let Some(r) = payload.monto_recibido {
+                if r + 0.005 < saldo {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        format!("El efectivo recibido (S/ {:.2}) no alcanza para el saldo (S/ {:.2}).", r, saldo),
+                    ));
+                }
+            }
+            (payload.monto_recibido, payload.cambio)
+        } else {
+            (None, None)
+        };
+        (
+            "MIXTO".to_string(),
+            Some(saldo),
+            Some(adelanto),
+            Some(crate::handlers::encargos::METODO_ADELANTO.to_string()),
+            medio_saldo,
+            recibido,
+            vuelto,
         )
     } else {
         let r = validar_pago(&payload, billetera).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
@@ -547,6 +611,12 @@ pub async fn procesar_venta(
         // Una orden de servicio se cobra con los precios con que se agregó cada cosa.
         if let Some((_, precios)) = &orden_cobro {
             for (producto, lista) in precios {
+                cotizados.entry(*producto).or_default().extend(lista.iter().copied());
+            }
+        }
+        // Un pedido por encargo, con los precios acordados con el cliente.
+        if let Some(c) = &encargo_cobro {
+            for (producto, lista) in &c.precios {
                 cotizados.entry(*producto).or_default().extend(lista.iter().copied());
             }
         }
@@ -863,6 +933,12 @@ pub async fn procesar_venta(
             //     caja la cobró antes, esta venta no entra).
             if let Some((orden_id, _)) = &orden_cobro {
                 crate::handlers::ordenes::marcar_cobrada(&conn, *orden_id, venta_id).await?;
+            }
+
+            // 6f-1. Pedido por encargo entregado: queda ENTREGADO con esta venta
+            //     (si otra caja lo entregó antes, esta venta no entra).
+            if let Some(c) = &encargo_cobro {
+                crate::handlers::encargos::marcar_entregado(&conn, c, venta_id).await?;
             }
 
             // 6f. Placa y kilometraje (módulo VEHICULOS): entran con la venta o no entra.

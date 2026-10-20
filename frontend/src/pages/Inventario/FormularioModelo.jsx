@@ -2,6 +2,11 @@
 // Se llena una sola vez: nombre, tallas, colores y una cuadrícula con el
 // precio, el stock y el código de barras de cada combinación. Por dentro,
 // cada fila es un producto normal ("Polo básico · M · Negro").
+//
+// modoCompra (desde Proveedores → Nueva compra): el mismo formulario, pero en
+// vez del stock se escribe cuánto LLEGA de cada talla en esa compra. El stock
+// no se toca aquí: entra al recibir la compra. Al guardar, lo que llega se
+// agrega a la compra con el precio de compra del modelo.
 import { useMemo, useRef, useState } from 'react';
 import { api, API_URL } from '../../api/api';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
@@ -23,6 +28,8 @@ function filasDe(grupo) {
       precio: String(v.precio),
       stock: String(v.stock),
       stockOriginal: String(v.stock),
+      stockActual: v.stock,
+      llega: '',
       codigo: v.codigo,
       nombre: v.nombre,
     };
@@ -40,6 +47,8 @@ export default function FormularioModelo({
   onQuitarVariante,
   onCategorias,
   ganancias = false,
+  modoCompra = false,
+  onAgregarACompra,
 }) {
   const editando = !!grupo;
   // Categorías: se puede crear una nueva sin salir de este formulario.
@@ -94,6 +103,7 @@ export default function FormularioModelo({
       incluida: !eligeColores,
       precio: precioTalla[c.talla.toLowerCase()] || '',
       stock: '',
+      llega: '',
       codigo: '',
     };
 
@@ -252,6 +262,9 @@ export default function FormularioModelo({
     setMensaje(null);
     if (!nombre.trim()) return setMensaje({ tipo: 'error', texto: 'Escribe el nombre del modelo (por ejemplo: Polo básico).' });
     if (!categoriaId) return setMensaje({ tipo: 'error', texto: 'Elige la categoría.' });
+    if (modoCompra && !(aNumero(precioCompra) > 0)) {
+      return setMensaje({ tipo: 'error', texto: 'Escribe el precio de compra de cada prenda (lo que te cobra el proveedor).' });
+    }
     if (ganancias && !(aNumero(precioCompra) > 0)) {
       return setMensaje({
         tipo: 'error',
@@ -275,9 +288,13 @@ export default function FormularioModelo({
       if (Number.isNaN(precio) || precio <= 0) {
         return setMensaje({ tipo: 'error', texto: `Falta el precio de ${etiqueta}.` });
       }
-      const stock = fila.stock === '' ? null : aNumero(fila.stock);
+      // En una compra no se escribe el stock: entra al recibirla.
+      const stock = modoCompra || fila.stock === '' ? null : aNumero(fila.stock);
       if (stock !== null && (Number.isNaN(stock) || stock < 0)) {
         return setMensaje({ tipo: 'error', texto: `El stock de ${etiqueta} no puede ser negativo.` });
+      }
+      if (modoCompra && fila.llega !== '' && !(aNumero(fila.llega) >= 0)) {
+        return setMensaje({ tipo: 'error', texto: `Revisa cuánto llega de ${etiqueta}.` });
       }
       if (fila.id && !fila.codigo.trim()) {
         return setMensaje({ tipo: 'error', texto: `${etiqueta} no puede quedar sin código.` });
@@ -294,6 +311,10 @@ export default function FormularioModelo({
       });
     }
 
+    if (modoCompra && !incluidas.some((c) => aNumero(filaDe(c).llega) > 0)) {
+      return setMensaje({ tipo: 'error', texto: 'Escribe cuánto llega de al menos una talla.' });
+    }
+
     const datos = {
       nombre: nombre.trim(),
       categoria_id: parseInt(categoriaId, 10),
@@ -306,6 +327,18 @@ export default function FormularioModelo({
     setGuardando(true);
     try {
       const guardado = editando ? await api.modeloActualizar(grupo.modelo_id, datos) : await api.modeloCrear(datos);
+      // Compra: lo que llega de cada talla, con su producto ya guardado.
+      if (modoCompra) {
+        const porNombre = new Map(guardado.variantes.map((v) => [v.nombre.toLowerCase(), v]));
+        const items = [];
+        for (const c of incluidas) {
+          const llega = aNumero(filaDe(c).llega);
+          if (!(llega > 0)) continue;
+          const v = porNombre.get(nombreVariante(nombre.trim(), c.talla, c.color).toLowerCase());
+          if (v) items.push({ producto_id: v.id, codigo: v.codigo, nombre: v.nombre, cantidad: llega, precio_compra: aNumero(precioCompra) });
+        }
+        onAgregarACompra?.(items);
+      }
       let aviso = null;
       if (imagenArchivo && guardado.variantes.length) {
         try {
@@ -321,7 +354,9 @@ export default function FormularioModelo({
           ? { tipo: 'error', texto: aviso }
           : {
               tipo: 'exito',
-              texto: editando
+              texto: modoCompra
+                ? `"${guardado.nombre}" agregado a la compra.`
+                : editando
                 ? `"${guardado.nombre}" actualizado.`
                 : `"${guardado.nombre}" creado con ${guardado.variantes.length} ${guardado.variantes.length === 1 ? 'talla' : 'tallas y colores'}.`,
             }
@@ -336,9 +371,11 @@ export default function FormularioModelo({
   return (
     <div className="inv-modal-overlay" onClick={() => !guardando && onCerrar()}>
       <div className="inv-modal mod-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Modelo con tallas">
-        <h2>{editando ? 'Editar modelo' : 'Nuevo modelo con tallas'}</h2>
+        <h2>{modoCompra ? (editando ? `Compra de ${grupo.nombre}` : 'Modelo nuevo para la compra') : editando ? 'Editar modelo' : 'Nuevo modelo con tallas'}</h2>
         <p className="mod-ayuda">
-          Un modelo es la prenda (por ejemplo «Polo básico»). Cada talla y color lleva su propio precio, stock y código de barras.
+          {modoCompra
+            ? 'Escribe cuánto llega de cada talla y color. Puedes agregar tallas o colores nuevos. El stock sube cuando recibas la compra.'
+            : 'Un modelo es la prenda (por ejemplo «Polo básico»). Cada talla y color lleva su propio precio, stock y código de barras.'}
         </p>
 
         <div className="inv-campo inv-campo-imagen">
@@ -414,7 +451,7 @@ export default function FormularioModelo({
             </select>
           </div>
           <div className="inv-campo">
-            <label>{ganancias ? 'Precio de compra (S/, con IGV)' : 'Precio de compra (S/, opcional)'}</label>
+            <label>{modoCompra ? 'Precio de compra por prenda (S/)' : ganancias ? 'Precio de compra (S/, con IGV)' : 'Precio de compra (S/, opcional)'}</label>
             <input type="number" inputMode="decimal" value={precioCompra} onChange={(e) => setPrecioCompra(e.target.value)} />
             {ganancias && (
               <small className={`inv-ayuda-costo${aNumero(precioCompra) > 0 ? '' : ' falta'}`}>
@@ -565,7 +602,7 @@ export default function FormularioModelo({
         {incluidas.length > 0 && (
           <div className="mod-seccion">
             <span className="mod-titulo">
-              {eligeColores ? '5.' : tallas.length > 0 ? '4.' : '3.'} Stock y código de barras de cada una
+              {eligeColores ? '5.' : tallas.length > 0 ? '4.' : '3.'} {modoCompra ? 'Cuánto llega y código de barras' : 'Stock y código de barras de cada una'}
             </span>
             <p className="mod-ayuda">
               Escanea o escribe el código de cada talla y color. Si lo dejas vacío, el sistema le pone uno.
@@ -574,7 +611,7 @@ export default function FormularioModelo({
               <div className="mod-fila mod-fila-cabecera">
                 <span>Talla y color</span>
                 <span>Precio</span>
-                <span>Stock</span>
+                <span>{modoCompra ? 'Llega' : 'Stock'}</span>
                 <span>Código de barras</span>
                 <span />
               </div>
@@ -600,18 +637,34 @@ export default function FormularioModelo({
                         aria-label={`Precio de ${etiqueta}`}
                       />
                     </label>
-                    <label>
-                      <small>Stock</small>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        placeholder="0"
-                        value={fila.stock}
-                        onChange={(e) => cambiarFila(c, { stock: e.target.value })}
-                        aria-label={`Stock de ${etiqueta}`}
-                      />
-                    </label>
+                    {modoCompra ? (
+                      <label>
+                        <small>Llega</small>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          placeholder="0"
+                          value={fila.llega}
+                          onChange={(e) => cambiarFila(c, { llega: e.target.value })}
+                          aria-label={`Llega de ${etiqueta}`}
+                        />
+                        {fila.id && <em className="mod-stock-actual">hay {fila.stockActual}</em>}
+                      </label>
+                    ) : (
+                      <label>
+                        <small>Stock</small>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          placeholder="0"
+                          value={fila.stock}
+                          onChange={(e) => cambiarFila(c, { stock: e.target.value })}
+                          aria-label={`Stock de ${etiqueta}`}
+                        />
+                      </label>
+                    )}
                     <label className="mod-fila-codigo">
                       <small>Código</small>
                       <span>
@@ -632,6 +685,7 @@ export default function FormularioModelo({
                     <button
                       type="button"
                       className="mod-boton-quitar"
+                      hidden={!!fila.id && !onQuitarVariante}
                       onClick={() => (fila.id ? quitarExistente(c) : cambiarFila(c, { incluida: false }))}
                       aria-label={`Quitar ${etiqueta}`}
                       title={fila.id ? 'Eliminar o desactivar esta talla' : 'Quitar de la lista'}
@@ -654,7 +708,9 @@ export default function FormularioModelo({
           <button className="inv-boton-guardar" onClick={guardar} disabled={guardando}>
             {guardando
               ? 'Guardando...'
-              : editando
+              : modoCompra
+                ? 'Agregar a la compra'
+                : editando
                 ? 'Guardar cambios'
                 : incluidas.length > 0
                   ? `Crear modelo (${incluidas.length})`
@@ -672,6 +728,71 @@ export default function FormularioModelo({
           />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * En "Editar producto" de un producto que se creó sin tallas: lo convierte
+ * en la primera talla/color de un modelo (conserva su código, precio, stock
+ * y ventas) para luego agregarle más tallas con el formulario del modelo.
+ */
+export function ConvertirEnModelo({ producto, onConvertido }) {
+  const [abierto, setAbierto] = useState(false);
+  const [talla, setTalla] = useState('');
+  const [color, setColor] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+  const [error, setError] = useState(null);
+
+  const convertir = async () => {
+    if (!talla.trim() && !color.trim()) return setError('Escribe la talla (o el color) de lo que ya tienes.');
+    setOcupado(true);
+    setError(null);
+    try {
+      const modelo = await api.modeloDesdeProducto(producto.id, { talla: talla.trim(), color: color.trim() });
+      onConvertido(modelo.modelo_id);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  if (!abierto) {
+    return (
+      <div className="mod-convertir">
+        <span>¿Este producto viene en varias tallas o colores?</span>
+        <button type="button" onClick={() => setAbierto(true)}>
+          Convertir en modelo con tallas
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="mod-convertir mod-convertir-abierto">
+      <p>
+        Lo que ya tienes de <strong>{producto.nombre}</strong> pasa a ser una talla del modelo (con su mismo código, precio y stock). Luego agregas las
+        demás tallas.
+      </p>
+      <div className="mod-convertir-campos">
+        <label>
+          <small>Talla de lo que ya tienes</small>
+          <input value={talla} maxLength={20} placeholder="M" onChange={(e) => setTalla(e.target.value.toUpperCase())} autoFocus />
+        </label>
+        <label>
+          <small>Color (opcional)</small>
+          <input value={color} maxLength={30} placeholder="Negro" onChange={(e) => setColor(e.target.value)} />
+        </label>
+      </div>
+      {error && <p className="inv-mensaje inv-mensaje-error">{error}</p>}
+      <div className="mod-convertir-acciones">
+        <button type="button" onClick={() => setAbierto(false)} disabled={ocupado}>
+          Cancelar
+        </button>
+        <button type="button" className="mod-convertir-si" onClick={convertir} disabled={ocupado}>
+          {ocupado ? 'Convirtiendo...' : 'Convertir y agregar tallas'}
+        </button>
+      </div>
     </div>
   );
 }

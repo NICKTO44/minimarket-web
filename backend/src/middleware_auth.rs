@@ -209,6 +209,11 @@ fn ruta_permitida(rol: &str, metodo: &Method, ruta: &str) -> bool {
                 // Fichas de repuesto y compatibilidades (lubricentro), para
                 // la lista de Productos.
                 || (lectura && es_de(ruta, "/repuestos"))
+                // Producción del día y mermas (pastelería, panadería). Las
+                // recetas las guarda solo el administrador (lo corta el handler).
+                || es_de(ruta, "/produccion")
+                || es_de(ruta, "/mermas")
+                || (lectura && es_de(ruta, "/formulas"))
         }
         _ => true,
     }

@@ -7,7 +7,7 @@ import { comprimirImagen } from '../../utils/comprimirImagen';
 import { etiquetaUnidad, opcionesUnidad } from '../../utils/unidades';
 import { AFECTACIONES, etiquetaAfectacion } from '../../utils/igv';
 import CategoriasIgv from './CategoriasIgv';
-import FormularioModelo from './FormularioModelo';
+import FormularioModelo, { ConvertirEnModelo } from './FormularioModelo';
 import ImportarProductos from './ImportarProductos';
 import { TIPO_XLSX, escribirXlsx } from '../../utils/hojas';
 import { descargarArchivo } from '../../utils/pdfTicket';
@@ -1114,6 +1114,24 @@ export default function Inventario({
         <div className="inv-modal-overlay" onClick={cerrarForm}>
           <div className="inv-modal" onClick={(e) => e.stopPropagation()}>
             <h2>{editandoId ? 'Editar producto' : 'Nuevo producto'}</h2>
+
+            {/* Ropa: un producto creado sin tallas puede pasar a modelo con tallas. */}
+            {variantes && editandoId && (() => {
+              const actual = productos.find((x) => x.id === editandoId);
+              return actual && actual.modelo_id == null ? (
+                <ConvertirEnModelo
+                  producto={actual}
+                  onConvertido={async (modeloId) => {
+                    cerrarForm();
+                    const lista = (await api.productos()).filter((x) => !x.carta_dia);
+                    setProductos(lista);
+                    const grupo = agruparPorModelo(lista).find((g) => g.esModelo && g.modelo_id === modeloId);
+                    setMensaje({ tipo: 'exito', texto: `"${actual.nombre}" ahora es un modelo: agrega sus demás tallas y colores.` });
+                    if (grupo) setModeloForm({ grupo });
+                  }}
+                />
+              ) : null;
+            })()}
 
             <div className="inv-campo inv-campo-imagen">
               <label>Foto del producto (opcional)</label>

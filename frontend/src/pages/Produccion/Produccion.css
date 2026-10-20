@@ -1,0 +1,330 @@
+/* Producción y mermas. Usa los estilos de PantallaModulo.css; aquí solo
+   lo propio de esta pantalla. */
+
+.prd-formularios {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .prd-formularios {
+    grid-template-columns: 1fr;
+  }
+}
+
+.prd-form,
+.prd-seccion {
+  padding: 16px;
+}
+
+.prd-form h2,
+.prd-seccion h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.prd-seccion {
+  margin-bottom: 14px;
+}
+
+.prd-buscar {
+  position: relative;
+}
+
+.prd-buscar input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.prd-buscar-lista {
+  margin-top: 6px;
+  border: 1px solid #e4e6eb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.prd-buscar-lista button {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-bottom: 1px solid #f0f1f4;
+  background: #fff;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prd-buscar-lista button:last-child {
+  border-bottom: none;
+}
+
+.prd-buscar-lista button:hover {
+  background: var(--color-primario-suave, #e8f6ed);
+}
+
+.prd-buscar-lista small {
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.prd-elegido {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--color-primario-borde, #b9e3c9);
+  border-radius: 10px;
+  background: var(--color-primario-suave, #e8f6ed);
+  font-size: 14px;
+}
+
+.prd-elegido small {
+  flex: 1;
+  color: #6b7280;
+}
+
+.prd-receta {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f4f5f7;
+  font-size: 13px;
+}
+
+.prd-receta ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.prd-receta li small {
+  color: #6b7280;
+}
+
+.prd-falta {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.prd-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.prd-faltan {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  font-size: 13px;
+  color: #991b1b;
+}
+
+.prd-faltan p {
+  margin: 0 0 8px;
+}
+
+.prd-enviar {
+  width: 100%;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.prd-tabla-scroll {
+  overflow-x: auto;
+}
+
+.prd-tabla-scroll .pm-lineas small {
+  font-style: normal;
+}
+
+.prd-rojo {
+  color: #b91c1c;
+}
+
+.prd-verde {
+  color: var(--color-primario-texto, #117f3a);
+}
+
+.prd-totales {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 10px;
+  font-size: 13.5px;
+}
+
+.prd-totales small {
+  width: 100%;
+  color: #6b7280;
+}
+
+.prd-movimientos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .prd-movimientos {
+    grid-template-columns: 1fr;
+  }
+}
+
+.prd-mov {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid #f0f1f4;
+  font-size: 13.5px;
+}
+
+.prd-mov:last-child {
+  border-bottom: none;
+}
+
+.prd-mov small {
+  display: block;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.prd-mov .prd-insumos {
+  margin-top: 2px;
+}
+
+.prd-mov-lado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.prd-anulada {
+  opacity: 0.55;
+}
+
+.prd-anulada strong {
+  text-decoration: line-through;
+}
+
+.prd-barra {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.prd-barra p {
+  margin: 0;
+  max-width: 720px;
+}
+
+@media (max-width: 640px) {
+  .prd-barra {
+    flex-direction: column;
+  }
+}
+
+.prd-fila-click {
+  cursor: pointer;
+}
+
+.prd-fila-click:hover td {
+  background: #fafbfc;
+}
+
+.prd-linea {
+  display: grid;
+  grid-template-columns: 1fr 90px 40px 80px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f1f4;
+  font-size: 13.5px;
+}
+
+.prd-linea input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  text-align: right;
+  font-size: 14px;
+}
+
+.prd-linea-nombre small {
+  display: block;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.prd-linea-unidad {
+  color: #6b7280;
+}
+
+.prd-linea-costo {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .prd-linea {
+    grid-template-columns: 1fr 80px 34px auto;
+  }
+  .prd-linea-costo {
+    display: none;
+  }
+}
+
+.prd-costos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.prd-costos > div {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f4f5f7;
+}
+
+.prd-costos span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+}
+
+.prd-costos strong {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}

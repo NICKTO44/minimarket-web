@@ -1,0 +1,245 @@
+/* Pedidos por encargo (pastelería). Usa los estilos de PantallaModulo.css;
+   aquí solo lo propio de esta pantalla. */
+
+.enc-barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.enc-buscar {
+  flex: 1 1 220px;
+  max-width: 320px;
+  padding: 9px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 14px;
+}
+
+.enc-grupo {
+  margin-bottom: 14px;
+}
+
+.enc-grupo-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px 2px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #16181d;
+}
+
+.enc-grupo-titulo span {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #e9ebef;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.enc-grupo-titulo.enc-atrasado {
+  color: #b91c1c;
+}
+
+.enc-grupo-titulo.enc-atrasado span {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.enc-hora {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--color-primario-suave, #e8f6ed);
+  color: var(--color-primario-texto, #117f3a);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pm-fila-monto small {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.enc-saldo {
+  color: #b45309;
+}
+
+.enc-pagado {
+  color: var(--color-primario-texto, #117f3a);
+}
+
+/* Formulario */
+.enc-cliente-elegido {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--color-primario-borde, #b9e3c9);
+  border-radius: 10px;
+  background: var(--color-primario-suave, #e8f6ed);
+  font-size: 14px;
+}
+
+.enc-cliente-elegido small {
+  color: #6b7280;
+}
+
+.enc-item {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e4e6eb;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.enc-item-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.enc-item-campos {
+  display: grid;
+  grid-template-columns: 110px 150px 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .enc-item-campos {
+    grid-template-columns: 1fr 1fr;
+  }
+  .enc-item-detalle {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Detalle */
+.enc-detalle {
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  .enc-detalle {
+    grid-template-columns: 1fr;
+  }
+}
+
+.enc-foto img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid #e4e6eb;
+}
+
+.enc-foto-vacia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  aspect-ratio: 1;
+  border: 1.5px dashed #d1d5db;
+  border-radius: 12px;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.enc-foto-acciones {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.enc-montos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.enc-montos > div {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f4f5f7;
+}
+
+.enc-montos span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+}
+
+.enc-montos strong {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.enc-montos .enc-montos-saldo {
+  background: #fff7ed;
+}
+
+.enc-montos .enc-montos-saldo strong {
+  color: #b45309;
+}
+
+.enc-recuadro {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 12px;
+  background: #fafbfc;
+}
+
+.enc-recuadro-peligro {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.enc-recuadro-pie {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.enc-pie {
+  flex-wrap: wrap;
+}
+
+/* Ticket del pedido (al imprimir) */
+@media print {
+  .enc-ticket-detalle {
+    font-size: 8pt;
+    overflow-wrap: anywhere;
+  }
+  .enc-ticket-dedicatoria {
+    margin: 2pt 0 4pt;
+    font-size: 11pt;
+    font-weight: 700;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+}

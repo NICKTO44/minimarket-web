@@ -235,6 +235,29 @@ async fn main() {
         .route("/ordenes/:id/estado", post(handlers::ordenes::cambiar_estado))
         .route("/mecanicos", get(handlers::ordenes::mecanicos).post(handlers::ordenes::crear_mecanico))
         .route("/mecanicos/:id", axum::routing::put(handlers::ordenes::actualizar_mecanico))
+        // Producción del día, mermas y recetas de producción (módulos PRODUCCION e INSUMOS).
+        .route("/produccion", get(handlers::produccion::listar_produccion).post(handlers::produccion::registrar_produccion))
+        .route("/produccion/resumen", get(handlers::produccion::resumen))
+        .route("/produccion/:id/anular", post(handlers::produccion::anular_produccion))
+        .route("/mermas", get(handlers::produccion::listar_mermas).post(handlers::produccion::registrar_merma))
+        .route("/mermas/:id/anular", post(handlers::produccion::anular_merma))
+        .route("/formulas", get(handlers::produccion::formulas))
+        .route(
+            "/formulas/:producto_id",
+            get(handlers::produccion::formula).put(handlers::produccion::guardar_formula).delete(handlers::produccion::borrar_formula),
+        )
+        // Pastelería: pedidos por encargo (módulo ENCARGOS).
+        .route("/encargos", get(handlers::encargos::listar).post(handlers::encargos::crear))
+        .route("/encargos/:id", get(handlers::encargos::obtener).put(handlers::encargos::actualizar))
+        .route("/encargos/:id/estado", post(handlers::encargos::cambiar_estado))
+        .route("/encargos/:id/adelantos", post(handlers::encargos::agregar_adelanto))
+        .route("/encargos/:id/cancelar", post(handlers::encargos::cancelar))
+        .route(
+            "/encargos/:id/foto",
+            post(handlers::encargos::subir_foto)
+                .delete(handlers::encargos::quitar_foto)
+                .layer(DefaultBodyLimit::max(12 * 1024 * 1024)),
+        )
         .route("/paquetes", get(handlers::paquetes::listar).post(handlers::paquetes::crear))
         .route(
             "/paquetes/:id",
@@ -399,6 +422,7 @@ async fn main() {
         .route("/modelos", post(handlers::variantes::crear_modelo))
         .route("/modelos/:id", axum::routing::put(handlers::variantes::actualizar_modelo))
         .route("/modelos/:id/imagen/:producto_id", post(handlers::variantes::compartir_imagen))
+        .route("/modelos/desde-producto/:producto_id", post(handlers::variantes::modelo_desde_producto))
         .route("/cambios/config", get(handlers::cambios::obtener_config))
         .route("/cambios/venta/:identificador", get(handlers::cambios::venta_para_cambio))
         .route("/configuracion/cambios", axum::routing::put(handlers::cambios::guardar_config))

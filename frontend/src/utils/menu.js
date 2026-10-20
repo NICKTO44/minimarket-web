@@ -26,6 +26,8 @@ import {
   Car,
   Wrench,
   PackageOpen,
+  CakeSlice,
+  Wheat,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
@@ -47,6 +49,8 @@ export const GRUPOS_MENU = [
       // Lubricentro.
       { id: 'ORDENES', label: 'Órdenes de servicio', icono: Wrench, modulo: 'ORDENES_SERVICIO' },
       { id: 'VEHICULOS', label: 'Vehículos', icono: Car, modulo: 'VEHICULOS' },
+      // Pastelería.
+      { id: 'ENCARGOS', label: 'Pedidos por encargo', icono: CakeSlice, modulo: 'ENCARGOS' },
     ],
   },
   {
@@ -57,6 +61,8 @@ export const GRUPOS_MENU = [
       { id: 'PROVEEDORES', label: 'Proveedores', icono: Truck },
       { id: 'DEVOLUCIONES', label: 'Devoluciones', icono: Undo2 },
       { id: 'PAQUETES', label: 'Paquetes', icono: PackageOpen, soloAdmin: true, modulo: 'PAQUETES' },
+      // Pastelería / panadería.
+      { id: 'PRODUCCION', label: 'Producción y mermas', icono: Wheat, modulo: 'PRODUCCION' },
     ],
   },
   {
@@ -99,7 +105,7 @@ export function esAlmacen(usuario) {
 export const PANTALLAS_MESERO = ['MESAS', 'CARTA'];
 export const PANTALLAS_PREPARACION = ['PREPARACION', 'CARTA'];
 /** Pantallas de Almacén, en cualquier rubro (el backend bloquea el resto). */
-export const PANTALLAS_ALMACEN = ['PRODUCTOS', 'STOCK', 'PROVEEDORES', 'REPORTES'];
+export const PANTALLAS_ALMACEN = ['PRODUCTOS', 'STOCK', 'PROVEEDORES', 'REPORTES', 'PRODUCCION'];
 
 /** Nombre del rol para mostrar en el menú. */
 export function etiquetaRol(usuario) {

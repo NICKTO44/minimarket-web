@@ -84,12 +84,24 @@ pub const MODULO_ORDENES_SERVICIO: &str = "ORDENES_SERVICIO";
 /// En la venta entran sus productos con un descuento por línea
 /// (handlers/paquetes.rs). No cambia cómo se cobra.
 pub const MODULO_PAQUETES: &str = "PAQUETES";
+/// Pedidos por encargo (pastelería): fecha de entrega, detalle, foto del
+/// diseño y adelantos; se entrega cobrando el saldo en el punto de venta
+/// (handlers/encargos.rs).
+pub const MODULO_ENCARGOS: &str = "ENCARGOS";
+/// Producción del día y mermas (pastelería, panadería): lo producido entra
+/// al stock sin ser una compra; lo perdido sale con su costo
+/// (handlers/produccion.rs).
+pub const MODULO_PRODUCCION: &str = "PRODUCCION";
+/// Recetas de producción con sus insumos: costo de cada producto y
+/// descuento de insumos al producir (handlers/produccion.rs). Necesita PRODUCCION.
+pub const MODULO_INSUMOS: &str = "INSUMOS";
 
 /// (módulo, el módulo que necesita encendido).
 const DEPENDENCIAS: &[(&str, &str)] = &[
     (MODULO_RECETAS, MODULO_FICHA_MEDICAMENTO),
     (MODULO_ALTERNATIVAS, MODULO_FICHA_MEDICAMENTO),
     (MODULO_ORDENES_SERVICIO, MODULO_VEHICULOS),
+    (MODULO_INSUMOS, MODULO_PRODUCCION),
 ];
 
 const MODULOS: &[&str] = &[
@@ -114,6 +126,9 @@ const MODULOS: &[&str] = &[
     MODULO_VEHICULOS,
     MODULO_ORDENES_SERVICIO,
     MODULO_PAQUETES,
+    MODULO_ENCARGOS,
+    MODULO_PRODUCCION,
+    MODULO_INSUMOS,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
@@ -163,6 +178,17 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
         &[
             "UNIDAD", "LITRO", "GALON", "ML", "KG", "PAR", "JUEGO", "CAJA", "PAQUETE", "BALDE", "LATA", "TUBO", "BOTELLA",
             "METRO", "ROLLO", "PIEZA",
+        ],
+    ),
+    (
+        "PASTELERIA",
+        &[
+            MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_COTIZACIONES, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR, MODULO_ENCARGOS,
+            MODULO_PRODUCCION, MODULO_INSUMOS,
+        ],
+        &[
+            "UNIDAD", "PORCION", "ENTERO", "MEDIO", "CUARTO", "DOCENA", "CIENTO", "KG", "GRAMO", "PAQUETE", "CAJA", "BOLSA",
+            "TAZA", "VASO", "BOTELLA",
         ],
     ),
     (RUBRO_GENERAL, &[], &[]),

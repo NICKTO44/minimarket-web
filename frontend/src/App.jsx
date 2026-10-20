@@ -31,6 +31,8 @@ import Guias from './pages/Guias/Guias';
 import Gastos from './pages/Gastos/Gastos';
 import Vehiculos from './pages/Vehiculos/Vehiculos';
 import Ordenes from './pages/Ordenes/Ordenes';
+import Encargos from './pages/Encargos/Encargos';
+import Produccion from './pages/Produccion/Produccion';
 import Paquetes from './pages/Paquetes/Paquetes';
 import AvisosListos from './components/AvisosListos';
 import DireccionNegocio from './components/DireccionNegocio';
@@ -63,6 +65,9 @@ import {
   MODULO_VEHICULOS,
   MODULO_ORDENES_SERVICIO,
   MODULO_PAQUETES,
+  MODULO_ENCARGOS,
+  MODULO_PRODUCCION,
+  MODULO_INSUMOS,
   rubroDe,
 } from './utils/rubros';
 
@@ -81,6 +86,8 @@ const MODULO_DE_PANTALLA = {
   VEHICULOS: MODULO_VEHICULOS,
   ORDENES: MODULO_ORDENES_SERVICIO,
   PAQUETES: MODULO_PAQUETES,
+  ENCARGOS: MODULO_ENCARGOS,
+  PRODUCCION: MODULO_PRODUCCION,
 };
 
 function App() {
@@ -108,6 +115,8 @@ function App() {
   const [cotizacionACargar, setCotizacionACargar] = useState(null);
   // Lubricentro: orden de servicio que se va a cobrar en el punto de venta.
   const [ordenACargar, setOrdenACargar] = useState(null);
+  // Pastelería: pedido por encargo que se va a entregar (cobrar) en el punto de venta.
+  const [encargoACargar, setEncargoACargar] = useState(null);
   // Cambio de prenda en curso: lo que el cliente devuelve; lo que se lleva
   // se elige en el punto de venta.
   const [cambioEnCurso, setCambioEnCurso] = useState(null);
@@ -569,6 +578,8 @@ function App() {
               paquetes={negocio.modulos.includes(MODULO_PAQUETES)}
               ordenACargar={negocio.modulos.includes(MODULO_ORDENES_SERVICIO) ? ordenACargar : null}
               onOrdenUsada={() => setOrdenACargar(null)}
+              encargoACargar={negocio.modulos.includes(MODULO_ENCARGOS) ? encargoACargar : null}
+              onEncargoUsado={() => setEncargoACargar(null)}
               cambios={negocio.modulos.includes(MODULO_CAMBIOS)}
               cambioEnCurso={negocio.modulos.includes(MODULO_CAMBIOS) ? cambioEnCurso : null}
               onCambioTerminado={() => setCambioEnCurso(null)}
@@ -598,7 +609,9 @@ function App() {
           />
         )}
         {pantallaVisible === 'STOCK' && <StockLotes esAdmin={usuarioActual?.rol_id === 1} />}
-        {pantallaVisible === 'PROVEEDORES' && <Proveedores />}
+        {pantallaVisible === 'PROVEEDORES' && (
+          <Proveedores variantes={negocio.modulos.includes(MODULO_VARIANTES)} ganancias={negocio.modulos.includes(MODULO_GANANCIAS)} />
+        )}
         {pantallaVisible === 'DEVOLUCIONES' && (
           <Devoluciones
             usuario={usuarioActual}
@@ -620,6 +633,7 @@ function App() {
             ruc={configuracionTienda?.ruc}
             onCargarEnVenta={(cotizacion) => {
               setPedidoACobrar(null);
+              setEncargoACargar(null);
               setCotizacionACargar(cotizacion);
               setPantalla('POS');
             }}
@@ -637,12 +651,30 @@ function App() {
             onCobrar={(orden) => {
               setPedidoACobrar(null);
               setCotizacionACargar(null);
+              setEncargoACargar(null);
               setOrdenACargar(orden);
               setPantalla('POS');
             }}
           />
         )}
         {pantallaVisible === 'PAQUETES' && usuarioActual?.rol_id === 1 && <Paquetes />}
+        {pantallaVisible === 'PRODUCCION' && (
+          <Produccion esAdmin={usuarioActual?.rol_id === 1} conRecetas={negocio.modulos.includes(MODULO_INSUMOS)} />
+        )}
+        {pantallaVisible === 'ENCARGOS' && (
+          <Encargos
+            nombreTienda={nombreTienda}
+            direccion={configuracionTienda?.direccion}
+            telefono={configuracionTienda?.telefono}
+            onEntregar={(encargo) => {
+              setPedidoACobrar(null);
+              setCotizacionACargar(null);
+              setOrdenACargar(null);
+              setEncargoACargar(encargo);
+              setPantalla('POS');
+            }}
+          />
+        )}
         {pantallaVisible === 'CREDITOS' && (
           <Creditos
             nombreTienda={nombreTienda}
