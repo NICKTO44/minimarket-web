@@ -1,0 +1,7 @@
+# Lo que NO se manda a docker build (target/ pesa GB en la Mac, .env tiene secretos)
+target
+.env
+uploads
+tests
+deploy
+*.log

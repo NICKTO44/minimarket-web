@@ -1,0 +1,51 @@
+# Va en /etc/nginx/sites-available/minimarket-backend (reemplaza al actual,
+# que tenía el bloque de sslip.io duplicado por Certbot).
+server {
+    server_name 159-89-231-214.sslip.io;
+
+    # El backend acepta hasta 12 MB (fotos de producto); sin esto Nginx
+    # cortaba todo lo mayor a 1 MB con error 413.
+    client_max_body_size 15M;
+
+    # Agente de impresión: WebSocket de larga duración (sin esto Nginx
+    # lo cerraba tras 60 s sin tráfico).
+    location /agente-impresion/ws {
+        proxy_pass http://monspeet_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location / {
+        proxy_pass http://monspeet_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/159-89-231-214.sslip.io/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/159-89-231-214.sslip.io/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+}
+
+server {
+    if ($host = 159-89-231-214.sslip.io) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+    listen 80;
+    server_name 159-89-231-214.sslip.io;
+    return 404; # managed by Certbot
+}

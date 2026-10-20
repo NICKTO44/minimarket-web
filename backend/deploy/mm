@@ -1,0 +1,8 @@
+#!/bin/bash
+# Ejecuta un comando dentro del contenedor que está atendiendo ahora
+# (azul o verde), para no tener que saber cuál es.
+#   ./deploy/mm ./licencias ...     ./deploy/mm ./migrar     ./deploy/mm ./sunat ...
+set -euo pipefail
+P=$(grep -oE '127\.0\.0\.1:[0-9]+' /etc/nginx/conf.d/monspeet-upstream.conf | head -1 | cut -d: -f2)
+case "$P" in 3001) N=minimarket-azul;; 3002) N=minimarket-verde;; *) N=minimarket-backend;; esac
+if [ -t 0 ]; then exec docker exec -it "$N" "$@"; else exec docker exec -i "$N" "$@"; fi

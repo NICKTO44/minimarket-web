@@ -465,5 +465,33 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     println!("Backend corriendo en http://0.0.0.0:3000");
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(senal_de_apagado())
+        .await
+        .unwrap();
+}
+
+/// Espera la señal de apagado. `docker stop` manda SIGTERM: antes el
+/// proceso (PID 1 en el contenedor) la ignoraba, Docker esperaba 10 s y lo
+/// mataba a la fuerza, cortando cualquier venta a medio procesar. Ahora deja
+/// de aceptar conexiones nuevas y termina las peticiones en curso.
+async fn senal_de_apagado() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c().await.ok();
+    };
+    #[cfg(unix)]
+    let terminar = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("no se pudo escuchar SIGTERM")
+            .recv()
+            .await;
+    };
+    #[cfg(not(unix))]
+    let terminar = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminar => {},
+    }
+    println!("🛑 Señal de apagado recibida: terminando las peticiones en curso...");
 }
