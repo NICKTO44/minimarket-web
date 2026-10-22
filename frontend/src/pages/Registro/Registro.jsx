@@ -9,6 +9,8 @@ import {
   baseUsuarioSugerido,
   candidatosUsuario,
 } from '../../utils/validacionRegistro';
+import TarjetaRuc from '../../components/TarjetaRuc';
+import { sugerirEn } from '../../utils/sugerencia';
 import '../Login/Login.css';
 import './Registro.css';
 
@@ -25,37 +27,6 @@ function nombreDePersonaNatural(razonSocial) {
   const capital = (p) => p.charAt(0).toUpperCase() + p.slice(1);
   const ordenadas = palabras.length >= 3 ? [...palabras.slice(2), ...palabras.slice(0, 2)] : palabras;
   return ordenadas.map(capital).join(' ');
-}
-
-const ESTADOS_NORMALES = ['ACTIVO', 'HABIDO'];
-
-function TarjetaRuc({ ruc, datos }) {
-  const tipo = ruc.startsWith('10') ? 'Persona natural' : ruc.startsWith('20') ? 'Empresa' : 'Contribuyente';
-  const comercial = datoReal(datos.nombre_comercial);
-  const etiquetas = [datos.estado, datos.condicion].filter(Boolean);
-  const fueraDeLoNormal = etiquetas.some((e) => !ESTADOS_NORMALES.includes(e.toUpperCase()));
-  return (
-    <div className="registro-ruc-tarjeta">
-      <span className="registro-ruc-tipo">{tipo} · RUC {ruc}</span>
-      <strong className="registro-ruc-razon">{datos.razon_social}</strong>
-      {comercial && comercial !== datos.razon_social && (
-        <span className="registro-ruc-comercial">{comercial}</span>
-      )}
-      {etiquetas.length > 0 && (
-        <div className="registro-ruc-etiquetas">
-          {etiquetas.map((e) => (
-            <span key={e} className={`registro-ruc-etiqueta${ESTADOS_NORMALES.includes(e.toUpperCase()) ? '' : ' aviso'}`}>
-              {e}
-            </span>
-          ))}
-        </div>
-      )}
-      {datos.direccion && <span className="registro-ruc-direccion">{datos.direccion}</span>}
-      {fueraDeLoNormal && (
-        <span className="registro-ruc-nota">Puedes registrarte igual; el estado en SUNAT no impide usar el sistema.</span>
-      )}
-    </div>
-  );
 }
 
 export default function Registro({ onRegistroExitoso, onIrALogin }) {
@@ -110,11 +81,7 @@ export default function Registro({ onRegistroExitoso, onIrALogin }) {
       const r = await api.verificarUsuario(candidato).catch(() => ({ disponible: null }));
       if (consultaActual.current !== idConsulta) return; // ya cambiaron el RUC
       if (r.disponible === true) {
-        setUsuario((actual) => {
-          if (actual.trim() && actual !== sugerido.current.usuario) return actual;
-          sugerido.current.usuario = candidato;
-          return candidato;
-        });
+        sugerirEn(setUsuario, sugerido, 'usuario', candidato);
         return;
       }
       if (r.disponible === null) return; // sin conexión: no insistir
@@ -133,15 +100,10 @@ export default function Registro({ onRegistroExitoso, onIrALogin }) {
       if (r.resultado !== 'ENCONTRADO' || !r.datos) return;
 
       const datos = r.datos;
-      const reemplazar = (actual, clave, nuevo) => {
-        if (!nuevo || (actual.trim() && actual !== sugerido.current[clave])) return actual;
-        sugerido.current[clave] = nuevo;
-        return nuevo;
-      };
       const negocioSugerido = datoReal(datos.nombre_comercial) || datoReal(datos.razon_social);
-      setNombreNegocio((actual) => reemplazar(actual, 'negocio', negocioSugerido));
+      sugerirEn(setNombreNegocio, sugerido, 'negocio', negocioSugerido);
       if (ruc.startsWith('10')) {
-        setNombreCompleto((actual) => reemplazar(actual, 'nombre', nombreDePersonaNatural(datos.razon_social)));
+        sugerirEn(setNombreCompleto, sugerido, 'nombre', nombreDePersonaNatural(datos.razon_social));
       }
       sugerirUsuario(ruc, datos, id);
     }, DEBOUNCE_RUC_MS);

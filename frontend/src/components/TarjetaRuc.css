@@ -1,0 +1,64 @@
+/* Tarjeta con los datos del RUC consultado. */
+.registro-ruc-tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1.5px solid #bbe5c8;
+  border-radius: 10px;
+  background: #f1faf4;
+  text-align: left;
+}
+
+.registro-ruc-tipo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #15803d;
+}
+
+.registro-ruc-razon {
+  font-size: 14px;
+  line-height: 1.3;
+  color: #16181d;
+  overflow-wrap: anywhere;
+}
+
+.registro-ruc-comercial {
+  font-size: 13px;
+  color: #374151;
+}
+
+.registro-ruc-etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.registro-ruc-etiqueta {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.registro-ruc-etiqueta.aviso {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.registro-ruc-direccion {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #6b7280;
+  overflow-wrap: anywhere;
+}
+
+.registro-ruc-nota {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #92400e;
+}

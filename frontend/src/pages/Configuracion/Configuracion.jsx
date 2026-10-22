@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api, API_URL } from '../../api/api';
 import { COLOR_MONSPEET, normalizarAcento } from '../../utils/tema';
 import './Configuracion.css';
@@ -13,6 +13,10 @@ import ConfiguracionImpresora from './ConfiguracionImpresora';
 import UsoPlan from '../../components/UsoPlan';
 import { etiquetaTasa, TASA_GENERAL } from '../../utils/igv';
 import { datosNegocio, MODULO_CAMBIOS, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
+import TarjetaRuc from '../../components/TarjetaRuc';
+import { useConsultaRuc } from '../../utils/useConsultaRuc';
+import { sugerirEn } from '../../utils/sugerencia';
+import { datoReal, errorNombre, errorRucConfiguracion } from '../../utils/validacionRegistro';
 
 const ROLES = [
   { id: 1, nombre: 'Administrador' },
@@ -47,6 +51,10 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
   const [mensaje, setMensaje] = useState(null);
   // Tasa de IGV que tiene guardada el negocio (para avisar si la cambia).
   const [tasaGuardada, setTasaGuardada] = useState(null);
+  // RUC guardado: solo un RUC nuevo se consulta en SUNAT. Y la última
+  // dirección sugerida por esa consulta (si el usuario la cambió, se respeta).
+  const [rucGuardado, setRucGuardado] = useState('');
+  const direccionSugerida = useRef({ direccion: '' });
 
   const cargarConfig = () => {
     api
@@ -54,6 +62,10 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
       .then((c) => {
         setFormConfig(c);
         setTasaGuardada(Number(c.iva_porcentaje));
+        setRucGuardado(c.ruc || '');
+        // La dirección guardada cuenta como sugerida: si cambia el RUC, la
+        // reemplaza la del RUC nuevo (salvo que el usuario la edite antes).
+        direccionSugerida.current.direccion = c.direccion || '';
       })
       .catch((e) => setMensaje({ tipo: 'error', texto: e.message }));
   };
@@ -83,6 +95,19 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
   const negocio = datosNegocio(formConfig);
   const restaurante = negocio.modulos.includes(MODULO_MESAS);
 
+  // RUC y nombre con las mismas reglas que el registro (el backend también
+  // las revisa). Un RUC nuevo se consulta y su dirección se sugiere.
+  const rucEscrito = formConfig?.ruc || '';
+  const consultaRuc = useConsultaRuc(rucEscrito, vista === 'NEGOCIO' && rucEscrito !== rucGuardado, (datos) => {
+    const setDireccion = (cambio) => setFormConfig((actual) => ({ ...actual, direccion: cambio(actual?.direccion) }));
+    sugerirEn(setDireccion, direccionSugerida, 'direccion', datoReal(datos.direccion));
+  });
+  const errorRuc = formConfig ? errorRucConfiguracion(rucGuardado, rucEscrito) : null;
+  const rucNoExiste = consultaRuc.estado === 'listo' && consultaRuc.resultado === 'NO_EXISTE';
+  const errorNombreNegocio = formConfig?.nombre_tienda?.trim()
+    ? errorNombre(formConfig.nombre_tienda, 'El nombre del negocio')
+    : null;
+
   // Configuración → Rubro y módulos guardó un cambio.
   const alCambiarNegocio = (cambio) => {
     setFormConfig((actual) => ({ ...actual, ...cambio }));
@@ -94,6 +119,14 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
     setMensaje(null);
     if (!formConfig.nombre_tienda.trim()) {
       setMensaje({ tipo: 'error', texto: 'El nombre de la tienda es obligatorio.' });
+      return;
+    }
+    if (errorNombreNegocio || errorRuc || rucNoExiste) {
+      setMensaje({ tipo: 'error', texto: errorNombreNegocio || errorRuc || consultaRuc.mensaje });
+      return;
+    }
+    if (consultaRuc.estado === 'consultando') {
+      setMensaje({ tipo: 'error', texto: 'Espera a que termine la consulta del RUC.' });
       return;
     }
     // La tasa de IGV se usa de verdad al cobrar y al emitir comprobantes.
@@ -135,6 +168,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
       const actualizada = await api.configuracionObtener();
       setFormConfig(actualizada);
       setTasaGuardada(Number(actualizada.iva_porcentaje));
+      setRucGuardado(actualizada.ruc || '');
       onIdentidadActualizada?.({
         logo_url: actualizada.logo_path,
         color_acento: actualizada.color_acento,
@@ -293,12 +327,31 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
             <input
               value={formConfig.nombre_tienda}
               onChange={(e) => setFormConfig({ ...formConfig, nombre_tienda: e.target.value })}
+              aria-invalid={Boolean(errorNombreNegocio)}
             />
+            {errorNombreNegocio && <span className="cfg-campo-error">{errorNombreNegocio}</span>}
           </div>
 
           <div className="cfg-campo">
             <label>RUC</label>
-            <input value={formConfig.ruc || ''} onChange={(e) => setFormConfig({ ...formConfig, ruc: e.target.value })} />
+            <input
+              inputMode="numeric"
+              maxLength={11}
+              value={formConfig.ruc || ''}
+              onChange={(e) => setFormConfig({ ...formConfig, ruc: e.target.value.replace(/\D/g, '').slice(0, 11) })}
+              aria-invalid={Boolean(errorRuc || rucNoExiste)}
+            />
+            {errorRuc && <span className="cfg-campo-error">{errorRuc}</span>}
+            {!errorRuc && consultaRuc.estado === 'consultando' && (
+              <span className="cfg-campo-info">Consultando SUNAT...</span>
+            )}
+            {rucNoExiste && <span className="cfg-campo-error">{consultaRuc.mensaje}</span>}
+            {consultaRuc.estado === 'listo' && consultaRuc.resultado === 'NO_DISPONIBLE' && (
+              <span className="cfg-campo-info">{consultaRuc.mensaje}</span>
+            )}
+            {consultaRuc.estado === 'listo' && consultaRuc.resultado === 'ENCONTRADO' && consultaRuc.datos && (
+              <TarjetaRuc ruc={rucEscrito} datos={consultaRuc.datos} />
+            )}
           </div>
 
           <div className="cfg-campo">

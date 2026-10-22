@@ -153,3 +153,22 @@ export function candidatosUsuario(base, ruc) {
   const corta = base.slice(0, 16);
   return [base, `${corta}${ruc.slice(-3)}`, `${corta}.pos`, `${corta}${ruc.slice(-4)}`];
 }
+
+// ---------------------------------------------------------------------
+// RUC al guardar desde Configuración (misma regla que
+// revisar_ruc_configuracion en el backend).
+// ---------------------------------------------------------------------
+
+/** Mensaje si el RUC no se puede guardar, o null. `actual` = el ya guardado. */
+export function errorRucConfiguracion(actual, nuevo) {
+  const guardado = (actual || '').trim();
+  const escrito = (nuevo || '').trim();
+  if (!escrito) return guardado ? 'El RUC no se puede dejar vacío.' : null;
+  return errorFormatoRuc(escrito);
+}
+
+/** ¿El RUC guardado está mal y el negocio debe corregirlo? (vacío no cuenta). */
+export function rucNecesitaCorreccion(ruc) {
+  const r = (ruc || '').trim();
+  return r !== '' && errorFormatoRuc(r) !== null;
+}

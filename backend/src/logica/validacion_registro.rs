@@ -185,6 +185,73 @@ pub fn error_usuario(usuario: &str) -> Option<&'static str> {
     None
 }
 
+// ---------------------------------------------------------------------
+// RUC al guardar desde Configuración (negocio ya creado).
+// ---------------------------------------------------------------------
+
+/// Qué hacer con el RUC que llega de Configuración.
+#[derive(Debug, PartialEq)]
+pub enum RevisionRuc {
+    /// No cambió (o el negocio nunca tuvo y sigue sin): no se consulta.
+    SinCambios,
+    /// Es nuevo y tiene buen formato: falta confirmar con Factiliza.
+    Consultar,
+}
+
+/// Regla del RUC en Configuración, comparando con el que ya está guardado:
+/// - Vacío: solo si el negocio ya no tenía RUC (algunos negocios antiguos y
+///   las demos no tienen). Un RUC guardado no se puede borrar.
+/// - Con valor: formato y dígito verificador, aunque no haya cambiado (así
+///   un RUC inválido guardado antes obliga a corregirlo para poder guardar).
+/// - Nuevo y bien escrito: hay que consultarlo antes de guardar.
+pub fn revisar_ruc_configuracion(actual: Option<&str>, nuevo: Option<&str>) -> Result<RevisionRuc, String> {
+    let actual = actual.map(str::trim).filter(|s| !s.is_empty());
+    match nuevo.map(str::trim).filter(|s| !s.is_empty()) {
+        None if actual.is_some() => Err("El RUC no se puede dejar vacío.".into()),
+        None => Ok(RevisionRuc::SinCambios),
+        Some(n) => {
+            if let Some(error) = error_formato_ruc(n) {
+                return Err(error.into());
+            }
+            Ok(if Some(n) == actual { RevisionRuc::SinCambios } else { RevisionRuc::Consultar })
+        }
+    }
+}
+
+#[cfg(test)]
+mod pruebas_configuracion {
+    use super::*;
+
+    #[test]
+    fn ruc_en_configuracion() {
+        // Negocio sin RUC que guarda sin RUC (demos, negocios antiguos).
+        assert_eq!(revisar_ruc_configuracion(None, None), Ok(RevisionRuc::SinCambios));
+        assert_eq!(revisar_ruc_configuracion(Some(""), Some("  ")), Ok(RevisionRuc::SinCambios));
+        // No se puede borrar un RUC guardado.
+        assert!(revisar_ruc_configuracion(Some("20131312955"), None).is_err());
+        assert!(revisar_ruc_configuracion(Some("sdsdsdsdsdsd"), Some("")).is_err());
+        // Mismo RUC válido: no se vuelve a consultar.
+        assert_eq!(revisar_ruc_configuracion(Some("20131312955"), Some("20131312955")), Ok(RevisionRuc::SinCambios));
+        // Un RUC inválido ya guardado obliga a corregirlo.
+        assert!(revisar_ruc_configuracion(Some("sdsdsdsdsdsd"), Some("sdsdsdsdsdsd")).is_err());
+        // RUC nuevo: formato primero, luego consulta.
+        assert!(revisar_ruc_configuracion(Some("sdsdsdsdsdsd"), Some("20131312956")).is_err());
+        assert_eq!(revisar_ruc_configuracion(Some("sdsdsdsdsdsd"), Some("20131312955")), Ok(RevisionRuc::Consultar));
+        assert_eq!(revisar_ruc_configuracion(None, Some("10467793549")), Ok(RevisionRuc::Consultar));
+    }
+
+    #[test]
+    fn nombres_de_negocios_existentes_pasan() {
+        for nombre in [
+            "Mi Minimarket", "monspeet", "Cafeteria", "Caferick", "Anbamar", "Tienda Maximo",
+            "Verane", "La Cabañita", "Ferreteria", "farme", "LubriCar", "Genjibre",
+        ] {
+            assert_eq!(error_nombre(nombre, "El nombre del negocio"), None, "debería pasar: {}", nombre);
+        }
+        assert!(error_nombre("dsdsdsd", "El nombre del negocio").is_some());
+    }
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;

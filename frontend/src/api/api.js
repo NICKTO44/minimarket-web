@@ -271,6 +271,8 @@ export const api = {
   devolucionCrear: (data) => request('/devoluciones', { method: 'POST', body: JSON.stringify(data) }),
   configuracionObtener: () => request('/configuracion'),
   configuracionActualizar: (data) => request('/configuracion', { method: 'PUT', body: JSON.stringify(data) }),
+  // "Completa los datos de tu negocio": solo nombre, RUC y dirección.
+  datosNegocioGuardar: (data) => request('/configuracion/datos-negocio', { method: 'PUT', body: JSON.stringify(data) }),
   configuracionSubirLogo: async (archivo) => {
     const token = obtenerToken();
     const formData = new FormData();

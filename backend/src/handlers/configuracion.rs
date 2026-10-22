@@ -91,6 +91,9 @@ pub async fn actualizar_configuracion(
     }
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Nombre del negocio y RUC con las mismas reglas que el registro.
+    validar_datos_negocio(&conn, &payload.nombre_tienda, payload.ruc.as_deref()).await?;
+
     conn.execute(
         "UPDATE configuracion_tienda SET nombre_tienda=?1, direccion=?2, telefono=?3, email=?4,
             ruc=?5, moneda=?6, iva_porcentaje=?7, facturalibre_token=?8, facturalibre_ruta=?9,
@@ -107,6 +110,80 @@ pub async fn actualizar_configuracion(
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al actualizar: {}", e)))?;
 
     Ok(Json(AccionResponse { success: true, message: "Configuración actualizada".into() }))
+}
+
+/// Revisa el nombre del negocio y el RUC antes de guardarlos, con las reglas
+/// del registro (logica/validacion_registro.rs). El RUC se compara con el ya
+/// guardado: si no cambió no se consulta a Factiliza; si es nuevo, solo
+/// bloquea cuando Factiliza dice que no existe (si no responde, se guarda).
+async fn validar_datos_negocio(
+    conn: &libsql::Connection,
+    nombre: &str,
+    ruc: Option<&str>,
+) -> Result<(), (StatusCode, String)> {
+    use crate::logica::validacion_documento::{consultar_ruc_registro, ConsultaRucRegistro};
+    use crate::logica::validacion_registro::{error_nombre, revisar_ruc_configuracion, RevisionRuc};
+
+    if let Some(error) = error_nombre(nombre, "El nombre del negocio") {
+        return Err((StatusCode::BAD_REQUEST, error));
+    }
+
+    let mut filas = conn
+        .query("SELECT ruc FROM configuracion_tienda LIMIT 1", ())
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let actual: Option<String> = match filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        Some(fila) => fila.get(0).ok(),
+        None => None,
+    };
+
+    let revision = revisar_ruc_configuracion(actual.as_deref(), ruc).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    if revision == RevisionRuc::Consultar {
+        let ruc = ruc.unwrap_or_default().trim();
+        if let ConsultaRucRegistro::NoExiste = consultar_ruc_registro(ruc).await {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "Ese RUC no figura en SUNAT. Revisa que esté bien escrito.".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[derive(serde::Deserialize)]
+pub struct DatosNegocio {
+    pub nombre_tienda: String,
+    pub ruc: Option<String>,
+    pub direccion: Option<String>,
+}
+
+/// Pantalla "Completa los datos de tu negocio" (negocios con un RUC
+/// inválido guardado): cambia SOLO el nombre, el RUC y la dirección, para no
+/// tener que reenviar (y arriesgar) el resto de la configuración.
+pub async fn guardar_datos_negocio(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+    Json(payload): Json<DatosNegocio>,
+) -> Result<Json<AccionResponse>, (StatusCode, String)> {
+    exigir_admin(&claims)?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let ruc = payload.ruc.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    if ruc.is_none() {
+        return Err((StatusCode::BAD_REQUEST, "El RUC es obligatorio.".to_string()));
+    }
+    validar_datos_negocio(&conn, &payload.nombre_tienda, ruc).await?;
+
+    let direccion = payload.direccion.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    conn.execute(
+        "UPDATE configuracion_tienda SET nombre_tienda = ?1, ruc = ?2, direccion = ?3,
+            fecha_actualizacion = datetime('now','localtime')",
+        libsql::params![payload.nombre_tienda.trim().to_string(), ruc, direccion],
+    )
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al actualizar: {}", e)))?;
+
+    Ok(Json(AccionResponse { success: true, message: "Datos del negocio actualizados".into() }))
 }
 
 pub async fn listar_usuarios(

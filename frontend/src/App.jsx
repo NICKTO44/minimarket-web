@@ -21,6 +21,8 @@ import Resumen from './pages/Resumen/Resumen';
 import HistorialCaja from './pages/Caja/HistorialCaja';
 import Login from './pages/Login/Login';
 import Registro from './pages/Registro/Registro';
+import CompletarDatos from './pages/CompletarDatos/CompletarDatos';
+import { rucNecesitaCorreccion } from './utils/validacionRegistro';
 import BoletaPublica from './pages/BoletaPublica/BoletaPublica';
 import Mesas from './pages/Mesas/Mesas';
 import Preparacion from './pages/Preparacion/Preparacion';
@@ -455,6 +457,18 @@ function App() {
         </div>
       </div>
     );
+  }
+
+  // Negocio con un RUC inválido guardado (creado antes de que el registro lo
+  // validara): el administrador lo corrige antes de seguir. En modo lectura
+  // no, porque no podría guardar y quedaría atrapado sin poder renovar.
+  if (
+    usuarioActual?.rol_id === 1 &&
+    !modoLectura &&
+    configuracionTienda &&
+    rucNecesitaCorreccion(configuracionTienda.ruc)
+  ) {
+    return <CompletarDatos configuracion={configuracionTienda} onListo={setConfiguracionTienda} onLogout={handleLogout} />;
   }
 
   // ¿El negocio atiende en mesas? Mientras llega la configuración del
