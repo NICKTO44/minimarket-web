@@ -198,7 +198,13 @@ async fn main() {
         .route("/registro/verificar-usuario", get(handlers::registro::verificar_usuario))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit::limitar_verificar));
 
-    let rutas_autenticacion = rutas_sensibles.merge(rutas_registro).merge(rutas_verificacion);
+    // Tarjeta del RUC en el formulario de registro (consulta a Factiliza).
+    let rutas_consulta_ruc = Router::new()
+        .route("/registro/consultar-ruc", get(handlers::registro::consultar_ruc))
+        .route_layer(axum::middleware::from_fn(rate_limit::limitar_consulta_ruc));
+
+    let rutas_autenticacion =
+        rutas_sensibles.merge(rutas_registro).merge(rutas_verificacion).merge(rutas_consulta_ruc);
 
     let rutas_publicas = Router::new()
         .route("/", get(health))

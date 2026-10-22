@@ -209,6 +209,190 @@ pub async fn direccion_fiscal(ruc: &str) -> Option<String> {
     consulta.direccion
 }
 
+// ---------------------------------------------------------------------
+// Consulta de RUC para el REGISTRO de negocios nuevos.
+//
+// Es aparte de `validar_ruc` (que usa el cajero y no se toca) porque aquí
+// sí importa POR QUÉ falla: un RUC que Factiliza no encuentra bloquea el
+// registro, pero Factiliza caído o sin saldo NO debe bloquear a nadie.
+// ---------------------------------------------------------------------
+
+/// Datos del RUC que se muestran en la tarjeta del registro.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DatosRucRegistro {
+    pub razon_social: Option<String>,
+    pub nombre_comercial: Option<String>,
+    pub estado: Option<String>,
+    pub condicion: Option<String>,
+    pub direccion: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ConsultaRucRegistro {
+    /// Factiliza respondió con los datos del RUC.
+    Encontrado(DatosRucRegistro),
+    /// Factiliza respondió que el RUC no existe (400/404, o success:false).
+    NoExiste,
+    /// No se pudo consultar: sin token, timeout, red, saldo agotado,
+    /// error del servidor o respuesta rara. No debe bloquear el registro.
+    NoDisponible,
+}
+
+/// Texto de un campo, o `None` si viene vacío o como "-".
+fn texto_de(data: &serde_json::Value, clave: &str) -> Option<String> {
+    let t = data.get(clave)?.as_str()?.split_whitespace().collect::<Vec<_>>().join(" ");
+    (t.chars().any(|c| c.is_alphanumeric())).then_some(t)
+}
+
+/// Clasifica la respuesta de Factiliza. Separado de la petición para
+/// poder probarlo sin red.
+fn clasificar_respuesta_ruc(status: u16, cuerpo: Option<RespuestaFactiliza>) -> ConsultaRucRegistro {
+    match status {
+        200..=299 => {}
+        // Factiliza responde 400/404 cuando el documento no existe.
+        400 | 404 => return ConsultaRucRegistro::NoExiste,
+        // 401/402/403/429/5xx...: problema de token, saldo o servidor.
+        _ => return ConsultaRucRegistro::NoDisponible,
+    }
+    let Some(cuerpo) = cuerpo else { return ConsultaRucRegistro::NoDisponible };
+    if !cuerpo.success {
+        return ConsultaRucRegistro::NoExiste;
+    }
+    let Some(data) = cuerpo.data else { return ConsultaRucRegistro::NoDisponible };
+    let razon_social = texto_de(&data, "nombre_o_razon_social");
+    if razon_social.is_none() {
+        // Éxito sin nombre: respuesta rara, mejor no concluir nada.
+        return ConsultaRucRegistro::NoDisponible;
+    }
+    ConsultaRucRegistro::Encontrado(DatosRucRegistro {
+        razon_social,
+        nombre_comercial: texto_de(&data, "nombre_comercial"),
+        estado: texto_de(&data, "estado"),
+        condicion: texto_de(&data, "condicion"),
+        direccion: direccion_de(&data),
+    })
+}
+
+/// RUC ya consultados para el registro, con la hora de la consulta. La
+/// tarjeta del formulario y el POST /registro preguntan por el mismo RUC
+/// casi seguidos: así se paga una sola consulta a Factiliza.
+type CacheRegistro = std::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, ConsultaRucRegistro)>>;
+
+fn cache_registro() -> &'static CacheRegistro {
+    static CACHE: std::sync::OnceLock<CacheRegistro> = std::sync::OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+const VIGENCIA_ENCONTRADO: std::time::Duration = std::time::Duration::from_secs(6 * 60 * 60);
+const VIGENCIA_NO_EXISTE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+const MAX_EN_CACHE: usize = 2_000;
+
+/// Espera de la consulta del registro. Más larga que la del cajero
+/// (TIMEOUT_SEGUNDOS): Factiliza contesta en ~1 s cuando el RUC existe, pero
+/// tarda 5 a 7 s en responder 404 cuando NO existe (medido el 22-oct-2026).
+/// Con 4 s, un RUC inventado se cortaba antes del "no existe" y pasaba como
+/// "no se pudo consultar".
+const TIMEOUT_REGISTRO_SEGUNDOS: u64 = 12;
+
+/// Consulta un RUC (ya validado en formato) para el registro.
+pub async fn consultar_ruc_registro(ruc: &str) -> ConsultaRucRegistro {
+    if let Ok(cache) = cache_registro().lock() {
+        if let Some((cuando, resultado)) = cache.get(ruc) {
+            let vigencia = match resultado {
+                ConsultaRucRegistro::NoExiste => VIGENCIA_NO_EXISTE,
+                _ => VIGENCIA_ENCONTRADO,
+            };
+            if cuando.elapsed() < vigencia {
+                return resultado.clone();
+            }
+        }
+    }
+
+    let Some(token) = token_factiliza() else { return ConsultaRucRegistro::NoDisponible };
+    let url = format!("{}/v1/ruc/info/{}", base_factiliza(), ruc);
+    let cliente = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(TIMEOUT_REGISTRO_SEGUNDOS))
+        .build()
+        .unwrap_or_default();
+    let resultado = match cliente.get(&url).bearer_auth(token).send().await {
+        Err(_) => ConsultaRucRegistro::NoDisponible,
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            let cuerpo = resp.json::<RespuestaFactiliza>().await.ok();
+            clasificar_respuesta_ruc(status, cuerpo)
+        }
+    };
+
+    // "No disponible" no se recuerda: la próxima vez se vuelve a intentar.
+    if !matches!(resultado, ConsultaRucRegistro::NoDisponible) {
+        if let Ok(mut cache) = cache_registro().lock() {
+            if cache.len() >= MAX_EN_CACHE {
+                cache.retain(|_, (cuando, _)| cuando.elapsed() < VIGENCIA_NO_EXISTE);
+            }
+            cache.insert(ruc.to_string(), (std::time::Instant::now(), resultado.clone()));
+        }
+    }
+    resultado
+}
+
+#[cfg(test)]
+mod pruebas_registro {
+    use super::*;
+    use serde_json::json;
+
+    fn cuerpo(v: serde_json::Value) -> Option<RespuestaFactiliza> {
+        serde_json::from_value(v).ok()
+    }
+
+    #[test]
+    fn ruc_encontrado_trae_sus_datos() {
+        let r = clasificar_respuesta_ruc(
+            200,
+            cuerpo(json!({ "success": true, "data": {
+                "nombre_o_razon_social": "INVERSIONES VERANE S.A.C.",
+                "nombre_comercial": "-",
+                "estado": "ACTIVO", "condicion": "NO HABIDO",
+                "direccion": "AV. EL SOL 500", "direccion_completa": "AV. EL SOL 500, CUSCO - CUSCO - CUSCO"
+            }})),
+        );
+        match r {
+            ConsultaRucRegistro::Encontrado(d) => {
+                assert_eq!(d.razon_social.as_deref(), Some("INVERSIONES VERANE S.A.C."));
+                assert_eq!(d.nombre_comercial, None);
+                assert_eq!(d.condicion.as_deref(), Some("NO HABIDO"));
+                assert_eq!(d.direccion.as_deref(), Some("AV. EL SOL 500, CUSCO - CUSCO - CUSCO"));
+            }
+            otro => panic!("esperaba Encontrado, llegó {:?}", otro),
+        }
+    }
+
+    #[test]
+    fn no_existe_solo_cuando_factiliza_lo_dice() {
+        assert!(matches!(clasificar_respuesta_ruc(400, None), ConsultaRucRegistro::NoExiste));
+        assert!(matches!(clasificar_respuesta_ruc(404, None), ConsultaRucRegistro::NoExiste));
+        assert!(matches!(
+            clasificar_respuesta_ruc(200, cuerpo(json!({ "success": false }))),
+            ConsultaRucRegistro::NoExiste
+        ));
+    }
+
+    #[test]
+    fn fallas_de_factiliza_no_bloquean() {
+        for status in [401, 402, 403, 429, 500, 502, 503] {
+            assert!(
+                matches!(clasificar_respuesta_ruc(status, None), ConsultaRucRegistro::NoDisponible),
+                "status {}",
+                status
+            );
+        }
+        assert!(matches!(clasificar_respuesta_ruc(200, None), ConsultaRucRegistro::NoDisponible));
+        assert!(matches!(
+            clasificar_respuesta_ruc(200, cuerpo(json!({ "success": true, "data": {} }))),
+            ConsultaRucRegistro::NoDisponible
+        ));
+    }
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;

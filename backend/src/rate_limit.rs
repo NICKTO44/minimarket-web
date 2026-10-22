@@ -184,6 +184,24 @@ pub async fn limitar_verificar(
 
     Ok(next.run(req).await)
 }
+/// Middleware de GET /registro/consultar-ruc: cada consulta puede gastar
+/// saldo de Factiliza y la ruta es pública, así que lleva su propio tope,
+/// más estricto que verificar-usuario: 15 consultas cada 10 minutos por IP
+/// (registrarse bien usa 1 o 2). Vive aquí y no en AppState para no
+/// cambiar la estructura que usan las pruebas.
+pub async fn limitar_consulta_ruc(req: Request, next: Next) -> Result<Response, (StatusCode, String)> {
+    static LIMITADOR: std::sync::OnceLock<Arc<LimitadorIntentos>> = std::sync::OnceLock::new();
+    let limitador = LIMITADOR.get_or_init(|| LimitadorIntentos::nuevo(15, Duration::from_secs(10 * 60)));
+
+    if !limitador.permitir(extraer_ip(&req)).await {
+        return Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            "Demasiadas consultas de RUC seguidas. Espera unos minutos.".into(),
+        ));
+    }
+    Ok(next.run(req).await)
+}
+
 /// Límite de negocios nuevos (POST /registro). Cada registro crea una base
 /// en Turso y da días de prueba gratis, y el limitador de login no lo frenaba
 /// (el registro nunca responde 401). Dos topes, en 24 horas:

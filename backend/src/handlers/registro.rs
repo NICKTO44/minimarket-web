@@ -186,6 +186,80 @@ pub async fn verificar_usuario(
     Json(VerificarUsuarioResponse { disponible })
 }
 
+#[derive(Deserialize)]
+pub struct ConsultarRucQuery {
+    pub ruc: String,
+}
+
+#[derive(Serialize)]
+pub struct ConsultarRucResponse {
+    /// "ENCONTRADO", "NO_EXISTE", "NO_DISPONIBLE" (Factiliza no respondió:
+    /// se puede seguir sin autocompletar) o "FORMATO_INVALIDO".
+    pub resultado: &'static str,
+    /// Mensaje para mostrar bajo el campo, cuando hay algo que decir.
+    pub mensaje: Option<String>,
+    /// Solo cuando resultado = "ENCONTRADO".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datos: Option<crate::logica::validacion_documento::DatosRucRegistro>,
+}
+
+const MENSAJE_RUC_NO_EXISTE: &str = "Ese RUC no figura en SUNAT. Revisa que esté bien escrito.";
+
+/// Tarjeta del formulario de registro: valida el formato del RUC y, si está
+/// bien, consulta sus datos. Ruta pública (quien se registra aún no tiene
+/// sesión) con su propio límite por IP. Siempre responde 200.
+pub async fn consultar_ruc(Query(params): Query<ConsultarRucQuery>) -> Json<ConsultarRucResponse> {
+    use crate::logica::validacion_documento::{consultar_ruc_registro, ConsultaRucRegistro};
+    use crate::logica::validacion_registro::error_formato_ruc;
+
+    if let Some(error) = error_formato_ruc(&params.ruc) {
+        return Json(ConsultarRucResponse { resultado: "FORMATO_INVALIDO", mensaje: Some(error.into()), datos: None });
+    }
+    Json(match consultar_ruc_registro(&params.ruc).await {
+        ConsultaRucRegistro::Encontrado(datos) => {
+            ConsultarRucResponse { resultado: "ENCONTRADO", mensaje: None, datos: Some(datos) }
+        }
+        ConsultaRucRegistro::NoExiste => {
+            ConsultarRucResponse { resultado: "NO_EXISTE", mensaje: Some(MENSAJE_RUC_NO_EXISTE.into()), datos: None }
+        }
+        ConsultaRucRegistro::NoDisponible => ConsultarRucResponse {
+            resultado: "NO_DISPONIBLE",
+            mensaje: Some("No pudimos consultar SUNAT en este momento. Puedes continuar y completar tus datos a mano.".into()),
+            datos: None,
+        },
+    })
+}
+
+/// Filtro de entrada del registro: revisa el FORMATO de lo que llega y que
+/// el RUC exista, antes de crear nada. No cambia ningún dato del payload ni
+/// los pasos de creación de abajo. Un error aquí es 400, así que el
+/// limitador de registros devuelve el cupo.
+async fn validar_datos_registro(payload: &RegistroRequest) -> Result<(), (StatusCode, String)> {
+    use crate::logica::validacion_documento::{consultar_ruc_registro, ConsultaRucRegistro};
+    use crate::logica::validacion_registro::{error_formato_ruc, error_nombre, error_usuario};
+
+    let error = |m: String| Err((StatusCode::BAD_REQUEST, m));
+
+    let ruc = payload.ruc.as_deref().unwrap_or("");
+    if let Some(m) = error_formato_ruc(ruc) {
+        return error(m.into());
+    }
+    if let Some(m) = error_nombre(&payload.nombre_negocio, "El nombre del negocio") {
+        return error(m);
+    }
+    if let Some(m) = error_nombre(&payload.nombre_completo, "Tu nombre") {
+        return error(m);
+    }
+    if let Some(m) = error_usuario(&payload.usuario) {
+        return error(m.into());
+    }
+    // Solo bloquea si Factiliza dice que no existe; si no responde, sigue.
+    if let ConsultaRucRegistro::NoExiste = consultar_ruc_registro(ruc).await {
+        return error(MENSAJE_RUC_NO_EXISTE.into());
+    }
+    Ok(())
+}
+
 /// Punto de entrada público: intenta el registro completo y, si algo
 /// falla en cualquier paso, deshace automáticamente lo que ya se haya
 /// creado (fila central, índice de usuario, y la base de Turso misma) en
@@ -204,6 +278,9 @@ pub async fn registrar_negocio(
             "Completa todos los campos (la contraseña debe tener al menos 6 caracteres)".into(),
         ));
     }
+
+    // RUC obligatorio y real, nombres y usuario que no sean texto al azar.
+    validar_datos_registro(&payload).await?;
 
     // El usuario tiene que estar libre en toda la plataforma.
     if state.tiendas.buscar_por_usuario(&payload.usuario).await.is_ok() {

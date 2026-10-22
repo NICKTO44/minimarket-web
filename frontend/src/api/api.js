@@ -106,6 +106,21 @@ export const api = {
     }
     return data;
   },
+  // Tarjeta del RUC en el registro. Nunca lanza: si el servidor no responde
+  // o pone el límite de consultas, devuelve NO_DISPONIBLE con el mensaje.
+  consultarRucRegistro: async (ruc) => {
+    try {
+      const res = await fetch(`${API_URL}/registro/consultar-ruc?ruc=${encodeURIComponent(ruc)}`);
+      const data = await leerRespuesta(res);
+      if (res.ok && data && typeof data === 'object') return data;
+      return {
+        resultado: 'NO_DISPONIBLE',
+        mensaje: typeof data === 'string' && data ? data : 'No pudimos consultar SUNAT en este momento. Puedes continuar.',
+      };
+    } catch {
+      return { resultado: 'NO_DISPONIBLE', mensaje: 'No pudimos consultar SUNAT en este momento. Puedes continuar.' };
+    }
+  },
   productos: () => request('/productos'),
   clientesBuscar: (q) => request(`/clientes?q=${encodeURIComponent(q)}`),
   clienteCrear: (cliente) => request('/clientes', { method: 'POST', body: JSON.stringify(cliente) }),
