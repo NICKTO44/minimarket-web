@@ -63,10 +63,94 @@ pub async fn ventas_por_rango(
             pago_efectivo_metodo: row.get::<Option<String>>(10).ok().flatten(),
             cajero: row.get(5).unwrap_or_default(),
             estado: row.get(6).unwrap_or_default(),
+            productos: Vec::new(),
+            comprobante: None,
         });
     }
 
+    // Productos y comprobante de cada venta, en dos consultas para todo el
+    // período. Son un detalle: si algo falla, la lista sale igual sin ellos.
+    let mut productos = productos_de_ventas(&conn, &rango).await;
+    let mut comprobantes = comprobantes_de_ventas(&conn, &rango).await;
+    for venta in ventas.iter_mut() {
+        venta.productos = productos.remove(&venta.id).unwrap_or_default();
+        venta.comprobante = comprobantes.remove(&venta.id);
+    }
+
     Ok(Json(ventas))
+}
+
+/// venta_id -> sus productos, en el orden en que se registraron.
+async fn productos_de_ventas(
+    conn: &libsql::Connection,
+    rango: &RangoFechas,
+) -> std::collections::HashMap<i64, Vec<ProductoDeVenta>> {
+    let consulta = |nombre: &str| {
+        format!(
+            "SELECT dv.venta_id, {}, dv.cantidad, dv.precio_unitario, dv.total_linea
+             FROM detalles_venta dv
+             JOIN ventas v ON v.id = dv.venta_id
+             LEFT JOIN productos p ON p.id = dv.producto_id
+             WHERE date(v.fecha_hora, '-5 hours') BETWEEN ?1 AND ?2
+             ORDER BY dv.id",
+            nombre
+        )
+    };
+    let parametros = || libsql::params![rango.fecha_inicio.clone(), rango.fecha_fin.clone()];
+    let mut mapa: std::collections::HashMap<i64, Vec<ProductoDeVenta>> = std::collections::HashMap::new();
+    // El nombre guardado en la venta (el producto pudo cambiar de nombre
+    // después); en bases sin esa columna, el del producto.
+    let filas = match conn.query(&consulta("COALESCE(dv.nombre_producto, p.nombre, 'Producto')"), parametros()).await {
+        Ok(f) => Some(f),
+        Err(_) => conn.query(&consulta("COALESCE(p.nombre, 'Producto')"), parametros()).await.ok(),
+    };
+    if let Some(mut filas) = filas {
+        while let Ok(Some(f)) = filas.next().await {
+            let Ok(venta_id) = f.get::<i64>(0) else { continue };
+            mapa.entry(venta_id).or_default().push(ProductoDeVenta {
+                nombre: f.get(1).unwrap_or_default(),
+                cantidad: f.get(2).unwrap_or(0.0),
+                precio_unitario: f.get(3).unwrap_or(0.0),
+                subtotal: f.get(4).unwrap_or(0.0),
+            });
+        }
+    }
+    mapa
+}
+
+/// venta_id -> su comprobante electrónico. Si una venta tiene más de uno
+/// (por ejemplo, se volvió a emitir), queda el último.
+async fn comprobantes_de_ventas(
+    conn: &libsql::Connection,
+    rango: &RangoFechas,
+) -> std::collections::HashMap<i64, ComprobanteDeVenta> {
+    let mut mapa = std::collections::HashMap::new();
+    let Ok(mut filas) = conn
+        .query(
+            "SELECT c.venta_id, c.tipo, c.serie, c.numero, c.estado
+             FROM comprobantes_electronicos c
+             JOIN ventas v ON v.id = c.venta_id
+             WHERE date(v.fecha_hora, '-5 hours') BETWEEN ?1 AND ?2
+             ORDER BY c.id",
+            libsql::params![rango.fecha_inicio.clone(), rango.fecha_fin.clone()],
+        )
+        .await
+    else {
+        return mapa;
+    };
+    while let Ok(Some(f)) = filas.next().await {
+        let Ok(venta_id) = f.get::<i64>(0) else { continue };
+        mapa.insert(
+            venta_id,
+            ComprobanteDeVenta {
+                tipo: f.get(1).unwrap_or_default(),
+                serie: f.get::<Option<String>>(2).ok().flatten(),
+                numero: f.get::<Option<i64>>(3).ok().flatten(),
+                estado: f.get(4).unwrap_or_default(),
+            },
+        );
+    }
+    mapa
 }
 
 pub async fn productos_mas_vendidos(

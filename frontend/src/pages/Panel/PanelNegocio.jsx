@@ -37,7 +37,10 @@ export default function PanelNegocio({ negocio, onVolver, onActualizado }) {
             {negocio.fecha_creacion && ` · cliente desde ${fechaCortaUtc(negocio.fecha_creacion)}`}
           </p>
         </div>
-        <span className={`pnl-chip pnl-chip-${s.tono} pnl-chip-grande`}>{s.texto}</span>
+        <span className="pnl-ficha-chips">
+          {negocio.tipo === 'DEMO' && <span className="pnl-chip pnl-chip-gris pnl-chip-grande">Demo</span>}
+          <span className={`pnl-chip pnl-chip-${s.tono} pnl-chip-grande`}>{s.texto}</span>
+        </span>
       </div>
 
       <div className="pnl-pestanas" role="tablist">
@@ -132,11 +135,59 @@ function Suscripcion({ negocio, onCambio }) {
     if (ok) hacer(() => panelApi.fijarVencimiento(negocio.id, nueva || null));
   };
 
+  const tipo = negocio.tipo || 'CLIENTE';
+  const cambiarTipo = async (nuevo) => {
+    if (nuevo === tipo) return;
+    const ok = await confirmar(
+      nuevo === 'DEMO'
+        ? {
+            titulo: '¿Marcar como demo?',
+            mensaje: 'Pasa a la lista de Demos y deja de vencer: queda activa y sin fecha de vencimiento, como Mi Minimarket.',
+            detalle: { etiqueta: 'Negocio', valor: negocio.nombre },
+            textoConfirmar: 'Marcar como demo',
+            tipo: 'normal',
+            icono: 'tiempo',
+          }
+        : {
+            titulo: '¿Marcar como cliente?',
+            mensaje: 'Pasa a la lista de Clientes. Su suscripción no cambia: si no tiene vencimiento, fíjale uno o renuévalo.',
+            detalle: { etiqueta: 'Negocio', valor: negocio.nombre },
+            textoConfirmar: 'Marcar como cliente',
+            tipo: 'normal',
+            icono: 'usuario',
+          }
+    );
+    if (ok) hacer(() => panelApi.cambiarTipo(negocio.id, nuevo));
+  };
+
   const n = Number(cantidad);
   const cantidadValida = Number.isInteger(n) && n >= 1 && n <= 120;
 
   return (
     <div className="pnl-rejilla">
+      <div className="pnl-caja">
+        <h2>Tipo de cuenta</h2>
+        <div className="pnl-segmentos" role="radiogroup" aria-label="Tipo de cuenta">
+          {[
+            ['CLIENTE', 'Cliente (negocio real)'],
+            ['DEMO', 'Demo (cuenta de prueba)'],
+          ].map(([valor, texto]) => (
+            <button
+              key={valor}
+              type="button"
+              role="radio"
+              aria-checked={tipo === valor}
+              className={tipo === valor ? 'activo' : ''}
+              disabled={ocupado}
+              onClick={() => cambiarTipo(valor)}
+            >
+              {texto}
+            </button>
+          ))}
+        </div>
+        <p className="pnl-nota">Las demos se listan aparte y no vencen. Los negocios que se registran entran como clientes.</p>
+      </div>
+
       <UsoDelPlan uso={negocio.uso} />
 
       <div className="pnl-caja">

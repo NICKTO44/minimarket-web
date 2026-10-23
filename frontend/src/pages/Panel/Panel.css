@@ -1088,3 +1088,28 @@ button.pnl-fila:hover {
 .pnl-paso .pnl-nota + .pnl-boton {
   margin-top: 10px;
 }
+
+/* Clientes / Demos, encima de las tarjetas de la lista. */
+.pnl-grupos {
+  margin-bottom: 14px;
+}
+
+.pnl-grupo-numero {
+  margin-left: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e3e6eb;
+  font-size: 12px;
+}
+
+.pnl-segmentos button.activo .pnl-grupo-numero {
+  background: #e8f6ed;
+  color: var(--pnl-verde);
+}
+
+.pnl-ficha-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}

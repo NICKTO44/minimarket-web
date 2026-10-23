@@ -162,6 +162,9 @@ pub struct NegocioPanel {
     pub acceso: String,
     pub motivo: Option<String>,
     pub usuarios: Vec<String>,
+    /// "CLIENTE" (negocio real) o "DEMO" (cuenta de prueba que se muestra a
+    /// los interesados). Solo organiza el panel; no cambia lo que puede hacer.
+    pub tipo: String,
     pub facturacion: FacturacionResumen,
     /// Boletas y facturas del ciclo frente a su plan. None si no se pudo
     /// leer su base.
@@ -241,6 +244,15 @@ pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<
             }
         }
     }
+    // Tipo (columna que crea el servidor al arrancar; si faltara, todos CLIENTE).
+    let mut tipos: HashMap<i64, String> = HashMap::new();
+    if let Ok(mut filas) = central.query("SELECT id, tipo FROM tiendas", ()).await {
+        while let Ok(Some(f)) = filas.next().await {
+            if let (Ok(id), Ok(tipo)) = (f.get::<i64>(0), f.get::<String>(1)) {
+                tipos.insert(id, tipo);
+            }
+        }
+    }
     let mut usuarios: HashMap<i64, Vec<String>> = HashMap::new();
     let mut filas = central.query("SELECT tienda_id, usuario FROM usuarios_indice ORDER BY usuario", ()).await.map_err(interno)?;
     while let Some(f) = filas.next().await.map_err(interno)? {
@@ -273,6 +285,7 @@ pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<
                 acceso,
                 motivo,
                 usuarios: usuarios.remove(&t.id).unwrap_or_default(),
+                tipo: tipos.remove(&t.id).unwrap_or_else(|| TIPO_CLIENTE.to_string()),
                 facturacion,
                 uso,
             }
@@ -382,6 +395,84 @@ pub async fn fijar_vencimiento(State(state): State<Arc<AppState>>, Path(id): Pat
         None => format!("{} queda sin fecha de vencimiento.", nombre),
     };
     Ok(Json(SuscripcionCambiada { estado, fecha_vencimiento: fecha, mensaje }))
+}
+
+// ---------------------------------------------------------------------
+// Tipo de negocio: CLIENTE (real) o DEMO (cuenta de prueba)
+// ---------------------------------------------------------------------
+
+pub const TIPO_CLIENTE: &str = "CLIENTE";
+pub const TIPO_DEMO: &str = "DEMO";
+
+/// Al arrancar: crea la columna `tipo` en la central si falta. Todos los
+/// negocios existentes y los que se registren quedan como CLIENTE; las demos
+/// se marcan desde el panel. Solo agrega (regla de migraciones del
+/// blue-green): la versión anterior del backend la ignora.
+pub async fn preparar_tipos(conn: &libsql::Connection) -> Result<(), String> {
+    match conn
+        .execute(
+            "ALTER TABLE tiendas ADD COLUMN tipo TEXT NOT NULL DEFAULT 'CLIENTE' CHECK (tipo IN ('CLIENTE', 'DEMO'))",
+            (),
+        )
+        .await
+    {
+        Ok(_) => Ok(()),
+        Err(e) if e.to_string().contains("duplicate column") => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct CambiarTipo {
+    pub tipo: String,
+}
+
+#[derive(Serialize)]
+pub struct TipoCambiado {
+    pub tipo: String,
+    pub estado: String,
+    pub fecha_vencimiento: Option<String>,
+    pub mensaje: String,
+}
+
+/// PUT /panel/negocios/:id/tipo — marca un negocio como CLIENTE o DEMO.
+/// Una DEMO no vence: se deja ACTIVA y sin fecha de vencimiento, igual que
+/// Mi Minimarket (así no hace falta tocar la lógica de licencias). Al volver
+/// a CLIENTE no se cambia su suscripción: se le fija una con los controles
+/// de siempre.
+pub async fn cambiar_tipo(State(state): State<Arc<AppState>>, Path(id): Path<i64>, Json(datos): Json<CambiarTipo>) -> Result<Json<TipoCambiado>, Fallo> {
+    let tipo = datos.tipo.trim().to_uppercase();
+    if tipo != TIPO_CLIENTE && tipo != TIPO_DEMO {
+        return Err(malo("Tipo no válido: CLIENTE o DEMO."));
+    }
+    let (estado, fecha, nombre) = datos_suscripcion(&state, id).await?;
+    let conn = state.tiendas.conexion_central().map_err(interno)?;
+    let respuesta = if tipo == TIPO_DEMO {
+        conn.execute(
+            "UPDATE tiendas SET tipo = 'DEMO', estado = 'ACTIVO', fecha_vencimiento = NULL WHERE id = ?1",
+            libsql::params![id],
+        )
+        .await
+        .map_err(interno)?;
+        TipoCambiado {
+            tipo,
+            estado: "ACTIVO".into(),
+            fecha_vencimiento: None,
+            mensaje: format!("{} es ahora una demo: activa y sin vencimiento.", nombre),
+        }
+    } else {
+        conn.execute("UPDATE tiendas SET tipo = 'CLIENTE' WHERE id = ?1", libsql::params![id])
+            .await
+            .map_err(interno)?;
+        let mensaje = if fecha.is_none() {
+            format!("{} es ahora un cliente. No tiene vencimiento: fíjale uno o renuévalo.", nombre)
+        } else {
+            format!("{} es ahora un cliente.", nombre)
+        };
+        TipoCambiado { tipo, estado, fecha_vencimiento: fecha, mensaje }
+    };
+    state.tiendas.invalidar_metadata(id).await;
+    Ok(Json(respuesta))
 }
 
 #[derive(Deserialize)]

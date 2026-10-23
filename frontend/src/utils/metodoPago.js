@@ -110,3 +110,20 @@ export function ventasDeCajaPorMetodo(caja) {
   if (sinSeparar !== 0) filas.push({ clave: 'YAPE_PLIN', label: 'Yape/Plin (sin separar)', valor: sinSeparar });
   return filas;
 }
+
+/**
+ * Cómo se repartió el pago de una venta: [{ metodo, monto }]. Sigue la misma
+ * regla que "Ventas por método" del servidor (pagos_por_metodo): un pago
+ * mixto son dos partes, la de pago_efectivo (con su medio; sin medio =
+ * efectivo) y la de pago_otro; al crédito, la segunda parte es 'CREDITO'.
+ */
+export function partesDelPago(venta) {
+  if (!venta) return [];
+  const total = Number(venta.total) || 0;
+  if (venta.metodo_pago !== 'MIXTO') return [{ metodo: venta.metodo_pago, monto: total }];
+  if (venta.pago_efectivo == null || venta.pago_otro == null) return [{ metodo: 'MIXTO', monto: total }];
+  return [
+    { metodo: venta.pago_efectivo_metodo || 'EFECTIVO', monto: Number(venta.pago_efectivo) || 0 },
+    { metodo: venta.pago_otro_metodo || 'MIXTO', monto: Number(venta.pago_otro) || 0 },
+  ].filter((p) => p.monto > 0);
+}

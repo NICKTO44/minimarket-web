@@ -32,7 +32,10 @@ CREATE TABLE IF NOT EXISTS tiendas (
     fecha_creacion TEXT NOT NULL DEFAULT (datetime('now')),
     estado TEXT NOT NULL DEFAULT 'ACTIVO' CHECK (estado IN ('ACTIVO', 'RESTRINGIDO', 'SUSPENDIDO')),
     fecha_vencimiento TEXT,
-    slug TEXT
+    slug TEXT,
+    -- CLIENTE (negocio real) o DEMO (cuenta de prueba). La agrega el backend
+    -- al arrancar si falta (handlers/panel.rs, preparar_tipos).
+    tipo TEXT NOT NULL DEFAULT 'CLIENTE' CHECK (tipo IN ('CLIENTE', 'DEMO'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tiendas_slug ON tiendas (slug);
 

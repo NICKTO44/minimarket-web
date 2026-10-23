@@ -9,6 +9,9 @@ export default function PanelNegocios({ onAbrir }) {
   const [error, setError] = useState('');
   const [buscar, setBuscar] = useState('');
   const [filtro, setFiltro] = useState('TODOS');
+  // Clientes (negocios reales) o Demos (cuentas de prueba): todo lo de abajo
+  // (contadores, filtros y búsqueda) es dentro del grupo elegido.
+  const [grupo, setGrupo] = useState('CLIENTE');
   const [cargando, setCargando] = useState(false);
 
   const cargar = async () => {
@@ -34,8 +37,17 @@ export default function PanelNegocios({ onAbrir }) {
     };
   }, []);
 
+  const tipoDe = (n) => n.tipo || 'CLIENTE';
+  const porGrupo = useMemo(
+    () => ({
+      CLIENTE: (negocios || []).filter((n) => tipoDe(n) === 'CLIENTE'),
+      DEMO: (negocios || []).filter((n) => tipoDe(n) === 'DEMO'),
+    }),
+    [negocios]
+  );
+
   const conteo = useMemo(() => {
-    const lista = negocios || [];
+    const lista = porGrupo[grupo];
     const tono = (n) => situacion(n).tono;
     return {
       TODOS: lista.length,
@@ -44,11 +56,11 @@ export default function PanelNegocios({ onAbrir }) {
       DIRECTO: lista.filter((n) => n.facturacion?.modo === 'DIRECTO').length,
       EXCESO: lista.filter((n) => n.uso?.extra > 0).length,
     };
-  }, [negocios]);
+  }, [porGrupo, grupo]);
 
   const visibles = useMemo(() => {
     const texto = buscar.trim().toLowerCase();
-    return (negocios || [])
+    return porGrupo[grupo]
       .filter((n) => {
         if (filtro === 'AL_DIA') return situacion(n).tono === 'verde';
         if (filtro === 'ATENCION') return situacion(n).tono !== 'verde';
@@ -61,7 +73,7 @@ export default function PanelNegocios({ onAbrir }) {
           !texto ||
           [n.nombre, n.identificador, n.facturacion?.ruc, ...(n.usuarios || [])].some((v) => (v || '').toLowerCase().includes(texto))
       );
-  }, [negocios, buscar, filtro]);
+  }, [porGrupo, grupo, buscar, filtro]);
 
   const FILTROS = [
     ['TODOS', 'Todos'],
@@ -81,6 +93,27 @@ export default function PanelNegocios({ onAbrir }) {
         <button type="button" className="pnl-boton" onClick={cargar} disabled={cargando}>
           <RefreshCw size={15} className={cargando ? 'pnl-girando' : ''} /> Actualizar
         </button>
+      </div>
+
+      <div className="pnl-segmentos pnl-grupos" role="radiogroup" aria-label="Tipo de negocio">
+        {[
+          ['CLIENTE', 'Clientes'],
+          ['DEMO', 'Demos'],
+        ].map(([valor, texto]) => (
+          <button
+            key={valor}
+            type="button"
+            role="radio"
+            aria-checked={grupo === valor}
+            className={grupo === valor ? 'activo' : ''}
+            onClick={() => {
+              setGrupo(valor);
+              setFiltro('TODOS');
+            }}
+          >
+            {texto} <span className="pnl-grupo-numero">{negocios ? porGrupo[valor].length : '—'}</span>
+          </button>
+        ))}
       </div>
 
       <div className="pnl-resumen">
@@ -142,7 +175,15 @@ export default function PanelNegocios({ onAbrir }) {
               </button>
             );
           })}
-          {visibles.length === 0 && <p className="pnl-tenue pnl-vacio">Ningún negocio coincide.</p>}
+          {visibles.length === 0 && (
+            <p className="pnl-tenue pnl-vacio">
+              {porGrupo[grupo].length === 0
+                ? grupo === 'DEMO'
+                  ? 'Todavía no hay demos. Marca una cuenta como demo desde su ficha.'
+                  : 'Todavía no hay clientes.'
+                : 'Ningún negocio coincide.'}
+            </p>
+          )}
         </div>
       )}
     </section>

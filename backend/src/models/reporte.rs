@@ -15,6 +15,29 @@ pub struct VentaResumen {
     pub pago_efectivo_metodo: Option<String>,
     pub cajero: String,
     pub estado: String,
+    /// Lo que se vendió (para revisar la venta desde Reportes).
+    pub productos: Vec<ProductoDeVenta>,
+    /// Boleta o factura emitida para la venta, si hubo. None = solo ticket.
+    pub comprobante: Option<ComprobanteDeVenta>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProductoDeVenta {
+    pub nombre: String,
+    pub cantidad: f64,
+    pub precio_unitario: f64,
+    /// Total de la línea (ya con su descuento, si tuvo).
+    pub subtotal: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ComprobanteDeVenta {
+    /// BOLETA | FACTURA
+    pub tipo: String,
+    pub serie: Option<String>,
+    pub numero: Option<i64>,
+    /// PENDIENTE | ACEPTADO | RECHAZADO | ERROR
+    pub estado: String,
 }
 
 #[derive(Debug, Serialize)]

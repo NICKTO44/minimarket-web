@@ -98,6 +98,8 @@ function App() {
   const [pantalla, setPantalla] = useState('RESUMEN');
   // Reportes → Ganancias pide abrir Productos ya filtrado por "sin precio de compra".
   const [productosSinPrecio, setProductosSinPrecio] = useState(false);
+  // Medio de pago con el que abrir Reportes (desde el Resumen).
+  const [metodoReporte, setMetodoReporte] = useState(null);
   const [configuracionTienda, setConfiguracionTienda] = useState(null);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
   const [vistaAuth, setVistaAuth] = useState('login');
@@ -603,7 +605,15 @@ function App() {
               onVolverAMesas={restaurante ? () => setPantalla('MESAS') : null}
             />
           ))}
-        {pantallaVisible === 'RESUMEN' && <Resumen onIrA={setPantalla} />}
+        {pantallaVisible === 'RESUMEN' && (
+          <Resumen
+            onIrA={setPantalla}
+            onVerMetodo={(metodo) => {
+              setMetodoReporte(metodo);
+              setPantalla('REPORTES');
+            }}
+          />
+        )}
         {pantallaVisible === 'CAJA' && <Caja usuario={usuarioActual} />}
         {pantallaVisible === 'HISTORIAL_CAJA' && <HistorialCaja />}
         {pantallaVisible === 'PRODUCTOS' && (
@@ -719,6 +729,8 @@ function App() {
         {pantallaVisible === 'REPORTES' && (
           <Reportes
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS) && usuarioActual?.rol_id === 1}
+            metodoInicial={metodoReporte}
+            onFiltroUsado={() => setMetodoReporte(null)}
             onVerSinPrecio={() => {
               setProductosSinPrecio(true);
               setPantalla('PRODUCTOS');

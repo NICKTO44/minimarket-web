@@ -26,7 +26,8 @@ const BARRA_DE_METODO = {
   YAPE_PLIN: { label: 'Yape/Plin', color: '#6b7280' },
 };
 
-export default function Resumen({ onIrA }) {
+// onVerMetodo(metodo): abrir Reportes con las ventas de hoy de ese medio.
+export default function Resumen({ onIrA, onVerMetodo }) {
   const [caja, setCaja] = useState(null);
   const [estadisticas, setEstadisticas] = useState(null);
   const [stockBajo, setStockBajo] = useState([]);
@@ -112,19 +113,24 @@ export default function Resumen({ onIrA }) {
             </div>
             <div className="res-chart-barras">
               {ventasPorMetodo.map((m) => (
-                <div key={m.clave} className="res-barra-fila">
-                  <span className="res-barra-label" title={m.ayuda}>
-                    {m.label}
-                  </span>
-                  <div className="res-barra-pista">
-                    <div
+                <button
+                  key={m.clave}
+                  type="button"
+                  className="res-barra-fila res-barra-boton"
+                  title={m.ayuda || `Ver las ventas de hoy por ${m.label}`}
+                  onClick={() => onVerMetodo?.(m.clave)}
+                >
+                  <span className="res-barra-label">{m.label}</span>
+                  <span className="res-barra-pista">
+                    <span
                       className="res-barra-relleno"
                       style={{ width: `${(Math.max(0, m.valor) / maxMetodo) * 100}%`, background: m.color }}
                     />
-                  </div>
+                  </span>
                   <span className="res-barra-valor">S/ {m.valor.toFixed(2)}</span>
-                </div>
+                </button>
               ))}
+              <p className="res-barra-nota">Toca un método para ver qué ventas son.</p>
             </div>
           </div>
         )}

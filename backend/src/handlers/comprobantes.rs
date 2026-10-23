@@ -9,6 +9,9 @@ use crate::models::comprobante::ComprobanteResumen;
 pub struct FiltrosComprobante {
     pub tipo: Option<String>,
     pub estado: Option<String>,
+    /// Solo el comprobante (o la nota simple) de esa venta. Lo usa Reportes
+    /// para mostrar el documento en modo lectura.
+    pub venta_id: Option<i64>,
 }
 
 pub async fn listar_comprobantes(
@@ -62,6 +65,10 @@ pub async fn listar_comprobantes(
         }
         if filtros.estado.is_some() {
             sql.push_str(&format!(" AND ce.estado = ?{}", idx));
+        }
+        // Es un número (i64 ya validado por el Query), no texto del usuario.
+        if let Some(venta_id) = filtros.venta_id {
+            sql.push_str(&format!(" AND v.id = {}", venta_id));
         }
         sql.push_str(" ORDER BY v.fecha_hora DESC LIMIT 100");
         sql

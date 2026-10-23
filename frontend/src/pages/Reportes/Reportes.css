@@ -299,3 +299,288 @@
   color: #6b7280;
   line-height: 1.4;
 }
+
+/* ---------------------------------------------------------------
+   Ventas por método: filtro, comprobante y productos de cada venta
+   --------------------------------------------------------------- */
+
+.rep-solo-lector {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.rep-celda-accion {
+  text-align: right;
+}
+
+.rep-boton-ver {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid #e4e6eb;
+  background: white;
+  color: #16181d;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.rep-boton-ver.activo {
+  border-color: #16181d;
+  background: #16181d;
+  color: white;
+}
+
+.rep-fila-activa td {
+  background: var(--color-primario-suave, #eaf7ef);
+}
+
+.rep-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-bottom: 12px;
+}
+
+.rep-filtro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.rep-filtro-titulo {
+  margin-right: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.rep-chip {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid #e4e6eb;
+  background: white;
+  color: #16181d;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rep-chip.activo {
+  border-color: #16181d;
+  background: #16181d;
+  color: white;
+}
+
+.rep-franja {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 16px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #eaf7ef;
+  border: 1px solid #bbe5c8;
+  color: #166534;
+  font-size: 14px;
+}
+
+.rep-franja span {
+  font-size: 12.5px;
+}
+
+.rep-como-pago {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.rep-etiqueta-mixto {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1f2f4;
+  color: #4b5563;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rep-pieza.resaltada {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #eaf7ef;
+  color: #166534;
+  font-weight: 700;
+}
+
+.rep-pieza.atenuada {
+  color: #6b7280;
+}
+
+.rep-comp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rep-comp small,
+.rep-venta-datos small[class^='rep-comp-'] {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.rep-comp-ok {
+  color: #15803d;
+}
+
+.rep-comp-aviso {
+  color: #b45309;
+}
+
+.rep-comp-error {
+  color: #b91c1c;
+}
+
+.rep-comp-tenue {
+  color: #6b7280;
+}
+
+.rep-cobrado {
+  font-weight: 700;
+}
+
+.rep-total-tenue {
+  color: #6b7280;
+}
+
+.rep-fila-abierta td {
+  border-bottom-color: transparent;
+}
+
+.rep-fila-detalle td {
+  background: #fafbfc;
+  padding: 4px 14px 14px 28px;
+}
+
+.rep-productos-tabla {
+  width: 100%;
+  max-width: 640px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.rep-productos-tabla th {
+  padding: 8px 8px 6px 0;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+}
+
+.rep-productos-tabla td {
+  padding: 6px 8px 6px 0;
+  border-top: 1px solid #eef0f3;
+}
+
+.rep-productos-tabla .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rep-pie-texto {
+  font-weight: 700;
+}
+
+.rep-pie-total {
+  font-weight: 800;
+  font-size: 15px;
+}
+
+/* En celular, las ventas van como tarjetas en vez de tabla. */
+.rep-ventas-tarjetas {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rep-venta-tarjeta {
+  background: white;
+  border: 1px solid #e4e6eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.rep-venta-cabeza {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rep-venta-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rep-venta-datos strong {
+  font-size: 14px;
+}
+
+.rep-venta-datos small {
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+.rep-venta-monto {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rep-venta-tarjeta .rep-productos {
+  padding: 4px 14px 12px;
+  background: #fafbfc;
+  border-top: 1px solid #eef0f3;
+}
+
+@media (max-width: 640px) {
+  .rep-ventas-tabla {
+    display: none;
+  }
+
+  .rep-ventas-tarjetas {
+    display: flex;
+  }
+}
+
+.rep-ventas-tabla .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rep-productos-acciones {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 0 4px;
+}
