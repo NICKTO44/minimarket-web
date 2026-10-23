@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import QRCode from 'qrcode';
 import { montoEnLetras } from '../utils/numeroALetras';
 import { construirCadenaQrSunat } from '../utils/qrSunat';
-import { nombreMetodo } from '../utils/metodoPago';
+import { nombreMetodo, pagoParaImprimir } from '../utils/metodoPago';
 import { desgloseDeComprobante, etiquetaTasa } from '../utils/igv';
 import { formatoCantidad, formatoPrecio, subtotalLinea } from '../utils/medidas';
 
@@ -37,6 +37,7 @@ export default function Recibo({
   // la forma de pago y la leyenda de representación impresa.
   const esFactura = comprobante?.tipo === 'FACTURA';
   const formaPago = venta.credito || venta.metodoPago === 'CREDITO' ? 'CRÉDITO' : 'CONTADO';
+  const pago = pagoParaImprimir(venta);
   const encabezado = comprobante
     ? `${comprobante.tipo === 'FACTURA' ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'}`
     : 'NOTA DE VENTA (sin comprobante tributario)';
@@ -261,18 +262,20 @@ export default function Recibo({
         </div>
       )}
 
-      {venta.metodoPago === 'MIXTO' && venta.pagoOtro != null && (
-        <div className="recibo-detalle-pago">
-          <span>{nombreMetodo(venta.pagoOtroMetodo)}</span>
-          <span>S/.{venta.pagoOtro.toFixed(2)}</span>
-        </div>
-      )}
-      {/* Mixto sin efectivo (p. ej. Yape + Plin): la otra parte también. */}
-      {venta.metodoPago === 'MIXTO' && venta.pagoSegundo != null && venta.pagoSegundoMetodo && venta.pagoSegundoMetodo !== 'EFECTIVO' && (
-        <div className="recibo-detalle-pago">
-          <span>{nombreMetodo(venta.pagoSegundoMetodo)}</span>
-          <span>S/.{venta.pagoSegundo.toFixed(2)}</span>
-        </div>
+      {/* Con qué pagó el cliente: "Yape", o "Pago mixto" con cada parte. */}
+      {pago && (
+        <>
+          <div className="recibo-fila-meta">
+            <span>Pago</span>
+            <span>{pago.titulo}</span>
+          </div>
+          {pago.partes.map((p, i) => (
+            <div className="recibo-detalle-pago" key={i}>
+              <span>{p.nombre}</span>
+              <span>S/.{p.monto.toFixed(2)}</span>
+            </div>
+          ))}
+        </>
       )}
       {venta.credito && (
         <div className="recibo-detraccion">

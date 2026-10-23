@@ -67,6 +67,45 @@ export function describirPago(venta) {
   return `Mixto: ${segundo} S/ ${Number(venta.pago_efectivo).toFixed(2)} + ${nombreMetodo(venta.pago_otro_metodo)} S/ ${Number(venta.pago_otro).toFixed(2)}`;
 }
 
+/**
+ * Cómo pagó el cliente, para imprimirlo en el ticket, la boleta/factura A4
+ * y la nota de venta. Acepta la venta del POS (metodoPago, pagoSegundo,
+ * pagoOtro...) o la del servidor (metodo_pago, pago_efectivo, pago_otro...).
+ * Devuelve { titulo, partes: [{ nombre, monto }] } o null:
+ *  - Un solo medio: { titulo: 'Yape', partes: [] }.
+ *  - Mixto: { titulo: 'Pago mixto', partes: [Yape S/ 50, Plin S/ 85] }.
+ *  - Al crédito recién vendido (venta.credito): null, ya tiene su bloque.
+ */
+export function pagoParaImprimir(venta) {
+  if (!venta) return null;
+  const metodo = venta.metodoPago ?? venta.metodo_pago;
+  if (!metodo) return null;
+  const otro = Number(venta.pagoOtro ?? venta.pago_otro);
+  const otroMetodo = venta.pagoOtroMetodo ?? venta.pago_otro_metodo;
+  const segundo = Number(venta.pagoSegundo ?? venta.pago_efectivo);
+  const segundoMetodo = venta.pagoSegundoMetodo ?? venta.pago_efectivo_metodo ?? 'EFECTIVO';
+  if (venta.credito) return null;
+  if (metodo === METODO_CREDITO || otroMetodo === METODO_CREDITO) {
+    const adelanto = segundo > 0 ? [{ nombre: `Adelanto (${nombreMetodo(segundoMetodo)})`, monto: segundo }] : [];
+    return { titulo: 'Al crédito', partes: adelanto };
+  }
+  if (metodo !== 'MIXTO') return { titulo: nombreMetodo(metodo), partes: [] };
+  const partes = otroMetodo
+    ? [
+        { nombre: nombreMetodo(segundoMetodo), monto: segundo },
+        { nombre: nombreMetodo(otroMetodo), monto: otro },
+      ].filter((p) => Number.isFinite(p.monto) && p.monto > 0)
+    : [];
+  return { titulo: 'Pago mixto', partes };
+}
+
+/** El pago en una sola línea: "Yape" o "Pago mixto: Yape S/ 50.00 + Plin S/ 85.00". */
+export function textoPago(pago) {
+  if (!pago) return '';
+  if (!pago.partes.length) return pago.titulo;
+  return `${pago.titulo}: ${pago.partes.map((p) => `${p.nombre} S/ ${p.monto.toFixed(2)}`).join(' + ')}`;
+}
+
 const centimos = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /**

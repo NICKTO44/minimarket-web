@@ -5,6 +5,7 @@
 // exactamente el mismo documento (y el mismo QR).
 import { api } from '../api/api';
 import { fechaHoraLima } from './formato';
+import { pagoParaImprimir, textoPago } from './metodoPago';
 
 // Comprobante con hoja A4 (además del ticket de 80 mm):
 // - la factura de FacturaLibre (su PDF oficial);
@@ -55,7 +56,18 @@ export const datosDelTicket = async (comp) => {
     // Fecha y hora de emisión (no la del momento en que se reimprime).
     fecha: fechaHoraLima(comp.fecha_emision),
     // metodoPago: para la "Forma de pago" de la factura (contado o crédito).
-    venta: { folio: detalle.folio, total: detalle.total, montoRecibido: null, cambio: null, metodoPago: detalle.metodo_pago },
+    venta: {
+      folio: detalle.folio,
+      total: detalle.total,
+      montoRecibido: null,
+      cambio: null,
+      metodoPago: detalle.metodo_pago,
+      // Con qué pagó el cliente (un medio o las dos partes de un mixto).
+      pagoOtro: detalle.pago_otro,
+      pagoOtroMetodo: detalle.pago_otro_metodo,
+      pagoSegundo: detalle.pago_efectivo,
+      pagoSegundoMetodo: detalle.pago_efectivo_metodo,
+    },
     items: detalle.productos.map((p) => {
       // Descuento de la línea (un paquete): lo cobrado es `subtotal`. Sin
       // descuento la diferencia es 0 y el ticket sale como siempre.
@@ -86,4 +98,13 @@ export const datosDelTicket = async (comp) => {
       : null,
     cliente,
   };
+};
+
+// Con qué pagó el cliente, en texto para la hoja A4 ("Yape", "Pago mixto:
+// Yape S/ 50.00 + Plin S/ 85.00"). Si no se puede leer la venta, la hoja
+// sale igual, sin esa línea.
+export const pagoDeVenta = async (folio) => {
+  if (!folio) return null;
+  const detalle = await api.ventaParaDevolucion(folio).catch(() => null);
+  return textoPago(pagoParaImprimir(detalle)) || null;
 };

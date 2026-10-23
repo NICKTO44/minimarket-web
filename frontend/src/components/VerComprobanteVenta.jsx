@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, API_URL } from '../api/api';
-import { datosDelTicket, facturaConA4 } from '../utils/documentoVenta';
+import { datosDelTicket, facturaConA4, pagoDeVenta } from '../utils/documentoVenta';
 import { datosA4DeDocumento, imprimirComprobanteA4 } from '../utils/facturaA4';
 import { descargarArchivo, pdfDeVenta } from '../utils/pdfTicket';
 import './VerComprobanteVenta.css';
@@ -110,6 +110,7 @@ export default function VerComprobanteVenta({ venta, onCerrar }) {
       const documento = await api.comprobanteDocumento(comp.id);
       const datos = await datosA4DeDocumento(documento, {
         hash: comp.hash,
+        pago: await pagoDeVenta(comp.folio_venta || venta.folio),
         telefono: cfg?.telefono,
         email: cfg?.email,
         logo: cfg?.logo_path ? `${API_URL}${cfg.logo_path}` : null,

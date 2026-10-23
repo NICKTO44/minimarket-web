@@ -7,7 +7,7 @@ import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
 import { ChevronRight, ShoppingCart } from 'lucide-react';
-import { METODOS_DE_ABONO, METODOS_DE_COBRO, METODOS_OTRO_MIXTO, METODOS_SEGUNDO_MIXTO, nombreMetodo } from '../../utils/metodoPago';
+import { METODOS_DE_ABONO, METODOS_DE_COBRO, METODOS_OTRO_MIXTO, METODOS_SEGUNDO_MIXTO, nombreMetodo, pagoParaImprimir, textoPago } from '../../utils/metodoPago';
 import { tituloPedido } from '../../utils/mesas';
 import { abreviaturaUnidad } from '../../utils/unidades';
 import { UNIDAD_PIE_TABLAR, formatoCantidad, formatoPrecio, leerCantidad, seVendeFraccionado, subtotalLinea } from '../../utils/medidas';
@@ -1631,6 +1631,7 @@ export default function POS({
       const documento = await api.comprobanteDocumento(comp.comprobante_id);
       const datos = await datosA4DeDocumento(documento, {
         hash: comp.hash,
+        pago: textoPago(pagoParaImprimir(ultimaVentaParaImprimir?.venta)) || null,
         telefono: cfgEmisor?.telefono || telefono,
         email: cfgEmisor?.email,
         logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,

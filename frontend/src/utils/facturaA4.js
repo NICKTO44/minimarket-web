@@ -161,6 +161,7 @@ export function htmlComprobanteA4(datos) {
         ${credito ? `<dt>Vencimiento</dt><dd>${escapar(cuotas[cuotas.length - 1].fecha)}</dd>` : ''}
         <dt>Moneda</dt><dd>Soles (PEN)</dd>
         ${esFactura ? `<dt>Forma de pago</dt><dd>${escapar(datos.formaPago || 'Contado')}</dd>` : ''}
+        ${datos.pago && comprobante.tipo !== 'NOTA_CREDITO' ? `<dt>Pago</dt><dd>${escapar(datos.pago)}</dd>` : ''}
       </dl>
     </div>`;
 
@@ -477,6 +478,9 @@ export async function datosA4DeDocumento(doc, extra = {}) {
       ? { porcentaje: doc.detraccion.percent, monto: doc.detraccion.mount, cuenta: doc.detraccion.ctaBanco }
       : null,
     qr,
+    // Con qué pagó el cliente, ya en texto ("Yape", "Pago mixto: ..."); lo
+    // pasa quien imprime (ver pagoDeVenta en documentoVenta.js).
+    pago: extra.pago || null,
   };
 }
 

@@ -14,6 +14,7 @@ import { construirCadenaQrSunat } from './qrSunat';
 import { NOMBRE_DOCUMENTO, lugarDeGuia, motivoDeGuia, numeroConCeros } from './guiaTexto';
 import { fechaCorta } from './formato';
 import { abreviaturaUnidad } from './unidades';
+import { pagoParaImprimir } from './metodoPago';
 
 const ANCHO = 226.77; // 80 mm en puntos
 const MARGEN = 11;
@@ -303,6 +304,14 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
     l.fila(`Detracción (${formatoCantidad(detraccion.detraccion_porcentaje)}%)`, soles(detraccion.detraccion_monto));
     if (detraccion.detraccion_cuenta) l.fila('Cta. Bco. de la Nación', detraccion.detraccion_cuenta);
     l.fila('Neto a pagar', soles(total - detraccion.detraccion_monto));
+  }
+
+  // Con qué pagó el cliente (igual que el ticket impreso, ver Recibo.jsx).
+  const pago = pagoParaImprimir(venta);
+  if (pago) {
+    l.espacio(2);
+    l.fila('Pago', pago.titulo);
+    for (const parte of pago.partes) l.fila(`  ${parte.nombre}`, soles(parte.monto));
   }
 
   l.linea({ doble: true });
