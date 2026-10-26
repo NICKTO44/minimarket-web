@@ -5,6 +5,7 @@ use crate::models::auth::Claims;
 use crate::tenants::TenantDb;
 use crate::models::producto::ProductoResponse;
 use crate::models::configuracion::AccionResponse;
+use crate::logica::imagen::{self, Salida};
 
 const ANCHO_MAXIMO: u32 = 800;
 const CALIDAD_JPEG: u8 = 80;
@@ -40,27 +41,30 @@ pub async fn subir_imagen_producto(
         return Err((StatusCode::BAD_REQUEST, "La imagen no puede pesar más de 10MB".into()));
     }
 
-    let img = image::load_from_memory(&bytes)
-        .map_err(|_| (StatusCode::BAD_REQUEST, "El archivo no es una imagen válida".to_string()))?;
+    // El producto tiene que existir en este negocio antes de guardar nada
+    // (antes se escribía el archivo con cualquier id).
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut filas = conn
+        .query("SELECT 1 FROM productos WHERE id = ?1", libsql::params![id])
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?.is_none() {
+        return Err((StatusCode::NOT_FOUND, "Ese producto no existe.".to_string()));
+    }
+    drop(filas);
 
-    let redimensionada = img.resize(ANCHO_MAXIMO, ANCHO_MAXIMO, image::imageops::FilterType::Lanczos3);
+    // Revisa medidas y formato antes de abrirla, con tope de memoria, en un
+    // hilo aparte y de a una (ver logica/imagen.rs).
+    let jpeg = imagen::procesar(bytes, ANCHO_MAXIMO, Salida::Jpeg(CALIDAD_JPEG))
+        .await
+        .map_err(|e| (e.status(), e.mensaje()))?;
 
     let carpeta = format!("uploads/productos/{}", claims.tienda_id);
-    std::fs::create_dir_all(&carpeta)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo crear la carpeta de imágenes: {}", e)))?;
-
     let ruta = format!("{}/{}.jpg", carpeta, id);
-    let mut salida = std::fs::File::create(&ruta)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo guardar el archivo: {}", e)))?;
-
-    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut salida, CALIDAD_JPEG);
-    encoder
-        .encode_image(&redimensionada)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al comprimir la imagen: {}", e)))?;
+    guardar(&carpeta, &ruta, jpeg).await?;
 
     let url_publica = format!("/uploads/productos/{}/{}.jpg", claims.tienda_id, id);
 
-    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     conn.execute(
         "UPDATE productos SET imagen_url = ?1, fecha_actualizacion = datetime('now','localtime') WHERE id = ?2",
         libsql::params![url_publica.clone(), id],
@@ -109,23 +113,14 @@ pub async fn subir_logo_tienda(
         return Err((StatusCode::BAD_REQUEST, "El logo no puede pesar más de 5MB".into()));
     }
 
-    let img = image::load_from_memory(&bytes)
-        .map_err(|_| (StatusCode::BAD_REQUEST, "El archivo no es una imagen válida".to_string()))?;
-
-    let redimensionada = img.resize(
-        ANCHO_MAXIMO_LOGO,
-        ANCHO_MAXIMO_LOGO,
-        image::imageops::FilterType::Lanczos3,
-    );
+    // PNG para conservar la transparencia (ver logica/imagen.rs).
+    let png = imagen::procesar(bytes, ANCHO_MAXIMO_LOGO, Salida::Png)
+        .await
+        .map_err(|e| (e.status(), e.mensaje()))?;
 
     let carpeta = format!("uploads/tienda/{}", claims.tienda_id);
-    std::fs::create_dir_all(&carpeta)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo crear la carpeta del logo: {}", e)))?;
-
     let ruta = format!("{}/logo.png", carpeta);
-    redimensionada
-        .save_with_format(&ruta, image::ImageFormat::Png)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo guardar el logo: {}", e)))?;
+    guardar(&carpeta, &ruta, png).await?;
 
     let url_publica = format!("/uploads/tienda/{}/logo.png", claims.tienda_id);
 
@@ -138,4 +133,19 @@ pub async fn subir_logo_tienda(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al guardar en base de datos: {}", e)))?;
 
     Ok(Json(AccionResponse { success: true, message: "Logo actualizado".into() }))
+}
+
+/// Escribe el archivo ya procesado. Se escribe aparte y luego se renombra:
+/// quien esté viendo la foto nunca recibe un archivo a medio escribir.
+async fn guardar(carpeta: &str, ruta: &str, contenido: Vec<u8>) -> Result<(), (StatusCode, String)> {
+    tokio::fs::create_dir_all(carpeta)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo crear la carpeta de imágenes: {}", e)))?;
+    let temporal = format!("{}.subiendo", ruta);
+    tokio::fs::write(&temporal, contenido)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo guardar el archivo: {}", e)))?;
+    tokio::fs::rename(&temporal, ruta)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo guardar el archivo: {}", e)))
 }

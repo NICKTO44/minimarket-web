@@ -9,6 +9,7 @@ import { METODOS_DE_ABONO, nombreMetodo } from '../../utils/metodoPago';
 import { enlaceWhatsapp } from '../../utils/vehiculos';
 import { imprimirTicket } from '../../utils/imprimirTicket';
 import { confirmar } from '../../utils/confirmar';
+import { comprimirImagen } from '../../utils/comprimirImagen';
 import '../../components/PantallaModulo.css';
 import '../../components/Recibo.css';
 import './Encargos.css';
@@ -602,7 +603,8 @@ function DetalleEncargo({ encargo, nombreTienda, onCambio, onCerrar, onEditar, o
 
   const subirFoto = async (archivo) => {
     if (!archivo) return;
-    await ejecutar(() => api.encargoSubirFoto(encargo.id, archivo));
+    // Se achica en el navegador: sube rápido aunque la foto sea pesada.
+    await ejecutar(async () => api.encargoSubirFoto(encargo.id, await comprimirImagen(archivo, { ladoMaximo: 1600 })));
     if (archivoRef.current) archivoRef.current.value = '';
   };
 

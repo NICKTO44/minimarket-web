@@ -845,10 +845,13 @@ pub async fn subir_foto(
     if bytes.len() > 10 * 1024 * 1024 {
         return Err(malo("La foto no puede pesar más de 10 MB."));
     }
-    let img = image::load_from_memory(&bytes).map_err(|_| malo("El archivo no es una imagen válida."))?;
-    let img = img.resize(1200, 1200, image::imageops::FilterType::Lanczos3);
+    // Revisa medidas y formato antes de abrirla, con tope de memoria, en un
+    // hilo aparte y de a una (ver logica/imagen.rs).
+    let jpeg = crate::logica::imagen::procesar(bytes, 1200, crate::logica::imagen::Salida::Jpeg(82))
+        .await
+        .map_err(|e| (e.status(), e.mensaje()))?;
     let carpeta = format!("uploads/encargos/{}", claims.tienda_id);
-    std::fs::create_dir_all(&carpeta).map_err(|e| e500(format!("No se pudo crear la carpeta de fotos: {}", e)))?;
+    tokio::fs::create_dir_all(&carpeta).await.map_err(|e| e500(format!("No se pudo crear la carpeta de fotos: {}", e)))?;
     let azar: String = {
         use rand::Rng;
         let mut r = rand::thread_rng();
@@ -856,10 +859,7 @@ pub async fn subir_foto(
     };
     let archivo = format!("{}-{}.jpg", id, azar);
     let ruta = format!("{}/{}", carpeta, archivo);
-    let mut salida = std::fs::File::create(&ruta).map_err(|e| e500(format!("No se pudo guardar la foto: {}", e)))?;
-    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut salida, 82)
-        .encode_image(&img.to_rgb8())
-        .map_err(|e| e500(format!("No se pudo comprimir la foto: {}", e)))?;
+    tokio::fs::write(&ruta, jpeg).await.map_err(|e| e500(format!("No se pudo guardar la foto: {}", e)))?;
     let url = format!("/uploads/encargos/{}/{}", claims.tienda_id, archivo);
     let anterior = foto_actual(&conn, id).await;
     conn.execute(

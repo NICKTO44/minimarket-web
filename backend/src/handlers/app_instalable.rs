@@ -163,7 +163,8 @@ pub async fn icono(
     let sin_logo = || (StatusCode::NOT_FOUND, "Este negocio no tiene logo.".to_string());
     let archivo = archivo_logo(negocio.logo_url.as_deref()).ok_or_else(sin_logo)?;
     let png = tokio::task::spawn_blocking(move || {
-        let logo = image::open(&archivo).map_err(|_| "sin logo".to_string())?;
+        // Con los mismos topes que una subida (ver logica/imagen.rs).
+        let logo = crate::logica::imagen::abrir_guardada(std::path::Path::new(&archivo)).map_err(|_| "sin logo".to_string())?;
         icono_cuadrado(&logo, tam)
     })
     .await
