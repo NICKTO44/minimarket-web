@@ -59,7 +59,9 @@ pub async fn uso_plan(
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "No se pudo consultar tu suscripción.".to_string()))?;
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    crate::logica::plan::uso_del_negocio(&conn, tienda.fecha_vencimiento.as_deref())
+    // Si no se pudiera leer la fecha de registro, se cuenta como antes.
+    let registro = state.tiendas.fecha_creacion(claims.tienda_id).await;
+    crate::logica::plan::uso_del_negocio(&conn, tienda.fecha_vencimiento.as_deref(), registro.as_deref())
         .await
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))

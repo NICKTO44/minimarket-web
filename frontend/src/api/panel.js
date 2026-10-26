@@ -89,4 +89,8 @@ export const panelApi = {
   },
   cambiarModo: (id, modo) => pedir(`/panel/negocios/${id}/facturacion/modo`, { metodo: 'PUT', cuerpo: { modo } }),
   probar: (id) => pedir(`/panel/negocios/${id}/facturacion/probar`, { metodo: 'POST' }),
+  // Usuarios del negocio y restablecer la contraseña de uno (el dueño que la olvidó).
+  usuarios: (id) => pedir(`/panel/negocios/${id}/usuarios`),
+  restablecerClave: (id, usuarioId, nueva) =>
+    pedir(`/panel/negocios/${id}/usuarios/${usuarioId}/clave`, { metodo: 'POST', cuerpo: { nueva } }),
 };

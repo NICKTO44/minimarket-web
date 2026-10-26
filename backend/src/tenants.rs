@@ -96,9 +96,9 @@ pub struct RegistroTiendas {
     central_db: libsql::Database,
     cache: RwLock<HashMap<i64, (TiendaConexion, Instant)>>,
     conexiones: RwLock<HashMap<i64, Arc<libsql::Database>>>,
-    /// (tienda_id, usuario_id) -> (activo, rol_id, cuándo se consultó).
-    /// Ver `estado_usuario`.
-    usuarios: RwLock<HashMap<(i64, i64), (bool, i64, Instant)>>,
+    /// (tienda_id, usuario_id) -> (activo, rol_id, token_version, cuándo se
+    /// consultó). Ver `estado_usuario`.
+    usuarios: RwLock<HashMap<(i64, i64), (bool, i64, i64, Instant)>>,
     clave_cifrado: [u8; 32],
 }
 
@@ -293,6 +293,17 @@ impl RegistroTiendas {
 
     /// Conexión directa a la base central (para el endpoint de registro,
     /// que necesita insertar la tienda nueva y su usuario en el índice).
+    /// `tiendas.fecha_creacion` (UTC) de un negocio: el día en que se
+    /// registró. None si no se pudo leer.
+    pub async fn fecha_creacion(&self, tienda_id: i64) -> Option<String> {
+        let conn = self.central_db.connect().ok()?;
+        let mut filas = conn
+            .query("SELECT fecha_creacion FROM tiendas WHERE id = ?1", libsql::params![tienda_id])
+            .await
+            .ok()?;
+        filas.next().await.ok()??.get::<String>(0).ok()
+    }
+
     pub fn conexion_central(&self) -> Result<libsql::Connection, String> {
         self.central_db.connect().map_err(|e| e.to_string())
     }
@@ -306,27 +317,37 @@ impl RegistroTiendas {
         tienda_id: i64,
         usuario_id: i64,
         db: &libsql::Database,
-    ) -> Result<Option<(bool, i64)>, String> {
-        if let Some((activo, rol_id, cuando)) = self.usuarios.read().await.get(&(tienda_id, usuario_id)) {
+    ) -> Result<Option<(bool, i64, i64)>, String> {
+        if let Some((activo, rol_id, tv, cuando)) = self.usuarios.read().await.get(&(tienda_id, usuario_id)) {
             if cuando.elapsed() < TTL_CACHE_USUARIO {
-                return Ok(Some((*activo, *rol_id)));
+                return Ok(Some((*activo, *rol_id, *tv)));
             }
         }
         let conn = db.connect().map_err(|e| e.to_string())?;
-        let mut rows = conn
-            .query("SELECT activo, rol_id FROM usuarios WHERE id = ?1", libsql::params![usuario_id])
+        // Con token_version (migración 0044). Si a este negocio aún no se le
+        // aplicó, se consulta como antes y la versión cuenta como 0: igual
+        // que los JWT viejos, así que nadie queda fuera.
+        let mut rows = match conn
+            .query("SELECT activo, rol_id, token_version FROM usuarios WHERE id = ?1", libsql::params![usuario_id])
             .await
-            .map_err(|e| e.to_string())?;
+        {
+            Ok(r) => r,
+            Err(_) => conn
+                .query("SELECT activo, rol_id, 0 FROM usuarios WHERE id = ?1", libsql::params![usuario_id])
+                .await
+                .map_err(|e| e.to_string())?,
+        };
         let resultado = match rows.next().await.map_err(|e| e.to_string())? {
             Some(fila) => {
                 let activo = fila.get::<i64>(0).unwrap_or(1) == 1;
                 let rol_id: i64 = fila.get(1).unwrap_or(0);
-                Some((activo, rol_id))
+                let tv: i64 = fila.get(2).unwrap_or(0);
+                Some((activo, rol_id, tv))
             }
             None => None,
         };
-        let (activo, rol_id) = resultado.unwrap_or((false, 0));
-        self.usuarios.write().await.insert((tienda_id, usuario_id), (activo, rol_id, Instant::now()));
+        let (activo, rol_id, tv) = resultado.unwrap_or((false, 0, 0));
+        self.usuarios.write().await.insert((tienda_id, usuario_id), (activo, rol_id, tv, Instant::now()));
         Ok(resultado)
     }
 
@@ -403,3 +424,18 @@ impl RegistroTiendas {
         Ok((agregados, conflictos))
     }
 }   
+/// token_version actual de un usuario (0 si la migración 0044 aún no se
+/// aplicó a ese negocio o si no se pudo leer). Lo usa el login para meterla
+/// en el JWT.
+pub async fn version_token(conn: &libsql::Connection, usuario_id: i64) -> i64 {
+    match conn
+        .query("SELECT token_version FROM usuarios WHERE id = ?1", libsql::params![usuario_id])
+        .await
+    {
+        Ok(mut filas) => match filas.next().await {
+            Ok(Some(fila)) => fila.get(0).unwrap_or(0),
+            _ => 0,
+        },
+        Err(_) => 0,
+    }
+}

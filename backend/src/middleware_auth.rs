@@ -73,7 +73,10 @@ pub async fn requiere_auth(
     //    de activación, que es justo el mecanismo para salir de este
     //    estado por sí mismo.
     //  - Completo: sin restricciones.
-    let es_canje_de_codigo = req.uri().path() == "/suscripcion/canjear-codigo";
+    // Cambiar la propia contraseña o cerrar las otras sesiones también se
+    // puede en modo lectura: es seguridad de la cuenta, no uso del sistema.
+    let es_canje_de_codigo = req.uri().path() == "/suscripcion/canjear-codigo"
+        || es_de(req.uri().path(), "/mi-cuenta");
 
     match tienda.nivel_acceso() {
         NivelAcceso::Bloqueado(motivo) => {
@@ -108,8 +111,14 @@ pub async fn requiere_auth(
     // criterio que con servicios externos): se deja pasar y se registra.
     let mut claims = claims;
     match state.tiendas.estado_usuario(claims.tienda_id, claims.sub, &db_tienda).await {
-        Ok(Some((true, rol_id))) => claims.rol_id = rol_id,
-        Ok(Some((false, _))) | Ok(None) => {
+        // La versión de la sesión subió (cambió o le restablecieron la
+        // contraseña, o cerró sus otras sesiones): este JWT ya no vale.
+        Ok(Some((true, _, version))) if version != claims.tv => {
+            eprintln!("🔑 Sesión anterior de {} en '{}' cerrada (versión {} != {})", claims.username, tienda.identificador, claims.tv, version);
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        Ok(Some((true, rol_id, _))) => claims.rol_id = rol_id,
+        Ok(Some((false, _, _))) | Ok(None) => {
             eprintln!("🚫 Usuario {} de la tienda '{}' desactivado o inexistente", claims.username, tienda.identificador);
             return Err(StatusCode::UNAUTHORIZED);
         }
@@ -168,8 +177,10 @@ fn es_de(ruta: &str, seccion: &str) -> bool {
 
 fn ruta_permitida(rol: &str, metodo: &Method, ruta: &str) -> bool {
     let lectura = metodo == Method::GET || metodo == Method::HEAD;
-    // Lo mínimo para que la app cargue (nombre del negocio, aviso de pago).
-    let basico = lectura && (ruta == "/configuracion" || ruta == "/suscripcion/estado");
+    // Lo mínimo para que la app cargue (nombre del negocio, aviso de pago),
+    // y la propia cuenta (cambiar su contraseña, cerrar sus otras sesiones).
+    let basico = (lectura && (ruta == "/configuracion" || ruta == "/suscripcion/estado"))
+        || es_de(ruta, "/mi-cuenta");
     match rol {
         "MESERO" => {
             basico
@@ -251,6 +262,15 @@ mod pruebas {
         assert!(ruta_permitida("CAJERO", &p, "/ventas"));
         assert!(ruta_permitida("CAJERO", &p, "/cajas/abrir"));
         assert!(ruta_permitida("CAJERO", &g, "/clientes/todos"));
+        // Su propia cuenta: todos los roles.
+        for rol in ["MESERO", "PREPARACION", "INVENTARIO", "CAJERO"] {
+            assert!(ruta_permitida(rol, &Method::PUT, "/mi-cuenta/clave"), "{}", rol);
+            assert!(ruta_permitida(rol, &p, "/mi-cuenta/cerrar-sesiones"), "{}", rol);
+        }
+        assert!(!ruta_permitida("MESERO", &p, "/mi-cuenta-falsa"));
+        // Restablecer la clave de otro: no es "su cuenta".
+        assert!(!ruta_permitida("MESERO", &p, "/usuarios/3/clave"));
+        assert!(!ruta_permitida("INVENTARIO", &p, "/usuarios/3/clave"));
     }
 
     /// Almacén: todo lo que usan Productos, Stock y Lotes, Proveedores y

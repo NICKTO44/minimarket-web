@@ -10,6 +10,17 @@ function obtenerToken() {
   }
 }
 
+// Al cambiar la contraseña o cerrar las otras sesiones, el servidor entrega
+// un token nuevo para este dispositivo (el anterior deja de servir).
+export function guardarTokenSesion(token) {
+  try {
+    const sesion = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if (sesion && token) localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...sesion, token }));
+  } catch {
+    // Sin almacenamiento: la sesión sigue en memoria hasta recargar.
+  }
+}
+
 async function leerRespuesta(res) {
   const isJson = res.headers.get('content-type')?.includes('application/json');
   return isJson ? res.json().catch(() => null) : res.text();
@@ -227,25 +238,7 @@ export const api = {
   encargoAdelanto: (id, data) => request(`/encargos/${id}/adelantos`, { method: 'POST', body: JSON.stringify(data) }),
   encargoCancelar: (id, data) => request(`/encargos/${id}/cancelar`, { method: 'POST', body: JSON.stringify(data) }),
   encargoQuitarFoto: (id) => request(`/encargos/${id}/foto`, { method: 'DELETE' }),
-  encargoSubirFoto: async (id, archivo) => {
-    const token = obtenerToken();
-    const formData = new FormData();
-    formData.append('imagen', archivo);
-    const res = await fetch(`${API_URL}/encargos/${id}/foto`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    });
-    const texto = await res.text();
-    let data;
-    try {
-      data = JSON.parse(texto);
-    } catch {
-      data = null;
-    }
-    if (!res.ok) throw new Error(data?.message || texto || 'No se pudo subir la foto');
-    return data;
-  },
+  encargoSubirFoto: (id, archivo) => subirImagen(`/encargos/${id}/foto`, 'imagen', archivo, 'No se pudo subir la foto'),
   ordenesComisiones: (desde, hasta) =>
     request(`/ordenes/comisiones?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`),
   mecanicos: () => request('/mecanicos'),
@@ -273,25 +266,18 @@ export const api = {
   configuracionActualizar: (data) => request('/configuracion', { method: 'PUT', body: JSON.stringify(data) }),
   // "Completa los datos de tu negocio": solo nombre, RUC y dirección.
   datosNegocioGuardar: (data) => request('/configuracion/datos-negocio', { method: 'PUT', body: JSON.stringify(data) }),
-  configuracionSubirLogo: async (archivo) => {
-    const token = obtenerToken();
-    const formData = new FormData();
-    formData.append('logo', archivo);
-
-    const res = await fetch(`${API_URL}/configuracion/logo`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    });
-
-    const data = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(data?.message || 'Error al subir el logo');
-    return data;
-  },
+  configuracionSubirLogo: (archivo) => subirImagen('/configuracion/logo', 'logo', archivo, 'Error al subir el logo'),
   usuariosListar: () => request('/usuarios'),
   usuarioCrear: (data) => request('/usuarios', { method: 'POST', body: JSON.stringify(data) }),
   usuarioDesactivar: (id) => request(`/usuarios/${id}/desactivar`, { method: 'POST' }),
   usuarioReactivar: (id) => request(`/usuarios/${id}/reactivar`, { method: 'POST' }),
+  // El admin le pone una contraseña nueva a un trabajador.
+  usuarioRestablecerClave: (id, nueva) =>
+    request(`/usuarios/${id}/clave`, { method: 'POST', body: JSON.stringify({ nueva }) }),
+  // Mi cuenta: cada usuario, con su contraseña actual. Devuelven { token }.
+  cambiarMiClave: (actual, nueva) =>
+    request('/mi-cuenta/clave', { method: 'PUT', body: JSON.stringify({ actual, nueva }) }),
+  cerrarOtrasSesiones: () => request('/mi-cuenta/cerrar-sesiones', { method: 'POST' }),
   roles: () => request('/roles'),
   modoNegocioCambiar: (modo_negocio) =>
     request('/configuracion/modo-negocio', { method: 'PUT', body: JSON.stringify({ modo_negocio }) }),
@@ -413,22 +399,40 @@ export const api = {
   comprobanteAnulacion: (id) => request(`/comprobantes/${id}/anulacion`),
   comprobanteAnular: (id, data) => request(`/comprobantes/${id}/anular`, { method: 'POST', body: JSON.stringify(data) }),
   comprobanteAnulacionConsultar: (id) => request(`/comprobantes/${id}/anulacion/consultar`, { method: 'POST' }),
-  productoSubirImagen: async (id, archivo) => {
-    const token = obtenerToken();
-    const formData = new FormData();
-    formData.append('imagen', archivo);
+  productoSubirImagen: (id, archivo) => subirImagen(`/productos/${id}/imagen`, 'imagen', archivo, 'Error al subir la imagen'),
+};
 
-    const res = await fetch(`${API_URL}/productos/${id}/imagen`, {
+// Sube una imagen (producto, logo, foto de encargo). Si el servidor la
+// rechaza, su mensaje llega tal cual al usuario ("La imagen es demasiado
+// grande...", "Sube una foto JPG, PNG o WebP"): el servidor responde texto,
+// no JSON, y antes se perdía y solo salía el mensaje genérico.
+async function subirImagen(ruta, campo, archivo, mensajeGenerico) {
+  const token = obtenerToken();
+  const formData = new FormData();
+  formData.append(campo, archivo);
+  let res;
+  try {
+    res = await fetch(`${API_URL}${ruta}`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-
-    const data = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(data?.message || 'Error al subir la imagen');
-    return data;
-  },
-};
+  } catch {
+    throw new Error(`${mensajeGenerico}: revisa tu conexión a internet.`);
+  }
+  const texto = await res.text();
+  let data;
+  try {
+    data = JSON.parse(texto);
+  } catch {
+    data = null;
+  }
+  if (!res.ok) {
+    if (res.status === 413) throw new Error('La imagen pesa demasiado. Prueba con otra foto o toma una captura de pantalla de ella.');
+    throw new Error(data?.message || (texto && texto.length < 300 ? texto : '') || mensajeGenerico);
+  }
+  return data;
+}
 
 // XML firmado ('xml') o constancia de SUNAT ('cdr') de un comprobante o de
 // una nota de crédito. Devuelve el archivo y su extensión: el CDR puede

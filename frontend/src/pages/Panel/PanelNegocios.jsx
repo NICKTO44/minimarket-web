@@ -201,7 +201,7 @@ function UsoCorto({ uso }) {
   }
   const tono = tonoUso(uso);
   return (
-    <span className="pnl-uso" role="cell" title={`Ciclo ${fechaCorta(uso.ciclo_inicio)} – ${fechaCorta(uso.ciclo_fin)}`}>
+    <span className="pnl-uso" role="cell" title={`Ciclo ${fechaCorta(uso.ciclo_inicio)} – ${fechaCorta(uso.ciclo_fin)}${uso.incluye_prueba ? ' (incluye la prueba gratis)' : ''}`}>
       <span className="pnl-uso-cifras">
         <strong className={tono !== 'verde' ? `pnl-texto-${tono}` : ''}>{uso.usados}</strong> / {uso.limite}
       </span>

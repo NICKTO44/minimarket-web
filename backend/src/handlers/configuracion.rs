@@ -235,6 +235,7 @@ pub async fn crear_usuario(
     if payload.nombre_completo.trim().is_empty() || payload.password.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "Completa usuario, contraseña y nombre completo.".into()));
     }
+    crate::handlers::cuenta::validar_clave_nueva(&payload.password)?;
 
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 

@@ -41,9 +41,11 @@ pub async fn base(nombre: &str, rubro: &str, modulos: &str) -> Arc<TenantDb> {
         let n = m.file_name().unwrap().to_string_lossy();
         n.as_ref() >= "0037"
     }) {
-        conn.execute_batch(&std::fs::read_to_string(m).unwrap())
-            .await
-            .unwrap_or_else(|e| panic!("{} (segunda vez): {}", m.display(), e));
+        // Un ADD COLUMN no se puede repetir: el aplicador real
+        // (src/migraciones.rs) salta el "duplicate column name".
+        if let Err(e) = conn.execute_batch(&std::fs::read_to_string(m).unwrap()).await {
+            assert!(e.to_string().contains("duplicate column name"), "{} (segunda vez): {}", m.display(), e);
+        }
     }
     conn.execute(
         "UPDATE configuracion_tienda SET rubro = ?1, modulos = ?2, nombre_tienda = 'LUBRICENTRO PRUEBA'",
@@ -73,7 +75,7 @@ pub async fn lubricentro(nombre: &str) -> Arc<TenantDb> {
 }
 
 pub fn claims() -> Claims {
-    Claims { sub: 1, username: "prueba".into(), rol_id: 1, nombre_completo: "Admin de prueba".into(), tienda_id: 1, exp: usize::MAX }
+    Claims { sub: 1, username: "prueba".into(), rol_id: 1, nombre_completo: "Admin de prueba".into(), tienda_id: 1, exp: usize::MAX, tv: 0 }
 }
 
 pub async fn abrir_caja(t: &Arc<TenantDb>) {

@@ -52,6 +52,18 @@ pub struct LoginResponse {
     pub aviso: Option<String>,
 }
 
+/// Duración de una sesión de negocio.
+const HORAS_SESION: i64 = 12;
+
+/// Firma el JWT de una sesión de negocio, con vencimiento desde ahora. Lo
+/// usan el login y "mi cuenta" (al cambiar la contraseña el dispositivo
+/// actual recibe un JWT nuevo con la versión nueva y no tiene que volver a
+/// entrar).
+pub fn firmar_sesion(state: &AppState, mut claims: Claims) -> Result<String, jsonwebtoken::errors::Error> {
+    claims.exp = (Utc::now() + Duration::hours(HORAS_SESION)).timestamp() as usize;
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(state.jwt_secret.as_bytes()))
+}
+
 pub async fn leer_identidad_visual(conn: &libsql::Connection) -> (Option<String>, Option<String>) {
     let resultado = conn
         .query("SELECT logo_path, color_acento FROM configuracion_tienda LIMIT 1", ())
@@ -147,18 +159,17 @@ pub async fn login(
         Err(_) => None,
     };
 
-    let exp = (Utc::now() + Duration::hours(12)).timestamp() as usize;
-
     let claims = Claims {
         sub: id,
         username: payload.usuario.clone(),
         rol_id,
         nombre_completo: nombre_completo.clone(),
         tienda_id: tienda.id,
-        exp,
+        exp: 0,
+        tv: crate::tenants::version_token(&conn, id).await,
     };
 
-    let token = encode(&Header::default(), &claims, &EncodingKey::from_secret(state.jwt_secret.as_bytes()))
+    let token = firmar_sesion(&state, claims)
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "No se pudo generar la sesión.".to_string()))?;
 
     Ok(Json(LoginResponse {

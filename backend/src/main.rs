@@ -387,6 +387,9 @@ async fn main() {
         .route("/usuarios", post(handlers::configuracion::crear_usuario))
         .route("/usuarios/:id/desactivar", post(handlers::configuracion::desactivar_usuario))
         .route("/usuarios/:id/reactivar", post(handlers::configuracion::reactivar_usuario))
+        .route("/usuarios/:id/clave", post(handlers::cuenta::restablecer_clave_usuario))
+        .route("/mi-cuenta/clave", axum::routing::put(handlers::cuenta::cambiar_mi_clave))
+        .route("/mi-cuenta/cerrar-sesiones", post(handlers::cuenta::cerrar_otras_sesiones))
         .route("/configuracion/modo-negocio", axum::routing::put(handlers::mesas::cambiar_modo_negocio))
         .route("/roles", get(handlers::mesas::listar_roles))
         // Módulo Cafetería / Restaurante (responde 403 si el negocio no lo activó)
@@ -467,6 +470,8 @@ async fn main() {
         .route("/panel/negocios/:id/facturacion/modo", axum::routing::put(handlers::panel::cambiar_modo))
         .route("/panel/negocios/:id/facturacion/probar", post(handlers::panel::probar_conexion))
         .route("/panel/codigos", get(handlers::panel::listar_codigos).post(handlers::panel::generar_codigo_panel))
+        .route("/panel/negocios/:id/usuarios", get(handlers::panel::usuarios_negocio))
+        .route("/panel/negocios/:id/usuarios/:usuario/clave", post(handlers::panel::restablecer_clave))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), handlers::panel::requiere_panel));
 
     let app = rutas_publicas

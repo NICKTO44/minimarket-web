@@ -60,7 +60,7 @@ async fn base(nombre: &str, modulos: &str) -> Arc<libsql::Database> {
 }
 
 fn claims() -> Claims {
-    Claims { sub: 1, username: "prueba".into(), rol_id: 1, nombre_completo: "Cajero de prueba".into(), tienda_id: 1, exp: usize::MAX }
+    Claims { sub: 1, username: "prueba".into(), rol_id: 1, nombre_completo: "Cajero de prueba".into(), tienda_id: 1, exp: usize::MAX, tv: 0 }
 }
 
 fn venta(v: serde_json::Value) -> Json<NuevaVenta> {

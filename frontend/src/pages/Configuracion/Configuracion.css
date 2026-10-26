@@ -201,6 +201,31 @@
   color: #9ca3af;
 }
 
+/* Contraseña + Desactivar en la fila de un usuario */
+.cfg-acciones-usuario {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cfg-boton-clave {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-primario-suave);
+  color: var(--color-primario-texto);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cfg-nota-clave {
+  margin: -4px 0 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #4b5563;
+}
+
 .cfg-boton-desactivar {
   padding: 6px 12px;
   border: none;
@@ -575,7 +600,8 @@
   }
 
   .cfg-boton-desactivar,
-  .cfg-boton-reactivar {
+  .cfg-boton-reactivar,
+  .cfg-boton-clave {
     padding: 9px 14px;
     font-size: 13px;
   }

@@ -1113,3 +1113,32 @@ button.pnl-fila:hover {
   gap: 6px;
   align-items: center;
 }
+
+/* ---------- Usuarios de un negocio (PanelUsuarios.jsx) ---------- */
+.pnl-usuarios {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
+  border-top: 1px solid var(--pnl-borde);
+}
+
+.pnl-usuario-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--pnl-borde);
+}
+
+.pnl-usuario-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pnl-usuario-datos span {
+  font-size: 13px;
+}

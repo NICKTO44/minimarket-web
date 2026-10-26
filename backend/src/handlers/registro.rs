@@ -10,7 +10,7 @@ use std::path::Path;
 use crate::migraciones;
 /// Cuántos días de prueba gratis recibe un negocio nuevo al registrarse,
 /// antes de pasar a modo lectura si no se activa con un código.
-const DIAS_PRUEBA_GRATIS: i64 = 15;
+const DIAS_PRUEBA_GRATIS: i64 = crate::logica::plan::DIAS_PRUEBA_GRATIS;
 
 /// Esquema completo de una instalación nueva, incrustado en el binario en
 /// tiempo de compilación (por eso el Dockerfile necesita copiar schema.sql

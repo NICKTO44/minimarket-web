@@ -8,4 +8,8 @@ pub struct Claims {
     pub nombre_completo: String,
     pub tienda_id: i64,
     pub exp: usize,
+    /// Versión de la sesión (usuarios.token_version) al iniciar sesión. Los
+    /// JWT emitidos antes de que existiera no lo traen: se leen como 0.
+    #[serde(default)]
+    pub tv: i64,
 }

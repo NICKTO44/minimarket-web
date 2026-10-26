@@ -40,9 +40,11 @@ async fn base(nombre: &str, rubro: &str, modulos: &str) -> Arc<TenantDb> {
     }
     // La migración nueva es idempotente: aplicarla otra vez no rompe nada.
     for m in migraciones.iter().filter(|m| m.file_name().unwrap().to_string_lossy().as_ref() >= "0042") {
-        conn.execute_batch(&std::fs::read_to_string(m).unwrap())
-            .await
-            .unwrap_or_else(|e| panic!("{} (segunda vez): {}", m.display(), e));
+        // Un ADD COLUMN no se puede repetir: el aplicador real
+        // (src/migraciones.rs) salta el "duplicate column name".
+        if let Err(e) = conn.execute_batch(&std::fs::read_to_string(m).unwrap()).await {
+            assert!(e.to_string().contains("duplicate column name"), "{} (segunda vez): {}", m.display(), e);
+        }
     }
     conn.execute(
         "UPDATE configuracion_tienda SET rubro = ?1, modulos = ?2, nombre_tienda = 'PASTELERIA PRUEBA'",
@@ -80,7 +82,7 @@ async fn pasteleria(nombre: &str) -> Arc<TenantDb> {
 }
 
 fn claims() -> Claims {
-    Claims { sub: 1, username: "prueba".into(), rol_id: 1, nombre_completo: "Admin de prueba".into(), tienda_id: 1, exp: usize::MAX }
+    Claims { sub: 1, username: "prueba".into(), rol_id: 1, nombre_completo: "Admin de prueba".into(), tienda_id: 1, exp: usize::MAX, tv: 0 }
 }
 
 async fn abrir_caja(t: &Arc<TenantDb>) {

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ArrowLeft, CalendarClock, FileCheck2 } from 'lucide-react';
+import { ArrowLeft, CalendarClock, FileCheck2, Users } from 'lucide-react';
 import { panelApi } from '../../api/panel';
 import { confirmar } from '../../utils/confirmar';
 import PanelFacturacion from './PanelFacturacion';
+import PanelUsuarios from './PanelUsuarios';
 import { fechaCorta, fechaCortaUtc, situacion, soles, textoDias, tonoUso, UNIDADES } from './formato';
 
 /** Ficha de un negocio: su suscripción y su facturación electrónica. */
@@ -50,10 +51,14 @@ export default function PanelNegocio({ negocio, onVolver, onActualizado }) {
         <button type="button" role="tab" aria-selected={pestana === 'FACTURACION'} className={pestana === 'FACTURACION' ? 'activo' : ''} onClick={() => setPestana('FACTURACION')}>
           <FileCheck2 size={16} /> Facturación electrónica
         </button>
+        <button type="button" role="tab" aria-selected={pestana === 'USUARIOS'} className={pestana === 'USUARIOS' ? 'activo' : ''} onClick={() => setPestana('USUARIOS')}>
+          <Users size={16} /> Usuarios
+        </button>
       </div>
 
       {pestana === 'SUSCRIPCION' && <Suscripcion negocio={negocio} onCambio={refrescar} />}
       {pestana === 'FACTURACION' && <PanelFacturacion negocio={negocio} onCambio={refrescar} />}
+      {pestana === 'USUARIOS' && <PanelUsuarios negocio={negocio} />}
     </section>
   );
 }
@@ -375,6 +380,7 @@ function UsoDelPlan({ uso }) {
       <span className="pnl-uso-cifras">
         <strong className={tono !== 'verde' ? `pnl-texto-${tono}` : ''}>{uso.usados}</strong> de {uso.limite} boletas y facturas ·
         del {fechaCorta(uso.ciclo_inicio)} al {fechaCorta(uso.ciclo_fin)}
+        {uso.incluye_prueba && ' · primer mes pagado, incluye la prueba gratis'}
       </span>
       <span className="pnl-uso-barra" aria-hidden="true">
         <span className={`pnl-uso-relleno pnl-uso-${tono}`} style={{ width: `${Math.min(100, uso.porcentaje)}%` }} />

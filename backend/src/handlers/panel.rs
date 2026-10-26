@@ -219,9 +219,9 @@ async fn resumen_facturacion(state: &AppState, tienda: &TiendaConexion) -> Factu
     }
 }
 
-async fn uso_de(state: &AppState, tienda: &TiendaConexion) -> Option<UsoPlan> {
+async fn uso_de(state: &AppState, tienda: &TiendaConexion, fecha_creacion: Option<&str>) -> Option<UsoPlan> {
     let conn = state.tiendas.conectar_cacheado(tienda).await.ok()?.connect().ok()?;
-    uso_del_negocio(&conn, tienda.fecha_vencimiento.as_deref()).await.ok()
+    uso_del_negocio(&conn, tienda.fecha_vencimiento.as_deref(), fecha_creacion).await.ok()
 }
 
 pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<Vec<NegocioPanel>>, Fallo> {
@@ -264,7 +264,7 @@ pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<
     // La facturación y los comprobantes del ciclo se leen de la base de
     // cada negocio, todas a la vez.
     let resumenes = futures_util::future::join_all(tiendas.iter().map(|t| async {
-        (resumen_facturacion(&state, t).await, uso_de(&state, t).await)
+        (resumen_facturacion(&state, t).await, uso_de(&state, t, creacion.get(&t.id).map(String::as_str)).await)
     }))
     .await;
 
@@ -615,6 +615,63 @@ async fn conexion_negocio(state: &AppState, id: i64) -> Result<libsql::Connectio
     db.connect().map_err(interno)
 }
 
+// ---------------------------------------------------------------------
+// Usuarios de un negocio: restablecer la contraseña del dueño (o de quien
+// sea) cuando la olvidó. Ver handlers/cuenta.rs.
+// ---------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct UsuarioPanel {
+    pub id: i64,
+    pub username: String,
+    pub nombre_completo: String,
+    pub rol: String,
+    pub activo: bool,
+}
+
+pub async fn usuarios_negocio(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> Result<Json<Vec<UsuarioPanel>>, Fallo> {
+    let conn = conexion_negocio(&state, id).await?;
+    let mut filas = conn
+        .query(
+            "SELECT u.id, u.username, u.nombre_completo, COALESCE(r.nombre, ''), u.activo
+             FROM usuarios u LEFT JOIN roles r ON r.id = u.rol_id
+             ORDER BY u.activo DESC, u.rol_id, u.username",
+            (),
+        )
+        .await
+        .map_err(interno)?;
+    let mut usuarios = Vec::new();
+    while let Some(f) = filas.next().await.map_err(interno)? {
+        usuarios.push(UsuarioPanel {
+            id: f.get(0).unwrap_or_default(),
+            username: f.get(1).unwrap_or_default(),
+            nombre_completo: f.get(2).unwrap_or_default(),
+            rol: f.get(3).unwrap_or_default(),
+            activo: f.get::<i64>(4).unwrap_or(1) == 1,
+        });
+    }
+    Ok(Json(usuarios))
+}
+
+#[derive(Deserialize)]
+pub struct ClaveNueva {
+    pub nueva: String,
+}
+
+pub async fn restablecer_clave(
+    State(state): State<Arc<AppState>>,
+    Path((id, usuario_id)): Path<(i64, i64)>,
+    Json(datos): Json<ClaveNueva>,
+) -> Result<Json<Value>, Fallo> {
+    let conn = conexion_negocio(&state, id).await?;
+    crate::handlers::cuenta::fijar_clave(&conn, usuario_id, &datos.nueva).await?;
+    state.tiendas.invalidar_usuario(id, usuario_id).await;
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "mensaje": "Contraseña restablecida. Sus sesiones abiertas se cerraron; ya puede entrar con la nueva.",
+    })))
+}
+
 #[derive(Serialize, Default)]
 pub struct AltaGuardada {
     pub usuario_sol: Option<String>,
@@ -843,6 +900,7 @@ mod pruebas {
             nombre_completo: "Admin".into(),
             tienda_id: 6,
             exp: (chrono::Utc::now().timestamp() + 3600) as usize,
+            tv: 0,
         };
         let t_negocio = encode(&Header::default(), &negocio, &EncodingKey::from_secret(secreto)).unwrap();
         assert!(decode::<PanelClaims>(&t_negocio, &DecodingKey::from_secret(secreto), &Validation::default()).is_err());

@@ -1,0 +1,11 @@
+-- Versión de la sesión de cada usuario (ver middleware_auth.rs).
+--
+-- Cada JWT lleva la versión que tenía el usuario al iniciar sesión (campo
+-- "tv"). Si la versión de la base sube (cambió su contraseña, el admin o el
+-- panel se la restablecieron, o pidió cerrar sus otras sesiones), los
+-- carnets viejos dejan de servir y esos dispositivos vuelven al login.
+--
+-- Solo ADITIVO: una columna nueva con 0 para todos. Los JWT que ya estaban
+-- en uso no traen "tv" y se leen como 0, así que nadie pierde la sesión al
+-- aplicar esta migración.
+ALTER TABLE usuarios ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;

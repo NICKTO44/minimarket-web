@@ -68,6 +68,12 @@ export default function UsoPlan() {
         {uso.boletas} boleta{uso.boletas === 1 ? '' : 's'} · {uso.facturas} factura{uso.facturas === 1 ? '' : 's'}
         {uso.extra === 0 && ` · te quedan ${quedan}`}
       </p>
+      {uso.incluye_prueba && (
+        <p className="uso-plan-nota">
+          Tu primer mes incluye los comprobantes que emitiste en la prueba gratis (desde {fecha(uso.ciclo_inicio)}). Desde el
+          próximo ciclo se cuenta solo el mes.
+        </p>
+      )}
 
       {uso.extra > 0 ? (
         <p className="uso-plan-aviso uso-plan-aviso-rojo">

@@ -218,6 +218,7 @@ fn claims() -> minimarket_backend::models::auth::Claims {
         nombre_completo: "Cajero de prueba".into(),
         tienda_id: 1,
         exp: usize::MAX,
+        tv: 0,
     }
 }
 

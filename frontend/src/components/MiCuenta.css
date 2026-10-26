@@ -1,0 +1,33 @@
+/* Pestaña "Mi contraseña" de Configuración (ver MiCuenta.jsx). Usa las
+   clases cfg-* de Configuracion.css; aquí solo lo propio. */
+.micuenta {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 520px;
+}
+
+.micuenta-nota {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+}
+
+.micuenta-boton-secundario {
+  padding: 11px 16px;
+  border: 1.5px solid var(--color-primario);
+  border-radius: 10px;
+  background: white;
+  color: var(--color-primario-texto);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.micuenta-boton-secundario:hover:not(:disabled) {
+  background: var(--color-primario-suave);
+}
+
+.micuenta-boton-secundario:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

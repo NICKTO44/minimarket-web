@@ -3,6 +3,7 @@ import { api, API_URL } from '../../api/api';
 import { COLOR_MONSPEET, normalizarAcento } from '../../utils/tema';
 import './Configuracion.css';
 import { confirmar } from '../../utils/confirmar';
+import { comprimirImagen } from '../../utils/comprimirImagen';
 import ConfiguracionRestaurante from './ConfiguracionRestaurante';
 import ConfiguracionUnidades from './ConfiguracionUnidades';
 import ConfiguracionNegocio from './ConfiguracionNegocio';
@@ -11,6 +12,7 @@ import ConfiguracionDetraccion from './ConfiguracionDetraccion';
 import ConfiguracionCambios from './ConfiguracionCambios';
 import ConfiguracionImpresora from './ConfiguracionImpresora';
 import UsoPlan from '../../components/UsoPlan';
+import MiCuenta from '../../components/MiCuenta';
 import { etiquetaTasa, TASA_GENERAL } from '../../utils/igv';
 import { datosNegocio, MODULO_CAMBIOS, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
 import TarjetaRuc from '../../components/TarjetaRuc';
@@ -47,6 +49,10 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
   const [mostrarNuevoUsuario, setMostrarNuevoUsuario] = useState(false);
   const [formUsuario, setFormUsuario] = useState({ username: '', password: '', nombre_completo: '', rol_id: 2 });
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
+  // Restablecer la contraseña de un trabajador (el usuario elegido o null).
+  const [restablecer, setRestablecer] = useState(null);
+  const [claveNueva, setClaveNueva] = useState('');
+  const [guardandoClave, setGuardandoClave] = useState(false);
 
   const [mensaje, setMensaje] = useState(null);
   // Tasa de IGV que tiene guardada el negocio (para avisar si la cambia).
@@ -187,7 +193,8 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
     setMensaje(null);
     setSubiendoLogo(true);
     try {
-      await api.configuracionSubirLogo(archivo);
+      // En PNG para conservar la transparencia; el servidor lo deja en 400 px.
+      await api.configuracionSubirLogo(await comprimirImagen(archivo, { ladoMaximo: 800, png: true }));
       setMensaje({ tipo: 'exito', texto: 'Logo actualizado.' });
       const actualizada = await api.configuracionObtener();
       setFormConfig(actualizada);
@@ -209,8 +216,8 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
       setMensaje({ tipo: 'error', texto: 'Completa usuario, contraseña y nombre completo.' });
       return;
     }
-    if (formUsuario.password.length < 6) {
-      setMensaje({ tipo: 'error', texto: 'La contraseña debe tener al menos 6 caracteres.' });
+    if (formUsuario.password.length < 8) {
+      setMensaje({ tipo: 'error', texto: 'La contraseña debe tener al menos 8 caracteres.' });
       return;
     }
     setGuardandoUsuario(true);
@@ -224,6 +231,33 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
       setMensaje({ tipo: 'error', texto: e.message });
     } finally {
       setGuardandoUsuario(false);
+    }
+  };
+
+  const abrirRestablecer = (u) => {
+    setClaveNueva('');
+    setRestablecer(u);
+  };
+
+  const guardarClaveNueva = async () => {
+    setMensaje(null);
+    if (claveNueva.length < 8) {
+      setMensaje({ tipo: 'error', texto: 'La contraseña debe tener al menos 8 caracteres.' });
+      return;
+    }
+    setGuardandoClave(true);
+    try {
+      await api.usuarioRestablecerClave(restablecer.id, claveNueva);
+      setMensaje({
+        tipo: 'exito',
+        texto: `Contraseña de "${restablecer.username}" restablecida. Si tenía la sesión abierta, tendrá que volver a entrar con la nueva.`,
+      });
+      setRestablecer(null);
+      setClaveNueva('');
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message });
+    } finally {
+      setGuardandoClave(false);
     }
   };
 
@@ -292,6 +326,9 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
           <button className={vista === 'PLAN' ? 'activo' : ''} onClick={() => setVista('PLAN')}>
             Plan y comprobantes
           </button>
+          <button className={vista === 'MI_CUENTA' ? 'activo' : ''} onClick={() => setVista('MI_CUENTA')}>
+            Mi contraseña
+          </button>
         </div>
       </div>
 
@@ -319,6 +356,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
       {vista === 'RESTAURANTE' && restaurante && <ConfiguracionRestaurante />}
       {vista === 'UNIDADES' && <ConfiguracionUnidades rubro={negocio.rubro} />}
       {vista === 'PLAN' && <UsoPlan />}
+      {vista === 'MI_CUENTA' && <MiCuenta onMensaje={setMensaje} />}
 
       {vista === 'NEGOCIO' && (
         <div className="cfg-card">
@@ -538,9 +576,14 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
                       </td>
                       <td>
                         {u.activo && u.id !== usuarioActualId && (
-                          <button className="cfg-boton-desactivar" onClick={() => desactivarUsuario(u)}>
-                            Desactivar
-                          </button>
+                          <span className="cfg-acciones-usuario">
+                            <button className="cfg-boton-clave" onClick={() => abrirRestablecer(u)}>
+                              Contraseña
+                            </button>
+                            <button className="cfg-boton-desactivar" onClick={() => desactivarUsuario(u)}>
+                              Desactivar
+                            </button>
+                          </span>
                         )}
                         {u.activo && u.id === usuarioActualId && <span className="cfg-tu-usuario">Tu usuario</span>}
                         {!u.activo && (
@@ -569,7 +612,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
                   />
                 </div>
                 <div className="cfg-campo">
-                  <label>Contraseña</label>
+                  <label>Contraseña (mínimo 8 caracteres)</label>
                   <input
                     type="password"
                     value={formUsuario.password}
@@ -603,6 +646,37 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
                   </button>
                   <button className="cfg-boton-guardar-modal" onClick={guardarUsuario} disabled={guardandoUsuario}>
                     {guardandoUsuario ? 'Creando...' : 'Crear usuario'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {restablecer && (
+            <div className="cfg-modal-overlay" onClick={() => setRestablecer(null)}>
+              <div className="cfg-modal" onClick={(e) => e.stopPropagation()}>
+                <h2>Contraseña de {restablecer.nombre_completo}</h2>
+                <p className="cfg-nota-clave">
+                  Escribe una contraseña nueva para <strong>{restablecer.username}</strong> y pásasela. Si tenía la sesión
+                  abierta en algún dispositivo, se cerrará.
+                </p>
+                <div className="cfg-campo">
+                  <label>Contraseña nueva (mínimo 8 caracteres)</label>
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    autoFocus
+                    value={claveNueva}
+                    onChange={(e) => setClaveNueva(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && guardarClaveNueva()}
+                  />
+                </div>
+                <div className="cfg-modal-acciones">
+                  <button className="cfg-boton-cancelar" onClick={() => setRestablecer(null)}>
+                    Cancelar
+                  </button>
+                  <button className="cfg-boton-guardar-modal" onClick={guardarClaveNueva} disabled={guardandoClave}>
+                    {guardandoClave ? 'Guardando...' : 'Guardar contraseña'}
                   </button>
                 </div>
               </div>
