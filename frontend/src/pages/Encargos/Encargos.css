@@ -281,3 +281,18 @@
 .enc-montos .enc-montos-pagado strong {
   color: #047857;
 }
+
+/* Lavandería: DNI / RUC consultado en RENIEC o SUNAT */
+.enc-doc-encontrado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--pm-borde, #e5e7eb);
+  border-radius: 10px;
+}
+.enc-doc-encontrado small {
+  color: #6b7280;
+}

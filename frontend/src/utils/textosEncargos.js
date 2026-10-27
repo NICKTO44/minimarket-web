@@ -78,6 +78,8 @@ export const TEXTOS_ENCARGOS_LAVANDERIA = {
   ejemploDetalle: 'Terno 2 piezas, lana, azul marino, mancha en la manga',
   buscarProducto: 'Buscar otro servicio por nombre o código',
   serviciosRapidos: true,
+  // Buscar por DNI/RUC: si no es cliente, se consulta RENIEC/SUNAT y se registra.
+  autocompletarDocumento: true,
   // Prendas escritas en la misma orden (sin crear un servicio por cada una).
   prendasEscritas: true,
   botonPrendaNueva: 'Prenda nueva',

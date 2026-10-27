@@ -367,6 +367,62 @@ function FormularioEncargo({ t, encargo, onCerrar, onGuardado }) {
     return () => clearTimeout(t);
   }, [buscarCliente]);
 
+  // Lavandería: si lo buscado es un DNI (8 dígitos) o RUC (11) que aún no es
+  // cliente, se consulta RENIEC/SUNAT (la misma consulta del punto de venta)
+  // para registrarlo de un toque. Si la consulta falla no bloquea nada.
+  const documentoBuscado = useMemo(() => {
+    const q = buscarCliente.trim();
+    if (!t.autocompletarDocumento) return null;
+    if (/^\d{8}$/.test(q)) return { tipo: 'DNI', numero: q };
+    if (/^\d{11}$/.test(q)) return { tipo: 'RUC', numero: q };
+    return null;
+  }, [buscarCliente, t.autocompletarDocumento]);
+  const [consultas, setConsultas] = useState({});
+  useEffect(() => {
+    if (!documentoBuscado || consultas[documentoBuscado.numero]) return undefined;
+    const { tipo, numero } = documentoBuscado;
+    let cancelado = false;
+    api
+      .documentoConsultar(tipo, numero)
+      .then((r) => {
+        if (cancelado) return;
+        const encontrado = r?.existe === true && r?.nombre;
+        setConsultas((c) => ({ ...c, [numero]: encontrado ? { nombre: r.nombre, direccion: r.direccion || null } : { nombre: null } }));
+      })
+      .catch(() => !cancelado && setConsultas((c) => ({ ...c, [numero]: { nombre: null } })));
+    return () => {
+      cancelado = true;
+    };
+  }, [documentoBuscado, consultas]);
+  const yaEsCliente = !!documentoBuscado && clientes.some((c) => c.numero_documento === documentoBuscado.numero);
+  const consultado = documentoBuscado && !yaEsCliente ? consultas[documentoBuscado.numero] : null;
+  const consultando = !!documentoBuscado && !yaEsCliente && !consultado;
+
+  const elegirCliente = (c) => {
+    setDatos((d) => ({ ...d, cliente: c, cliente_nombre: '', cliente_telefono: d.cliente_telefono || c.telefono || '' }));
+    setBuscarCliente('');
+    setClientes([]);
+  };
+  // Lo registra como cliente (queda para la próxima vez, la boleta y el cierre de mes) y lo elige.
+  const registrarConDocumento = async (nombre, direccion) => {
+    setError(null);
+    setOcupado(true);
+    try {
+      const nuevo = await api.clienteCrear({
+        tipo_documento: documentoBuscado.tipo,
+        numero_documento: documentoBuscado.numero,
+        nombre_razon_social: nombre.trim(),
+        telefono: datos.cliente_telefono.trim() || null,
+        direccion: direccion || null,
+      });
+      elegirCliente(nuevo);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
   const encontrados = useMemo(() => {
     const q = buscarProducto.trim().toLowerCase();
     if (q.length < 2) return [];
@@ -473,9 +529,44 @@ function FormularioEncargo({ t, encargo, onCerrar, onGuardado }) {
           ) : (
             <div className="pm-campos">
               <label className="pm-campo pm-campo-ancho">
-                <span>Buscar cliente registrado (opcional)</span>
-                <input value={buscarCliente} placeholder="Nombre o DNI" onChange={(e) => setBuscarCliente(e.target.value)} />
+                <span>{t.autocompletarDocumento ? 'Buscar cliente o escribir su DNI / RUC (opcional)' : 'Buscar cliente registrado (opcional)'}</span>
+                <input
+                  value={buscarCliente}
+                  placeholder={t.autocompletarDocumento ? 'Nombre, DNI o RUC' : 'Nombre o DNI'}
+                  inputMode={t.autocompletarDocumento && /^\d+$/.test(buscarCliente.trim()) ? 'numeric' : undefined}
+                  onChange={(e) => setBuscarCliente(e.target.value)}
+                />
               </label>
+              {consultando && (
+                <p className="pm-subtitulo pm-campo-ancho">Consultando {documentoBuscado.tipo === 'RUC' ? 'SUNAT' : 'RENIEC'}…</p>
+              )}
+              {consultado?.nombre && (
+                <div className="pm-campo-ancho enc-doc-encontrado">
+                  <span>
+                    <strong>{consultado.nombre}</strong>
+                    <small>
+                      {' '}
+                      · {documentoBuscado.tipo} {documentoBuscado.numero}
+                    </small>
+                  </span>
+                  <button type="button" className="pm-boton" disabled={ocupado} onClick={() => registrarConDocumento(consultado.nombre, consultado.direccion)}>
+                    Usar este cliente
+                  </button>
+                </div>
+              )}
+              {consultado && !consultado.nombre && (
+                <div className="pm-campo-ancho enc-doc-encontrado">
+                  <span className="pm-subtitulo">
+                    No se encontró el {documentoBuscado.tipo} {documentoBuscado.numero}. Escribe su nombre abajo
+                    {datos.cliente_nombre.trim() ? '' : ' y podrás registrarlo con este documento'}.
+                  </span>
+                  {datos.cliente_nombre.trim() && (
+                    <button type="button" className="pm-boton-secundario" disabled={ocupado} onClick={() => registrarConDocumento(datos.cliente_nombre)}>
+                      Registrar con {documentoBuscado.tipo}
+                    </button>
+                  )}
+                </div>
+              )}
               {buscarCliente.trim().length >= 2 && clientes.length > 0 && (
                 <div className="pm-campo-ancho">
                   {clientes.map((c) => (
@@ -483,11 +574,7 @@ function FormularioEncargo({ t, encargo, onCerrar, onGuardado }) {
                       key={c.id}
                       type="button"
                       className="pm-fila"
-                      onClick={() => {
-                        setDatos((d) => ({ ...d, cliente: c, cliente_telefono: d.cliente_telefono || c.telefono || '' }));
-                        setBuscarCliente('');
-                        setClientes([]);
-                      }}
+                      onClick={() => elegirCliente(c)}
                     >
                       <span className="pm-fila-principal">
                         <span className="pm-fila-titulo">{c.nombre_razon_social}</span>
