@@ -280,6 +280,12 @@ export default function Recibo({
       {venta.credito && (
         <div className="recibo-detraccion">
           <div className="recibo-detraccion-titulo">VENTA AL CRÉDITO</div>
+          {venta.credito.adelantoPedido > 0 && (
+            <div className="recibo-fila-meta">
+              <span>Adelanto del pedido</span>
+              <span>S/.{venta.credito.adelantoPedido.toFixed(2)}</span>
+            </div>
+          )}
           {venta.credito.adelanto > 0 && (
             <div className="recibo-fila-meta">
               <span>Adelanto ({nombreMetodo(venta.credito.adelantoMetodo)})</span>

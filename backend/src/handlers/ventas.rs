@@ -411,21 +411,35 @@ pub async fn procesar_venta(
     // guarda como MIXTO: la parte ya pagada en 'ADELANTO' (la caja no la
     // cuenta: entró como ingreso el día del adelanto) y el saldo por el medio
     // elegido. Una venta normal no hace nada aquí.
+    // Al crédito sí se puede: la lavandería entrega la ropa a cuenta y cobra a
+    // fin de mes (lo adelantado del pedido cuenta como ya pagado).
     if payload.encargo_id.is_some()
-        && (credito.is_some()
-            || payload.pedido_id.is_some()
+        && (payload.pedido_id.is_some()
             || payload.cotizacion_id.is_some()
             || payload.cambio_prenda.is_some()
             || payload.orden_servicio_id.is_some())
     {
         return Err((
             StatusCode::BAD_REQUEST,
-            "Un pedido por encargo se entrega solo: sin crédito, pedido de mesa, cotización, cambio de prenda ni orden de servicio.".into(),
+            "Un pedido por encargo se entrega solo: sin pedido de mesa, cotización, cambio de prenda ni orden de servicio.".into(),
         ));
     }
     let encargo_cobro = crate::handlers::encargos::preparar_cobro(&conn, modulos.as_deref(), payload.encargo_id).await?;
     let adelanto_encargo = encargo_cobro.as_ref().map(|c| c.adelanto).filter(|a| *a > 0.0);
-    if let Some(adelanto) = adelanto_encargo {
+    // Encargo al crédito: lo que ya adelantó más lo que deja hoy tiene que
+    // ser menor al total (si no, ya no queda nada por deber).
+    if let (Some((adelanto_hoy, _, _)), Some(adelanto)) = (&credito, adelanto_encargo) {
+        if adelanto + adelanto_hoy >= redondear_2(payload.total) - 0.005 {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "El cliente ya adelantó S/ {:.2}: no queda saldo para dejar a crédito. Entrégalo cobrando con un método normal.",
+                    adelanto + adelanto_hoy
+                ),
+            ));
+        }
+    }
+    if let (Some(adelanto), None) = (adelanto_encargo, &credito) {
         if adelanto > payload.total + 0.005 {
             return Err((
                 StatusCode::BAD_REQUEST,
@@ -842,6 +856,14 @@ pub async fn procesar_venta(
                         .unwrap_or_else(|| (p.nombre.clone(), "UNIDAD".to_string()));
                     // Las opciones de un pedido de mesa o las medidas van con el
                     // nombre: "Capuchino (Grande, Leche de almendras)".
+                    // Lavandería: una prenda escrita en la orden se vende con lo
+                    // que se escribió ("Lavado de terno negro (mancha)"), no con
+                    // el nombre de su servicio de respaldo. Solo se acepta un
+                    // nombre que esté en la orden.
+                    let nombre_base = match encargo_cobro.as_ref().and_then(|c| c.libres.get(&p.id)) {
+                        Some(escritos) if escritos.iter().any(|x| x == p.nombre.trim()) => p.nombre.trim().to_string(),
+                        _ => nombre_base,
+                    };
                     let nombre_venta = match p.detalle.as_deref().map(str::trim) {
                         Some(detalle) if !detalle.is_empty() => {
                             format!("{} ({})", nombre_base, detalle.chars().take(120).collect::<String>())
@@ -913,10 +935,15 @@ pub async fn procesar_venta(
             // 6c. Venta al crédito: se abre la cuenta por cobrar y, si el cliente
             //     dejó un adelanto, entra como su primer abono.
             if let (Some((adelanto, adelanto_metodo, vence)), Some(cliente_id)) = (&credito, payload.cliente_id) {
-                crate::handlers::creditos::crear_para_venta(
+                let credito_id = crate::handlers::creditos::crear_para_venta(
                     &conn, venta_id, cliente_id, payload.total, vence, *adelanto, adelanto_metodo, usuario_id,
                 )
                 .await?;
+                // Encargo entregado al crédito: lo que el cliente ya adelantó
+                // en el pedido baja la deuda (ya entró a la caja ese día).
+                if let (Some(c), Some(previo)) = (&encargo_cobro, adelanto_encargo) {
+                    crate::handlers::creditos::abonar_adelanto_previo(&conn, credito_id, previo, c.numero, usuario_id).await?;
+                }
             }
 
             // 6d. Si salió de una cotización, queda vendida (no puede hacer fallar la venta).

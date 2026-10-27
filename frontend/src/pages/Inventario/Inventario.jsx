@@ -27,6 +27,7 @@ import {
   textoPlano,
 } from '../../utils/medicamentos';
 import FichaRepuesto from './FichaRepuesto';
+import { esRespaldoLavanderia } from '../../utils/textosEncargos';
 import {
   FICHA_REPUESTO_VACIA,
   compatibilidadCoincide,
@@ -234,8 +235,10 @@ export default function Inventario({
     setCargando(true);
     Promise.all([api.productos(), api.categorias()])
       .then(([p, c]) => {
-        // Los platos de la carta del día se manejan en "Carta de hoy".
-        setProductos(p.filter((x) => !x.carta_dia));
+        // Los platos de la carta del día se manejan en "Carta de hoy". Los
+        // respaldos de las prendas escritas en una orden de lavado son de uso
+        // interno (otro negocio no los tiene).
+        setProductos(p.filter((x) => !x.carta_dia && !esRespaldoLavanderia(x)));
         setCategorias(c);
       })
       .catch((e) => setMensaje({ tipo: 'error', texto: e.message }))

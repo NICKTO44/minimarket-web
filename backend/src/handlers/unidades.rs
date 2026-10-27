@@ -41,6 +41,10 @@ pub const UNIDADES_FARMACIA: &[&str] = &[
     "TABLETA", "CAPSULA", "BLISTER", "FRASCO", "AMPOLLA", "VIAL", "SOBRE", "SUPOSITORIO", "OVULO", "PARCHE",
 ];
 
+/// Las de lavandería: se cobra por kilo o por prenda (terno, casaca...).
+/// En el comprobante sale como unidad (NIU).
+pub const UNIDADES_LAVANDERIA: &[&str] = &["PRENDA"];
+
 /// La unidad base: nunca se puede apagar.
 const UNIDAD_BASE: &str = "UNIDAD";
 
@@ -50,6 +54,7 @@ fn catalogo() -> impl Iterator<Item = &'static str> {
         .chain(UNIDADES_RESTAURANTE.iter())
         .chain(UNIDADES_CONSTRUCCION.iter())
         .chain(UNIDADES_FARMACIA.iter())
+        .chain(UNIDADES_LAVANDERIA.iter())
         .copied()
 }
 

@@ -421,6 +421,8 @@ async fn main() {
         .route("/cotizaciones/:id/anular", post(handlers::cotizaciones::anular))
         .route("/creditos", get(handlers::creditos::listar))
         .route("/creditos/cliente/:id", get(handlers::creditos::deuda_cliente))
+        .route("/creditos/cliente/:id/pagar", post(handlers::creditos::pagar_cliente))
+        .route("/creditos/estado-cuenta/:id", get(handlers::creditos::estado_cuenta))
         .route("/creditos/:id", get(handlers::creditos::obtener))
         .route("/creditos/:id/abonos", post(handlers::creditos::abonar))
         .route("/guias", get(handlers::guias::listar).post(handlers::guias::crear))

@@ -4,8 +4,9 @@
 // arrancan encendidos, qué unidades se sugieren y cómo se llaman algunas
 // pantallas ("Carta" en vez de "Productos" en un restaurante).
 // Debe coincidir con backend/src/handlers/rubros.rs.
-import { Axe, CakeSlice, Hammer, Pill, Shirt, ShoppingBasket, Store, UtensilsCrossed, Wrench } from 'lucide-react';
+import { Axe, CakeSlice, Hammer, Pill, Shirt, ShoppingBasket, Store, UtensilsCrossed, WashingMachine, Wrench } from 'lucide-react';
 import { UNIDADES_CLASICAS } from './unidades';
+import { TEXTOS_ENCARGOS_LAVANDERIA } from './textosEncargos';
 
 export const MODULO_MESAS = 'MESAS';
 export const MODULO_SERVICIOS = 'SERVICIOS';
@@ -40,6 +41,7 @@ export const MODULO_ORDENES_SERVICIO = 'ORDENES_SERVICIO';
 // Paquetes de productos a un precio ("Cambio de aceite completo").
 export const MODULO_PAQUETES = 'PAQUETES';
 // Pastelería: pedidos por encargo con fecha de entrega y adelanto.
+// Lavandería: el mismo módulo son las órdenes de lavado (utils/textosEncargos.js).
 export const MODULO_ENCARGOS = 'ENCARGOS';
 // Producción del día y mermas; recetas de producción con insumos y costo.
 export const MODULO_PRODUCCION = 'PRODUCCION';
@@ -308,6 +310,27 @@ export const RUBROS = [
       'TAZA', 'VASO', 'BOTELLA',
     ],
     etiquetas: {},
+  },
+  {
+    valor: 'LAVANDERIA',
+    label: 'Lavandería',
+    descripcion:
+      'Órdenes de lavado por kilo o por prenda (tipo de prenda, tela y precio al recibirla), con adelanto opcional, recojo o delivery, aviso por WhatsApp cuando está lista, clientes a cuenta con cierre de mes y boleta o nota de venta al entregar.',
+    Icono: WashingMachine,
+    modulos: [MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_ENCARGOS, MODULO_CREDITO],
+    unidades: ['UNIDAD', 'KG', 'PRENDA', 'PAR', 'JUEGO', 'PIEZA'],
+    etiquetas: {
+      PRODUCTOS: 'Servicios',
+      ENCARGOS: 'Órdenes de lavado',
+      tituloProductos: 'Servicios y precios',
+      nuevoProducto: '+ Nuevo servicio',
+      sinStock: 'Es un servicio (lavado, planchado, al seco): se vende sin controlar stock',
+      iconos: { ENCARGOS: WashingMachine },
+      textosEncargos: TEXTOS_ENCARGOS_LAVANDERIA,
+      // Créditos: pestaña "Por cliente" y estado de cuenta del mes (solo aquí;
+      // los demás rubros ven Créditos como siempre).
+      cierreMes: true,
+    },
   },
   {
     valor: RUBRO_GENERAL,

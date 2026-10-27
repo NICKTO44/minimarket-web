@@ -326,6 +326,10 @@ export const api = {
   credito: (id) => request(`/creditos/${id}`),
   creditoAbonar: (id, datos) => request(`/creditos/${id}/abonos`, { method: 'POST', body: JSON.stringify(datos) }),
   creditoDeudaCliente: (clienteId) => request(`/creditos/cliente/${clienteId}`),
+  // Cierre de mes: estado de cuenta (todo lo pendiente o de un mes) y pago de varias cuentas.
+  creditoEstadoCuenta: (clienteId, desde, hasta) =>
+    request(`/creditos/estado-cuenta/${clienteId}${desde && hasta ? `?desde=${desde}&hasta=${hasta}` : ''}`),
+  creditoPagarCliente: (clienteId, datos) => request(`/creditos/cliente/${clienteId}/pagar`, { method: 'POST', body: JSON.stringify(datos) }),
   // Guías de remisión (módulo GUIAS)
   guias: () => request('/guias'),
   guiasConfig: () => request('/guias/config'),

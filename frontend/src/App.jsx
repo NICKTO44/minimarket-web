@@ -687,6 +687,7 @@ function App() {
         )}
         {pantallaVisible === 'ENCARGOS' && (
           <Encargos
+            etiquetas={etiquetas}
             nombreTienda={nombreTienda}
             direccion={configuracionTienda?.direccion}
             telefono={configuracionTienda?.telefono}
@@ -701,6 +702,7 @@ function App() {
         )}
         {pantallaVisible === 'CREDITOS' && (
           <Creditos
+            cierreMes={!!etiquetas.cierreMes}
             nombreTienda={nombreTienda}
             direccion={configuracionTienda?.direccion}
             telefono={configuracionTienda?.telefono}

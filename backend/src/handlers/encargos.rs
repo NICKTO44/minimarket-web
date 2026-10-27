@@ -52,6 +52,58 @@ pub const METODO_ADELANTO: &str = "ADELANTO";
 const METODOS: &[&str] = &["EFECTIVO", "TARJETA", "TRANSFERENCIA", "YAPE", "PLIN"];
 const ACTIVOS: &[&str] = &["PENDIENTE", "EN_PREPARACION", "LISTO"];
 
+// ---------------------------------------------------------------------
+// Lavandería: prendas escritas en la misma orden
+// ---------------------------------------------------------------------
+//
+// En una lavandería cada cliente trae ropa distinta: la prenda y su precio se
+// escriben en la orden, sin crear un servicio por cada una (Servicios y el
+// punto de venta no se llenan). Como cada línea de una venta necesita un
+// producto, esas prendas se apoyan en uno de dos servicios de respaldo, sin
+// stock, que se crean solos la primera vez: "Servicio por kilo" y "Servicio
+// por prenda". En la orden, el ticket y el comprobante sale lo que se
+// escribió ("Lavado de terno negro"), con el precio puesto ese día.
+const RUBRO_LAVANDERIA: &str = "LAVANDERIA";
+const CATEGORIA_RESPALDO: &str = "Servicios de lavandería";
+/// (cobro, código, nombre, unidad)
+const RESPALDOS: &[(&str, &str, &str, &str)] = &[
+    ("KG", "_LAV_KG", "Servicio por kilo", "KG"),
+    ("PRENDA", "_LAV_PRENDA", "Servicio por prenda", "PRENDA"),
+];
+
+/// ¿Es uno de los servicios de respaldo de las prendas escritas?
+pub fn es_respaldo(codigo: &str) -> bool {
+    RESPALDOS.iter().any(|r| r.1 == codigo)
+}
+
+/// Id del servicio de respaldo para ese cobro (KG o PRENDA). Lo crea si no
+/// existe y lo vuelve a activar si alguien lo desactivó.
+async fn respaldo(conn: &libsql::Connection, cobro: &str) -> Result<i64, Fallo> {
+    let (_, codigo, nombre, unidad) = RESPALDOS
+        .iter()
+        .find(|r| r.0 == cobro)
+        .ok_or_else(|| malo("Elige si la prenda se cobra por kilo o por prenda."))?;
+    conn.execute(
+        "INSERT OR IGNORE INTO categorias (nombre, descripcion) VALUES (?1, 'Creada por Órdenes de lavado')",
+        libsql::params![CATEGORIA_RESPALDO],
+    )
+    .await
+    .map_err(e500)?;
+    conn.execute(
+        "INSERT OR IGNORE INTO productos (codigo, nombre, descripcion, precio, stock, stock_minimo, unidad_medida, categoria_id)
+         VALUES (?1, ?2, 'Uso interno de Órdenes de lavado: el nombre y el precio se ponen en cada orden.', 1, 0, 0, ?3,
+                 (SELECT id FROM categorias WHERE nombre = ?4))",
+        libsql::params![*codigo, *nombre, *unidad, CATEGORIA_RESPALDO],
+    )
+    .await
+    .map_err(e500)?;
+    conn.execute("UPDATE productos SET activo = 1, controla_stock = 0 WHERE codigo = ?1", libsql::params![*codigo])
+        .await
+        .map_err(e500)?;
+    let mut f = conn.query("SELECT id FROM productos WHERE codigo = ?1", libsql::params![*codigo]).await.map_err(e500)?;
+    f.next().await.map_err(e500)?.and_then(|f| f.get::<i64>(0).ok()).ok_or_else(|| e500("No se pudo preparar el servicio de respaldo."))
+}
+
 fn malo(texto: impl Into<String>) -> Fallo {
     (StatusCode::BAD_REQUEST, texto.into())
 }
@@ -97,6 +149,8 @@ pub struct ItemEncargo {
     /// Del producto, para cargarlo en el carrito.
     pub unidad_medida: String,
     pub controla_stock: bool,
+    /// Lavandería: prenda escrita en la orden (su producto es un respaldo).
+    pub libre: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -137,6 +191,8 @@ pub struct Encargo {
     pub usuario: Option<String>,
     pub fecha_creacion: Option<String>,
     pub fecha_entregado: Option<String>,
+    /// Entregado al crédito (cierre de mes): el saldo quedó a cuenta, no se cobró.
+    pub a_cuenta: bool,
     pub items: Vec<ItemEncargo>,
     /// Solo en el detalle (GET /encargos/:id).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -146,7 +202,8 @@ pub struct Encargo {
 const SELECT_ENCARGO: &str = "SELECT e.id, e.numero, e.cliente_id, e.cliente_nombre, e.cliente_telefono, c.numero_documento,
         e.fecha_entrega, e.hora_entrega, e.entrega, e.direccion_entrega, e.dedicatoria, e.notas, e.foto_url,
         CAST(e.total AS REAL), CAST(e.adelantado AS REAL), CAST(e.devuelto AS REAL), e.estado, e.venta_id, v.folio,
-        e.motivo_cancelacion, u.nombre_completo, e.fecha_creacion, e.fecha_entregado
+        e.motivo_cancelacion, u.nombre_completo, e.fecha_creacion, e.fecha_entregado,
+        COALESCE(v.pago_otro_metodo, '') = 'CREDITO'
      FROM encargos e
      LEFT JOIN clientes c ON c.id = e.cliente_id
      LEFT JOIN ventas v ON v.id = e.venta_id
@@ -181,6 +238,7 @@ fn encargo_de(f: &libsql::Row) -> Encargo {
         usuario: f.get(20).ok(),
         fecha_creacion: f.get(21).ok(),
         fecha_entregado: f.get(22).ok(),
+        a_cuenta: f.get::<i64>(23).unwrap_or(0) == 1,
         items: Vec::new(),
         pagos: None,
     }
@@ -197,7 +255,7 @@ async fn items_de(conn: &libsql::Connection, ids: &[i64]) -> Result<HashMap<i64,
         .query(
             &format!(
                 "SELECT i.encargo_id, i.id, i.producto_id, i.nombre, CAST(i.cantidad AS REAL), CAST(i.precio_unitario AS REAL), i.detalle,
-                        COALESCE(p.unidad_medida, 'UNIDAD'), COALESCE(p.controla_stock, 1)
+                        COALESCE(p.unidad_medida, 'UNIDAD'), COALESCE(p.controla_stock, 1), COALESCE(p.codigo, '')
                  FROM encargo_items i LEFT JOIN productos p ON p.id = i.producto_id
                  WHERE i.encargo_id IN ({}) ORDER BY i.id",
                 marcas
@@ -219,6 +277,7 @@ async fn items_de(conn: &libsql::Connection, ids: &[i64]) -> Result<HashMap<i64,
             detalle: f.get(6).ok(),
             unidad_medida: f.get(7).unwrap_or_else(|_| "UNIDAD".to_string()),
             controla_stock: f.get::<i64>(8).unwrap_or(1) == 1,
+            libre: es_respaldo(&f.get::<String>(9).unwrap_or_default()),
         });
     }
     Ok(mapa)
@@ -330,7 +389,15 @@ pub async fn obtener(Extension(tenant): Extension<Arc<TenantDb>>, Path(id): Path
 
 #[derive(Debug, Deserialize)]
 pub struct ItemNuevo {
-    pub producto_id: i64,
+    /// Vacío en una prenda escrita en la orden (solo Lavandería).
+    #[serde(default)]
+    pub producto_id: Option<i64>,
+    /// Prenda escrita: lo que es ("Lavado de terno negro").
+    #[serde(default)]
+    pub nombre: Option<String>,
+    /// Prenda escrita nueva: KG o PRENDA.
+    #[serde(default)]
+    pub cobro: Option<String>,
     pub cantidad: f64,
     pub precio_unitario: f64,
     #[serde(default)]
@@ -444,26 +511,60 @@ async fn revisar(conn: &libsql::Connection, d: &DatosEncargo, es_nuevo: bool) ->
     if d.items.len() > MAX_ITEMS {
         return Err(malo(format!("Un pedido puede llevar hasta {} productos.", MAX_ITEMS)));
     }
-    let ids: Vec<String> = d.items.iter().map(|i| i.producto_id.to_string()).collect();
-    let mut nombres: HashMap<i64, String> = HashMap::new();
-    let mut filas = conn
-        .query(
-            &format!("SELECT id, nombre FROM productos WHERE activo = 1 AND id IN ({})", ids.join(",")),
-            (),
-        )
-        .await
-        .map_err(e500)?;
-    while let Some(f) = filas.next().await.map_err(e500)? {
-        nombres.insert(f.get(0).unwrap_or_default(), f.get(1).unwrap_or_default());
+    let ids: Vec<String> = d.items.iter().filter_map(|i| i.producto_id).map(|id| id.to_string()).collect();
+    // id -> (nombre, ¿es respaldo de prendas escritas?)
+    let mut nombres: HashMap<i64, (String, bool)> = HashMap::new();
+    if !ids.is_empty() {
+        let mut filas = conn
+            .query(
+                &format!("SELECT id, nombre, codigo FROM productos WHERE activo = 1 AND id IN ({})", ids.join(",")),
+                (),
+            )
+            .await
+            .map_err(e500)?;
+        while let Some(f) = filas.next().await.map_err(e500)? {
+            nombres.insert(
+                f.get(0).unwrap_or_default(),
+                (f.get(1).unwrap_or_default(), es_respaldo(&f.get::<String>(2).unwrap_or_default())),
+            );
+        }
     }
-    drop(filas);
+    // Prendas escritas en la orden: solo en una lavandería.
+    let hay_escritas = d.items.iter().any(|i| i.producto_id.is_none() || i.producto_id.and_then(|id| nombres.get(&id)).is_some_and(|n| n.1));
+    if hay_escritas && crate::handlers::rubros::negocio(conn).await.rubro != RUBRO_LAVANDERIA {
+        return Err(malo("Las prendas escritas en la orden son solo para lavanderías. Elige un producto de la lista."));
+    }
+    let mut respaldos: HashMap<String, i64> = HashMap::new();
     let mut items = Vec::new();
     let mut total = 0.0;
     for i in &d.items {
-        let nombre = nombres
-            .get(&i.producto_id)
-            .cloned()
-            .ok_or_else(|| malo("Un producto del pedido no existe o está desactivado. Quítalo y vuelve a agregarlo."))?;
+        let (producto_id, nombre) = match i.producto_id {
+            None => {
+                let cobro = i.cobro.as_deref().unwrap_or("").trim().to_uppercase();
+                let nombre = texto(i.nombre.as_deref(), 120, "Prenda")?.ok_or_else(|| malo("Escribe qué prenda o servicio es."))?;
+                let id = match respaldos.get(&cobro) {
+                    Some(id) => *id,
+                    None => {
+                        let id = respaldo(conn, &cobro).await?;
+                        respaldos.insert(cobro, id);
+                        id
+                    }
+                };
+                (id, nombre)
+            }
+            Some(id) => {
+                let (nombre_producto, libre) = nombres
+                    .get(&id)
+                    .cloned()
+                    .ok_or_else(|| malo("Un producto del pedido no existe o está desactivado. Quítalo y vuelve a agregarlo."))?;
+                let nombre = if libre {
+                    texto(i.nombre.as_deref(), 120, "Prenda")?.ok_or_else(|| malo("Escribe qué prenda o servicio es."))?
+                } else {
+                    nombre_producto
+                };
+                (id, nombre)
+            }
+        };
         if !(i.cantidad > 0.0) || !i.cantidad.is_finite() || i.cantidad > 100_000.0 {
             return Err(malo(format!("La cantidad de {} no es válida.", nombre)));
         }
@@ -473,7 +574,7 @@ async fn revisar(conn: &libsql::Connection, d: &DatosEncargo, es_nuevo: bool) ->
         let detalle = texto(i.detalle.as_deref(), 500, "Detalle")?;
         let precio = (i.precio_unitario * 1_000_000.0).round() / 1_000_000.0;
         total += r2(precio * i.cantidad);
-        items.push((i.producto_id, nombre, i.cantidad, precio, detalle));
+        items.push((producto_id, nombre, i.cantidad, precio, detalle));
     }
     Ok(Listo {
         cliente_id: d.cliente_id,
@@ -909,10 +1010,15 @@ fn borrar_archivo(url: Option<&str>, tienda_id: i64) {
 /// Lo que la venta necesita del pedido que se entrega.
 pub struct CobroEncargo {
     pub id: i64,
+    /// N.° del pedido (para la nota del abono si se entrega al crédito).
+    pub numero: i64,
     /// Lo que ya pagó (adelantos − devoluciones): no se vuelve a cobrar.
     pub adelanto: f64,
     /// producto -> precios acordados (se aceptan en la venta).
     pub precios: HashMap<i64, Vec<f64>>,
+    /// Lavandería: respaldo -> lo escrito en cada prenda de la orden. En la
+    /// venta esas líneas llevan como nombre lo que se escribió.
+    pub libres: HashMap<i64, Vec<String>>,
 }
 
 /// Antes de la venta: el pedido debe estar activo y el módulo encendido.
@@ -930,24 +1036,33 @@ pub async fn preparar_cobro(
         ));
     }
     let mut filas = conn
-        .query("SELECT estado, CAST(adelantado - devuelto AS REAL) FROM encargos WHERE id = ?1", libsql::params![id])
+        .query("SELECT estado, CAST(adelantado - devuelto AS REAL), numero FROM encargos WHERE id = ?1", libsql::params![id])
         .await
         .map_err(sin_migracion)?;
-    let (estado, adelanto): (String, f64) = match filas.next().await.map_err(e500)? {
-        Some(f) => (f.get(0).unwrap_or_default(), f.get(1).unwrap_or(0.0)),
+    let (estado, adelanto, numero): (String, f64, i64) = match filas.next().await.map_err(e500)? {
+        Some(f) => (f.get(0).unwrap_or_default(), f.get(1).unwrap_or(0.0), f.get(2).unwrap_or(0)),
         None => return Err((StatusCode::NOT_FOUND, "El pedido no existe.".into())),
     };
     drop(filas);
     activo(&estado)?;
     let mut precios: HashMap<i64, Vec<f64>> = HashMap::new();
     let mut filas = conn
-        .query("SELECT producto_id, CAST(precio_unitario AS REAL) FROM encargo_items WHERE encargo_id = ?1", libsql::params![id])
+        .query(
+            "SELECT i.producto_id, CAST(i.precio_unitario AS REAL), COALESCE(p.codigo, ''), i.nombre
+             FROM encargo_items i LEFT JOIN productos p ON p.id = i.producto_id WHERE i.encargo_id = ?1",
+            libsql::params![id],
+        )
         .await
         .map_err(e500)?;
+    let mut libres: HashMap<i64, Vec<String>> = HashMap::new();
     while let Some(f) = filas.next().await.map_err(e500)? {
-        precios.entry(f.get(0).unwrap_or_default()).or_default().push(f.get(1).unwrap_or(-1.0));
+        let producto: i64 = f.get(0).unwrap_or_default();
+        precios.entry(producto).or_default().push(f.get(1).unwrap_or(-1.0));
+        if es_respaldo(&f.get::<String>(2).unwrap_or_default()) {
+            libres.entry(producto).or_default().push(f.get::<String>(3).unwrap_or_default());
+        }
     }
-    Ok(Some(CobroEncargo { id, adelanto: r2(adelanto.max(0.0)), precios }))
+    Ok(Some(CobroEncargo { id, numero, adelanto: r2(adelanto.max(0.0)), precios, libres }))
 }
 
 /// Dentro de la transacción de la venta: el pedido queda ENTREGADO con su

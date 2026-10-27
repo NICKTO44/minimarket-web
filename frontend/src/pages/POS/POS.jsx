@@ -21,6 +21,7 @@ import '../../components/PantallaModulo.css';
 import SelectorTalla from '../../components/SelectorTalla';
 import { datosA4DeDocumento, imprimirComprobanteA4 } from '../../utils/facturaA4';
 import { agruparPorModelo } from '../../utils/variantes';
+import { esRespaldoLavanderia } from '../../utils/textosEncargos';
 import AvisoNotaCredito from '../../components/AvisoNotaCredito';
 import { enlaceComprobantePublico } from '../../utils/enlacePublico';
 import { imprimirTicket } from '../../utils/imprimirTicket';
@@ -204,12 +205,15 @@ function carritoDeOrden(orden) {
   }));
 }
 
-// Pastelería: lo que lleva un pedido por encargo, con el precio acordado.
+// Pedido por encargo (pastelería) u orden de lavado (lavandería): lo que
+// lleva, con el precio acordado. El detalle ("Terno, lana, azul" o
+// "Chocolate, relleno de manjar") va con el nombre en la boleta y el ticket.
 function carritoDeEncargo(encargo) {
   return (encargo.items || []).map((i, idx) => ({
     id: i.producto_id,
     clave: `medida-enc-${encargo.id}-${idx}`,
     nombre: i.nombre,
+    detalle: i.detalle || null,
     precio: i.precio_unitario,
     cantidad: i.cantidad,
     descuentoMonto: 0,
@@ -764,21 +768,24 @@ export default function POS({
 
   // Categorías que tienen productos, por nombre. Salen de los mismos
   // productos ya cargados (no se pide nada más al servidor).
+  // Lavandería: los servicios de respaldo de las prendas escritas en una
+  // orden no se eligen aquí (entran solo con su orden). Otro negocio no los tiene.
+  const productosVenta = useMemo(() => productos.filter((p) => !esRespaldoLavanderia(p)), [productos]);
   const categoriasPos = useMemo(() => {
     const porId = new Map();
-    for (const p of productos) {
+    for (const p of productosVenta) {
       if (p.categoria_id != null && p.categoria_nombre && !porId.has(p.categoria_id)) {
         porId.set(p.categoria_id, p.categoria_nombre);
       }
     }
     return [...porId].map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-  }, [productos]);
+  }, [productosVenta]);
   // Si la categoría elegida ya no tiene productos, se vuelve a "Todas".
   const categoriaActiva = categoriasPos.some((c) => c.id === categoriaFiltro) ? categoriaFiltro : null;
 
   const productosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    const deCategoria = categoriaActiva == null ? productos : productos.filter((p) => p.categoria_id === categoriaActiva);
+    const deCategoria = categoriaActiva == null ? productosVenta : productosVenta.filter((p) => p.categoria_id === categoriaActiva);
     const plano = fichaMedicamento || fichaRepuesto || compatibilidad ? textoPlano(q) : '';
     // Lubricentro: con un vehículo elegido, solo lo que le sirve.
     const filtroVehiculo =
@@ -819,7 +826,7 @@ export default function POS({
       return [...base].sort((a, b) => Number(!!b.carta_dia) - Number(!!a.carta_dia));
     }
     return base;
-  }, [productos, busqueda, ordenPrecio, categoriaActiva, fichaMedicamento, fichas, fichaRepuesto, repuestos, compatibilidad,
+  }, [productosVenta, busqueda, ordenPrecio, categoriaActiva, fichaMedicamento, fichas, fichaRepuesto, repuestos, compatibilidad,
       compatibilidades, vehiculoFiltro]);
 
   // Tallas y colores: una tarjeta por modelo (con las tallas que pasaron el
@@ -1268,7 +1275,9 @@ export default function POS({
   const esMixto = metodoPago === 'MIXTO';
   const esCredito = metodoPago === 'CREDITO';
   const adelantoNum = redondear2(parseFloat(String(creditoAdelanto).replace(',', '.')) || 0);
-  const adelantoValido = adelantoNum >= 0 && adelantoNum < total;
+  // Encargo al crédito: lo que ya adelantó en el pedido también cuenta.
+  const adelantoValido = adelantoNum >= 0 && redondear2(adelantoNum + adelantoEncargo) < total;
+  const quedaDebiendo = redondear2(Math.max(0, total - adelantoEncargo - adelantoNum));
 
   // Cuánto debe ya ese cliente, para verlo antes de darle otro crédito.
   const clienteIdCredito = esCredito ? cliente?.id : null;
@@ -1332,7 +1341,7 @@ export default function POS({
     (!clienteEsObligatorio || cliente) &&
     (metodoPago !== 'EFECTIVO' || ((enCambio || adelantoEncargo > 0) && aCobrar === 0) || parseFloat(montoRecibido) >= aCobrar) &&
     !totalMenorQueAdelanto &&
-    (!encargoEnVenta || (!esMixto && !esCredito)) &&
+    (!encargoEnVenta || !esMixto) &&
     (!esCredito || adelantoValido) &&
     estadoMixto.listo;
 
@@ -1502,7 +1511,7 @@ export default function POS({
             : null,
           // Pedido por encargo con adelanto: el ticket muestra lo ya
           // adelantado y el saldo (así lo guarda el servidor).
-          ...(adelantoEncargo > 0
+          ...(adelantoEncargo > 0 && !esCredito
             ? {
                 metodoPago: 'MIXTO',
                 pagoOtro: adelantoEncargo,
@@ -1518,7 +1527,13 @@ export default function POS({
                 pagoSegundoMetodo: esMixto ? mixtoSegundoMetodo : null,
               }),
           credito: esCredito
-            ? { adelanto: adelantoNum, adelantoMetodo: creditoAdelantoMetodo, saldo: redondear2(total - adelantoNum), dias: creditoDias }
+            ? {
+                adelanto: adelantoNum,
+                adelantoMetodo: creditoAdelantoMetodo,
+                adelantoPedido: adelantoEncargo,
+                saldo: quedaDebiendo,
+                dias: creditoDias,
+              }
             : null,
         },
         items: carrito.map((i) => ({
@@ -2479,7 +2494,7 @@ export default function POS({
                 {esMixto ? 'MIXTO · DOS MEDIOS' : '+ MIXTO · DOS MEDIOS'}
               </button>
             )}
-            {credito && !enCambio && !encargoEnVenta && (
+            {credito && !enCambio && (
               <button className={`pos-metodo-mixto${esCredito ? ' activo' : ''}`} onClick={() => setMetodoPago('CREDITO')}>
                 {esCredito ? 'CRÉDITO · PAGA DESPUÉS' : '+ CRÉDITO · PAGA DESPUÉS'}
               </button>
@@ -2534,12 +2549,22 @@ export default function POS({
                 </div>
               </div>
 
+              {adelantoEncargo > 0 && (
+                <div className="pos-mixto-calculado">
+                  <span>Ya adelantó en el pedido</span>
+                  <strong>S/ {adelantoEncargo.toFixed(2)}</strong>
+                </div>
+              )}
               <div className="pos-mixto-calculado">
                 <span>Queda debiendo</span>
-                <strong>S/ {Math.max(0, total - adelantoNum).toFixed(2)}</strong>
+                <strong>S/ {quedaDebiendo.toFixed(2)}</strong>
               </div>
-              {creditoAdelanto !== '' && !adelantoValido && (
-                <p className="pos-mixto-error">El adelanto debe ser menor al total. Si paga todo hoy, usa otro método.</p>
+              {(creditoAdelanto !== '' || adelantoEncargo > 0) && !adelantoValido && (
+                <p className="pos-mixto-error">
+                  {adelantoEncargo > 0
+                    ? 'Con lo ya adelantado no queda saldo para dejar a cuenta. Entrégalo cobrando con otro método.'
+                    : 'El adelanto debe ser menor al total. Si paga todo hoy, usa otro método.'}
+                </p>
               )}
             </div>
           )}
@@ -2745,7 +2770,9 @@ export default function POS({
                     ? `Hacer el cambio · cobrar S/ ${aCobrar.toFixed(2)}`
                     : 'Hacer el cambio'
                 : esCredito
-                  ? `Registrar crédito S/ ${total.toFixed(2)}`
+                  ? encargoEnVenta
+                    ? `Entregar a cuenta · debe S/ ${quedaDebiendo.toFixed(2)}`
+                    : `Registrar crédito S/ ${total.toFixed(2)}`
                   : adelantoEncargo > 0
                     ? aCobrar > 0
                       ? `Entregar · cobrar saldo S/ ${aCobrar.toFixed(2)}`

@@ -84,9 +84,9 @@ pub const MODULO_ORDENES_SERVICIO: &str = "ORDENES_SERVICIO";
 /// En la venta entran sus productos con un descuento por línea
 /// (handlers/paquetes.rs). No cambia cómo se cobra.
 pub const MODULO_PAQUETES: &str = "PAQUETES";
-/// Pedidos por encargo (pastelería): fecha de entrega, detalle, foto del
-/// diseño y adelantos; se entrega cobrando el saldo en el punto de venta
-/// (handlers/encargos.rs).
+/// Pedidos por encargo (pastelería) u órdenes de lavado (lavandería):
+/// fecha de entrega, detalle por línea con su precio, foto y adelantos; se
+/// entrega cobrando el saldo en el punto de venta (handlers/encargos.rs).
 pub const MODULO_ENCARGOS: &str = "ENCARGOS";
 /// Producción del día y mermas (pastelería, panadería): lo producido entra
 /// al stock sin ser una compra; lo perdido sale con su costo
@@ -190,6 +190,11 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
             "UNIDAD", "PORCION", "ENTERO", "MEDIO", "CUARTO", "DOCENA", "CIENTO", "KG", "GRAMO", "PAQUETE", "CAJA", "BOLSA",
             "TAZA", "VASO", "BOTELLA",
         ],
+    ),
+    (
+        "LAVANDERIA",
+        &[MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_ENCARGOS, MODULO_CREDITO],
+        &["UNIDAD", "KG", "PRENDA", "PAR", "JUEGO", "PIEZA"],
     ),
     (RUBRO_GENERAL, &[], &[]),
 ];

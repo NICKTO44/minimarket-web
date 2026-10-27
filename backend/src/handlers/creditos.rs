@@ -218,6 +218,50 @@ pub async fn registrar_abono(
     Ok(())
 }
 
+/// Encargo (pedido de pastelería u orden de lavado) entregado al crédito:
+/// lo que el cliente ya adelantó en el pedido entra como un abono ya pagado.
+/// No pasa por la caja: ese dinero entró el día del adelanto (encargos.rs).
+pub const METODO_ADELANTO_PEDIDO: &str = "ADELANTO";
+
+pub async fn abonar_adelanto_previo(
+    conn: &libsql::Connection,
+    credito_id: i64,
+    monto: f64,
+    numero_pedido: i64,
+    usuario_id: i64,
+) -> Result<(), (StatusCode, String)> {
+    let monto = round2(monto);
+    if monto <= 0.0 {
+        return Ok(());
+    }
+    let actualizados = conn
+        .execute(
+            "UPDATE creditos SET abonado = abonado + ?1,
+                    estado = CASE WHEN total - (abonado + ?1) - devuelto <= 0.005 THEN 'PAGADO' ELSE 'PENDIENTE' END
+             WHERE id = ?2 AND total - abonado - devuelto >= ?1 - 0.005",
+            libsql::params![monto, credito_id],
+        )
+        .await
+        .map_err(e500)?;
+    if actualizados == 0 {
+        return Err(malo("Lo adelantado en el pedido es mayor que el total de la venta."));
+    }
+    conn.execute(
+        "INSERT INTO credito_abonos (credito_id, monto, metodo_pago, caja_id, nota, usuario_id, fecha) VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6)",
+        libsql::params![
+            credito_id,
+            monto,
+            METODO_ADELANTO_PEDIDO,
+            format!("Adelanto del pedido N.° {}", numero_pedido),
+            usuario_id,
+            ahora_lima()
+        ],
+    )
+    .await
+    .map_err(e500)?;
+    Ok(())
+}
+
 /// Una devolución de una venta al crédito baja la deuda en vez de devolver
 /// dinero. Devuelve Err si la deuda pendiente es menor que lo devuelto.
 pub async fn descontar_devolucion(conn: &libsql::Connection, venta_id: i64, monto: f64) -> Result<(), (StatusCode, String)> {
@@ -510,4 +554,224 @@ pub async fn deuda_cliente(Extension(tenant): Extension<Arc<TenantDb>>, Path(cli
         None => (0.0, 0, 0.0),
     };
     Ok(Json(DeudaCliente { cliente_id, saldo: round2(saldo), creditos_pendientes: cantidad, vencido: round2(vencido) }))
+}
+
+// ============================================================
+// Cierre de mes: estado de cuenta del cliente y pago de varias cuentas
+// ============================================================
+//
+// Clientes que se llevan a cuenta durante el mes (una lavandería con
+// hoteles, una bodega con su fiado) y pagan todo a fin de mes. Funciona
+// igual con nota de venta, boleta o factura: el crédito es de la venta.
+
+#[derive(Debug, Deserialize)]
+pub struct PeriodoEstado {
+    /// AAAA-MM-DD. Con desde y hasta: las ventas a cuenta de esas fechas
+    /// (pagadas o no) y el saldo anterior. Sin fechas: todo lo pendiente.
+    pub desde: Option<String>,
+    pub hasta: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EstadoCuenta {
+    pub cliente_id: i64,
+    pub cliente_nombre: String,
+    pub cliente_documento: Option<String>,
+    pub cliente_telefono: Option<String>,
+    pub desde: Option<String>,
+    pub hasta: Option<String>,
+    /// Lo pendiente de ventas anteriores a `desde` (0 sin periodo).
+    pub saldo_anterior: f64,
+    /// Del periodo (o de lo pendiente): total, pagado y saldo.
+    pub total: f64,
+    pub pagado: f64,
+    pub saldo: f64,
+    /// Todo lo que debe hoy, sin importar la fecha.
+    pub saldo_total: f64,
+    pub vencido: f64,
+    /// Cada venta a cuenta con lo que se llevó y sus pagos (la más antigua primero).
+    pub creditos: Vec<Credito>,
+}
+
+fn fecha_valida(f: &str) -> bool {
+    f.len() == 10 && chrono::NaiveDate::parse_from_str(f, "%Y-%m-%d").is_ok()
+}
+
+async fn cliente_de(conn: &libsql::Connection, cliente_id: i64) -> Result<(String, Option<String>, Option<String>), (StatusCode, String)> {
+    let mut filas = conn
+        .query("SELECT nombre_razon_social, numero_documento, telefono FROM clientes WHERE id = ?1", libsql::params![cliente_id])
+        .await
+        .map_err(e500)?;
+    match filas.next().await.map_err(e500)? {
+        Some(f) => Ok((f.get(0).unwrap_or_default(), f.get::<String>(1).ok(), f.get::<String>(2).ok())),
+        None => Err((StatusCode::NOT_FOUND, "Ese cliente no existe.".to_string())),
+    }
+}
+
+/// GET /creditos/estado-cuenta/:cliente_id?desde=&hasta= — para imprimirlo
+/// o mandarlo por WhatsApp a fin de mes.
+pub async fn estado_cuenta(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Path(cliente_id): Path<i64>,
+    Query(periodo): Query<PeriodoEstado>,
+) -> Resultado<EstadoCuenta> {
+    let conn = tenant.0.connect().map_err(e500)?;
+    conn.query("SELECT 1 FROM creditos LIMIT 1", ()).await.map_err(actualizando)?;
+    let (cliente_nombre, cliente_documento, cliente_telefono) = cliente_de(&conn, cliente_id).await?;
+    let rango = match (periodo.desde.as_deref(), periodo.hasta.as_deref()) {
+        (Some(d), Some(h)) => {
+            if !fecha_valida(d) || !fecha_valida(h) || d > h {
+                return Err(malo("Revisa las fechas del estado de cuenta."));
+            }
+            Some((d.to_string(), h.to_string()))
+        }
+        (None, None) => None,
+        _ => return Err(malo("Indica desde y hasta, o ninguna de las dos.")),
+    };
+
+    let (sql, params) = match &rango {
+        Some((d, h)) => (
+            format!(
+                "SELECT {} WHERE cr.cliente_id = ?1 AND substr(cr.fecha, 1, 10) BETWEEN ?2 AND ?3 ORDER BY cr.fecha, cr.id LIMIT 500",
+                COLUMNAS
+            ),
+            vec![libsql::Value::Integer(cliente_id), libsql::Value::Text(d.clone()), libsql::Value::Text(h.clone())],
+        ),
+        None => (
+            format!("SELECT {} WHERE cr.cliente_id = ?1 AND cr.estado = 'PENDIENTE' ORDER BY cr.fecha, cr.id LIMIT 500", COLUMNAS),
+            vec![libsql::Value::Integer(cliente_id)],
+        ),
+    };
+    let mut ids = Vec::new();
+    let mut filas = conn.query(&sql, libsql::params_from_iter(params)).await.map_err(e500)?;
+    while let Some(f) = filas.next().await.map_err(e500)? {
+        ids.push(f.get::<i64>(0).unwrap_or_default());
+    }
+    drop(filas);
+    let mut creditos = Vec::with_capacity(ids.len());
+    for id in ids {
+        creditos.push(detalle(&conn, id).await?);
+    }
+
+    let saldo_anterior = match &rango {
+        Some((d, _)) => {
+            let mut filas = conn
+                .query(
+                    "SELECT CAST(COALESCE(SUM(total - abonado - devuelto), 0) AS REAL) FROM creditos
+                     WHERE cliente_id = ?1 AND estado = 'PENDIENTE' AND substr(fecha, 1, 10) < ?2",
+                    libsql::params![cliente_id, d.clone()],
+                )
+                .await
+                .map_err(e500)?;
+            filas.next().await.map_err(e500)?.and_then(|f| f.get::<f64>(0).ok()).unwrap_or(0.0)
+        }
+        None => 0.0,
+    };
+    let Json(deuda) = deuda_cliente(Extension(tenant.clone()), Path(cliente_id)).await?;
+    let total = round2(creditos.iter().map(|c| c.total).sum());
+    let saldo = round2(creditos.iter().map(|c| c.saldo).sum());
+    Ok(Json(EstadoCuenta {
+        cliente_id,
+        cliente_nombre,
+        cliente_documento,
+        cliente_telefono,
+        desde: rango.as_ref().map(|r| r.0.clone()),
+        hasta: rango.as_ref().map(|r| r.1.clone()),
+        saldo_anterior: round2(saldo_anterior),
+        total,
+        pagado: round2(total - saldo),
+        saldo,
+        saldo_total: deuda.saldo,
+        vencido: deuda.vencido,
+        creditos,
+    }))
+}
+
+#[derive(Debug, Serialize)]
+pub struct PagoAplicado {
+    pub credito_id: i64,
+    pub folio: String,
+    pub monto: f64,
+    pub saldo_restante: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ResultadoPagoCliente {
+    pub pagado: f64,
+    pub aplicado: Vec<PagoAplicado>,
+    /// Lo que sigue debiendo después del pago.
+    pub saldo_total: f64,
+}
+
+/// POST /creditos/cliente/:id/pagar — el cliente paga varias cuentas de una
+/// vez (el cierre de mes). Se reparte desde la más antigua; cada parte es un
+/// abono normal (en efectivo entra a la caja). Todo o nada.
+pub async fn pagar_cliente(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+    Path(cliente_id): Path<i64>,
+    Json(payload): Json<NuevoAbono>,
+) -> Resultado<ResultadoPagoCliente> {
+    let monto = round2(payload.monto);
+    if !(monto > 0.0) || !monto.is_finite() {
+        return Err(malo("El monto del pago debe ser mayor a 0."));
+    }
+    if !METODOS_ABONO.contains(&payload.metodo_pago.as_str()) {
+        return Err(malo("Método de pago no válido."));
+    }
+    let nota = payload.nota.as_deref().map(str::trim).filter(|n| !n.is_empty());
+    let conn = tenant.0.connect().map_err(e500)?;
+    let tx = conn
+        .transaction_with_behavior(libsql::TransactionBehavior::Immediate)
+        .await
+        .map_err(e500)?;
+    let resultado: Result<_, (StatusCode, String)> = async {
+        let mut pendientes: Vec<(i64, String, f64)> = Vec::new();
+        let mut filas = tx
+            .query(
+                "SELECT cr.id, COALESCE(v.folio, ''), CAST(cr.total - cr.abonado - cr.devuelto AS REAL)
+                 FROM creditos cr LEFT JOIN ventas v ON v.id = cr.venta_id
+                 WHERE cr.cliente_id = ?1 AND cr.estado = 'PENDIENTE' ORDER BY cr.fecha, cr.id",
+                libsql::params![cliente_id],
+            )
+            .await
+            .map_err(actualizando)?;
+        while let Some(f) = filas.next().await.map_err(e500)? {
+            let saldo = round2(f.get::<f64>(2).unwrap_or(0.0));
+            if saldo > 0.0 {
+                pendientes.push((f.get(0).unwrap_or_default(), f.get(1).unwrap_or_default(), saldo));
+            }
+        }
+        drop(filas);
+        let deuda = round2(pendientes.iter().map(|p| p.2).sum());
+        if deuda <= 0.0 {
+            return Err((StatusCode::CONFLICT, "Este cliente no tiene cuentas por pagar.".to_string()));
+        }
+        if monto > deuda + 0.005 {
+            return Err(malo(format!("El pago (S/ {:.2}) es mayor que lo que debe (S/ {:.2}).", monto, deuda)));
+        }
+        let mut queda = monto;
+        let mut aplicado = Vec::new();
+        for (id, folio, saldo) in pendientes {
+            if queda <= 0.005 {
+                break;
+            }
+            let parte = round2(queda.min(saldo));
+            registrar_abono(&tx, id, parte, &payload.metodo_pago, nota.or(Some("Pago de cuenta")), claims.sub).await?;
+            queda = round2(queda - parte);
+            aplicado.push(PagoAplicado { credito_id: id, folio, monto: parte, saldo_restante: round2(saldo - parte) });
+        }
+        Ok((aplicado, round2(deuda - monto)))
+    }
+    .await;
+    match resultado {
+        Ok((aplicado, saldo_total)) => {
+            tx.commit().await.map_err(e500)?;
+            Ok(Json(ResultadoPagoCliente { pagado: monto, aplicado, saldo_total: saldo_total.max(0.0) }))
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            Err(e)
+        }
+    }
 }

@@ -243,3 +243,41 @@
     overflow-wrap: anywhere;
   }
 }
+
+/* Lavandería: los servicios como botones para agregarlos de un toque. */
+.enc-rapidos {
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.enc-rapidos button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Lavandería: prenda escrita en la misma orden */
+.enc-prenda-nueva {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.enc-item-cabecera .enc-item-prenda {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.enc-item-cabecera:has(.enc-item-prenda) {
+  align-items: flex-end;
+}
+.enc-item-cobro {
+  margin-bottom: 6px;
+}
+
+/* Entregado y cobrado: lo que faltaba ya se pagó en la venta. */
+.enc-montos .enc-montos-pagado {
+  background: #ecfdf5;
+}
+.enc-montos .enc-montos-pagado strong {
+  color: #047857;
+}

@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useState } from 'react';
-import { HandCoins, Printer } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FileText, HandCoins, Printer } from 'lucide-react';
 import { api } from '../../api/api';
 import { METODOS_DE_ABONO, nombreMetodo } from '../../utils/metodoPago';
 import { formatoCantidad } from '../../utils/medidas';
 import { fechaCorta } from '../../utils/formato';
 import '../../components/PantallaModulo.css';
 import '../../components/Recibo.css';
+import EstadoCuenta from './EstadoCuenta';
 
+// CLIENTES (cierre de mes: una fila por cliente) solo con `cierreMes`
+// (rubro Lavandería); los demás negocios ven las mismas pestañas de siempre.
 const FILTROS = [
   { valor: 'PENDIENTE', label: 'Por cobrar' },
+  { valor: 'CLIENTES', label: 'Por cliente', soloCierreMes: true },
   { valor: 'PAGADO', label: 'Pagados' },
   { valor: 'TODOS', label: 'Todos' },
 ];
@@ -100,7 +104,7 @@ function CreditoImprimible({ credito, nombreTienda, direccion, telefono, ruc }) 
  * cada cliente y se registran los abonos. Un abono en efectivo entra a la
  * caja abierta como ingreso.
  */
-export default function Creditos({ nombreTienda, direccion, telefono, ruc }) {
+export default function Creditos({ nombreTienda, direccion, telefono, ruc, cierreMes = false }) {
   const [filtro, setFiltro] = useState('PENDIENTE');
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
@@ -110,11 +114,12 @@ export default function Creditos({ nombreTienda, direccion, telefono, ruc }) {
   const [nota, setNota] = useState('');
   const [errorAbono, setErrorAbono] = useState(null);
   const [ocupado, setOcupado] = useState(false);
+  const [estadoDe, setEstadoDe] = useState(null);
 
   const cargar = useCallback(
     () =>
       api
-        .creditos(filtro)
+        .creditos(filtro === 'CLIENTES' ? 'PENDIENTE' : filtro)
         .then((d) => {
           setDatos(d);
           setError(null);
@@ -140,6 +145,21 @@ export default function Creditos({ nombreTienda, direccion, telefono, ruc }) {
       setError(e.message);
     }
   };
+
+  // "Por cliente": lo pendiente agrupado (el más endeudado primero).
+  const porCliente = useMemo(() => {
+    if (filtro !== 'CLIENTES' || !datos) return [];
+    const mapa = new Map();
+    for (const c of datos.creditos) {
+      const g = mapa.get(c.cliente_id) || { cliente_id: c.cliente_id, nombre: c.cliente_nombre, saldo: 0, cuentas: 0, vencido: false, desde: c.fecha };
+      g.saldo = Math.round((g.saldo + c.saldo) * 100) / 100;
+      g.cuentas += 1;
+      g.vencido = g.vencido || c.vencido;
+      if (c.fecha < g.desde) g.desde = c.fecha;
+      mapa.set(c.cliente_id, g);
+    }
+    return [...mapa.values()].sort((a, b) => b.saldo - a.saldo);
+  }, [filtro, datos]);
 
   const montoNum = Math.round((parseFloat(String(monto).replace(',', '.')) || 0) * 100) / 100;
   const puedeAbonar = abierto && abierto.saldo > 0 && montoNum > 0 && montoNum <= abierto.saldo + 0.005 && !ocupado;
@@ -172,7 +192,7 @@ export default function Creditos({ nombreTienda, direccion, telefono, ruc }) {
           <p className="pm-subtitulo">Lo que te deben tus clientes. Para vender al crédito, elige “Crédito” al cobrar en el punto de venta.</p>
         </div>
         <div className="pm-filtros" role="tablist">
-          {FILTROS.map((f) => (
+          {FILTROS.filter((f) => cierreMes || !f.soloCierreMes).map((f) => (
             <button key={f.valor} role="tab" aria-selected={filtro === f.valor} className={filtro === f.valor ? 'activo' : ''} onClick={() => setFiltro(f.valor)}>
               {f.label}
             </button>
@@ -203,7 +223,24 @@ export default function Creditos({ nombreTienda, direccion, telefono, ruc }) {
         {!datos ? (
           <p className="pm-vacio">{error ? 'No se pudo cargar.' : 'Cargando...'}</p>
         ) : datos.creditos.length === 0 ? (
-          <p className="pm-vacio">{filtro === 'PENDIENTE' ? 'Nadie te debe: no hay créditos por cobrar.' : 'No hay créditos en esta lista.'}</p>
+          <p className="pm-vacio">{filtro === 'PENDIENTE' || filtro === 'CLIENTES' ? 'Nadie te debe: no hay créditos por cobrar.' : 'No hay créditos en esta lista.'}</p>
+        ) : filtro === 'CLIENTES' ? (
+          porCliente.map((g) => (
+            <button key={g.cliente_id} className="pm-fila" onClick={() => setEstadoDe(g.cliente_id)}>
+              <span className="pm-fila-principal">
+                <span className="pm-fila-titulo">
+                  {g.nombre} {g.vencido && <span className="pm-chip pm-chip-mal">Vencido</span>}
+                </span>
+                <span className="pm-fila-detalle">
+                  {g.cuentas === 1 ? '1 cuenta pendiente' : `${g.cuentas} cuentas pendientes`} · desde {fechaCorta(g.desde)} · toca para ver el estado de cuenta
+                </span>
+              </span>
+              <span className="pm-fila-monto">
+                <strong>S/ {g.saldo.toFixed(2)}</strong>
+                <span>debe</span>
+              </span>
+            </button>
+          ))
         ) : (
           datos.creditos.map((c) => (
             <button key={c.id} className="pm-fila" onClick={() => abrir(c.id)}>
@@ -335,6 +372,17 @@ export default function Creditos({ nombreTienda, direccion, telefono, ruc }) {
               </table>
             </div>
             <div className="pm-modal-pie">
+              {cierreMes && (
+                <button
+                  className="pm-boton-secundario"
+                  onClick={() => {
+                    setEstadoDe(abierto.cliente_id);
+                    setAbierto(null);
+                  }}
+                >
+                  <FileText size={15} /> Estado de cuenta del cliente
+                </button>
+              )}
               <button className="pm-boton-secundario" onClick={() => window.print()}>
                 <Printer size={15} /> Imprimir estado de cuenta
               </button>
@@ -347,6 +395,18 @@ export default function Creditos({ nombreTienda, direccion, telefono, ruc }) {
       )}
 
       <CreditoImprimible credito={abierto} nombreTienda={nombreTienda} direccion={direccion} telefono={telefono} ruc={ruc} />
+
+      {estadoDe && (
+        <EstadoCuenta
+          clienteId={estadoDe}
+          nombreTienda={nombreTienda}
+          direccion={direccion}
+          telefono={telefono}
+          ruc={ruc}
+          onCerrar={() => setEstadoDe(null)}
+          onPagado={cargar}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CakeSlice, Camera, ChefHat, MessageCircle, Pencil, Plus, Printer, ShoppingCart, Trash2 } from 'lucide-react';
+import { Camera, MessageCircle, Pencil, Plus, Printer, ShoppingCart, Trash2 } from 'lucide-react';
 import { api, API_URL } from '../../api/api';
 import { fechaCorta, hoyLima } from '../../utils/formato';
 import { formatoCantidad } from '../../utils/medidas';
@@ -10,6 +10,7 @@ import { enlaceWhatsapp } from '../../utils/vehiculos';
 import { imprimirTicket } from '../../utils/imprimirTicket';
 import { confirmar } from '../../utils/confirmar';
 import { comprimirImagen } from '../../utils/comprimirImagen';
+import { esRespaldoLavanderia, textosEncargos } from '../../utils/textosEncargos';
 import '../../components/PantallaModulo.css';
 import '../../components/Recibo.css';
 import './Encargos.css';
@@ -30,11 +31,71 @@ const ETIQUETA_ESTADO = {
 };
 
 const soles = (n) => `S/ ${Number(n || 0).toFixed(2)}`;
+
+const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+// "martes 27/10/2026"
+const diaYFecha = (texto) => {
+  const [a, m, d] = String(texto || '').slice(0, 10).split('-').map(Number);
+  if (!a || !m || !d) return fechaCorta(texto);
+  return `${DIAS[new Date(Date.UTC(a, m - 1, d)).getUTCDay()]} ${fechaCorta(texto)}`;
+};
+
+/**
+ * Lavandería: el WhatsApp lleva la orden completa. Recibida o en lavado:
+ * las prendas, el total, lo pagado, el saldo y cuándo se entrega. Lista:
+ * que ya puede recogerla (o que sale el delivery) y lo que falta pagar.
+ */
+function mensajeLavanderia(encargo, tienda) {
+  const nombre = encargo.cliente_nombre.split(' ')[0];
+  const pagado = redondear2(encargo.adelantado - encargo.devuelto);
+  const cuenta = [
+    `Total: ${soles(encargo.total)}`,
+    ...(pagado > 0 ? [`Pagado: ${soles(pagado)}`] : []),
+    encargo.saldo > 0 ? `Saldo por pagar: ${soles(encargo.saldo)}` : 'Ya está todo pagado ✅',
+  ];
+  if (encargo.estado === 'LISTO') {
+    return [
+      `Hola ${nombre} 👋`,
+      `¡Tu ropa ya está lista! 🧺 Orden N° ${encargo.numero} de ${tienda}.`,
+      '',
+      encargo.entrega === 'DELIVERY'
+        ? `La llevamos a ${encargo.direccion_entrega || 'tu dirección'}.`
+        : 'Ya puedes pasar a recogerla.',
+      encargo.saldo > 0 ? `Saldo por pagar: ${soles(encargo.saldo)}` : 'Ya está todo pagado ✅',
+      '',
+      '¡Gracias por tu preferencia!',
+    ].join('\n');
+  }
+  const prendas = (encargo.items || []).map((i) => {
+    const unidad = i.unidad_medida === 'PRENDA' ? (Number(i.cantidad) === 1 ? 'prenda' : 'prendas') : abreviaturaUnidad(i.unidad_medida);
+    const cantidad = `${formatoCantidad(i.cantidad)} ${unidad}`.trim();
+    return `• ${i.nombre}${i.detalle ? ` (${i.detalle})` : ''} · ${cantidad} · ${soles(i.total)}`;
+  });
+  const entrega =
+    encargo.entrega === 'DELIVERY'
+      ? `Entrega a domicilio: ${diaYFecha(encargo.fecha_entrega)}${encargo.hora_entrega ? ` a las ${encargo.hora_entrega}` : ''}${
+          encargo.direccion_entrega ? `, en ${encargo.direccion_entrega}` : ''
+        }.`
+      : `Lista para recoger: ${diaYFecha(encargo.fecha_entrega)}${encargo.hora_entrega ? ` desde las ${encargo.hora_entrega}` : ''}.`;
+  return [
+    `Hola ${nombre} 👋`,
+    `Recibimos tu ropa en ${tienda}. Orden N° ${encargo.numero}:`,
+    '',
+    ...prendas,
+    '',
+    ...cuenta,
+    '',
+    entrega,
+    'Te avisamos por aquí cuando esté lista. ¡Gracias!',
+  ].join('\n');
+}
 const numeroDe = (texto) => Number(String(texto ?? '').replace(',', '.'));
 const redondear2 = (n) => Math.round(n * 100) / 100;
 
-function Estado({ estado }) {
-  const [texto, clase] = ETIQUETA_ESTADO[estado] || [estado, ''];
+// t: textos del rubro (utils/textosEncargos.js); "En lavado" en lavandería.
+function Estado({ estado, t }) {
+  const [base, clase] = ETIQUETA_ESTADO[estado] || [estado, ''];
+  const texto = t?.estados?.[estado] || base;
   return <span className={`pm-chip ${clase}`}>{texto}</span>;
 }
 
@@ -64,13 +125,16 @@ const resumenItems = (e) =>
   (e.items || []).map((i) => `${formatoCantidad(i.cantidad)} ${i.nombre}`).join(', ');
 
 /**
- * Pedidos por encargo (módulo ENCARGOS, pastelería). El cliente pide una
+ * Pedidos por encargo (módulo ENCARGOS, pastelería; en lavandería son las
+ * órdenes de lavado, con sus propios textos). El cliente pide una
  * torta para una fecha y deja un adelanto: el adelanto no es una venta ni
  * lleva comprobante; queda en el historial del pedido (y en la caja, si fue
  * en efectivo). Al entregarlo se cobra en el punto de venta: sale la boleta
  * por el total y solo se cobra el saldo.
  */
-export default function Encargos({ nombreTienda, direccion, telefono, onEntregar }) {
+export default function Encargos({ nombreTienda, direccion, telefono, onEntregar, etiquetas }) {
+  const t = useMemo(() => textosEncargos(etiquetas), [etiquetas]);
+  const IconoTitulo = t.Icono;
   const [filtro, setFiltro] = useState('ACTIVOS');
   const [buscar, setBuscar] = useState('');
   const [lista, setLista] = useState([]);
@@ -126,15 +190,13 @@ export default function Encargos({ nombreTienda, direccion, telefono, onEntregar
       <header className="pm-cabecera">
         <div>
           <h1>
-            <CakeSlice size={22} /> Pedidos por encargo
+            <IconoTitulo size={22} /> {t.titulo}
           </h1>
-          <p className="pm-subtitulo">
-            Tortas y pedidos para una fecha. El adelanto no emite comprobante: al entregar se cobra el saldo y sale la boleta completa.
-          </p>
+          <p className="pm-subtitulo">{t.subtitulo}</p>
         </div>
         <div className="pm-acciones">
           <button className="pm-boton" onClick={() => setFormulario({})}>
-            <Plus size={15} /> Nuevo pedido
+            <Plus size={15} /> {t.nuevo}
           </button>
         </div>
       </header>
@@ -154,7 +216,7 @@ export default function Encargos({ nombreTienda, direccion, telefono, onEntregar
           value={buscar}
           placeholder="Buscar por cliente, teléfono o N°"
           onChange={(e) => setBuscar(e.target.value)}
-          aria-label="Buscar pedidos"
+          aria-label={t.buscarListado}
         />
       </div>
 
@@ -166,10 +228,10 @@ export default function Encargos({ nombreTienda, direccion, telefono, onEntregar
         <div className="pm-tarjeta">
           <p className="pm-vacio">
             {buscar
-              ? 'Ningún pedido coincide con la búsqueda.'
+              ? t.sinCoincidencias
               : filtro === 'ACTIVOS'
-                ? 'No hay pedidos por entregar. Toca “Nuevo pedido” cuando un cliente encargue algo.'
-                : 'No hay pedidos.'}
+                ? t.sinPendientes
+                : t.sinNada}
           </p>
         </div>
       ) : (
@@ -186,7 +248,7 @@ export default function Encargos({ nombreTienda, direccion, telefono, onEntregar
                 <button key={e.id} className="pm-fila" onClick={() => abrir(e.id)}>
                   <span className="pm-fila-principal">
                     <span className="pm-fila-titulo">
-                      {e.hora_entrega && <span className="enc-hora">{e.hora_entrega}</span>}N° {e.numero} · {e.cliente_nombre} <Estado estado={e.estado} />
+                      {e.hora_entrega && <span className="enc-hora">{e.hora_entrega}</span>}N° {e.numero} · {e.cliente_nombre} <Estado estado={e.estado} t={t} />
                       {e.entrega === 'DELIVERY' && <span className="pm-chip">Delivery</span>}
                     </span>
                     <span className="pm-fila-detalle" style={{ display: 'block' }}>
@@ -208,11 +270,12 @@ export default function Encargos({ nombreTienda, direccion, telefono, onEntregar
       )}
 
       {formulario && (
-        <FormularioEncargo encargo={formulario.encargo || null} onCerrar={() => setFormulario(null)} onGuardado={alGuardar} />
+        <FormularioEncargo t={t} encargo={formulario.encargo || null} onCerrar={() => setFormulario(null)} onGuardado={alGuardar} />
       )}
 
       {abierto && !formulario && (
         <DetalleEncargo
+          t={t}
           encargo={abierto}
           nombreTienda={nombreTienda}
           onCambio={(e) => {
@@ -230,6 +293,7 @@ export default function Encargos({ nombreTienda, direccion, telefono, onEntregar
         createPortal(
           <EncargoImprimible
             key={impresion.n}
+            t={t}
             tipo={impresion.tipo}
             encargo={impresion.encargo}
             nombreTienda={nombreTienda}
@@ -249,13 +313,16 @@ export default function Encargos({ nombreTienda, direccion, telefono, onEntregar
 const lineaDeItem = (i) => ({
   producto_id: i.producto_id,
   nombre: i.nombre,
+  // Lavandería: prenda escrita en la orden (su servicio es un respaldo).
+  libre: !!i.libre,
+  cobro: i.unidad_medida === 'KG' ? 'KG' : 'PRENDA',
   unidad_medida: i.unidad_medida,
   cantidad: String(formatoCantidad(i.cantidad)),
   precio: String(i.precio_unitario),
   detalle: i.detalle || '',
 });
 
-function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
+function FormularioEncargo({ t, encargo, onCerrar, onGuardado }) {
   const editando = !!encargo;
   const [datos, setDatos] = useState(() => ({
     cliente: encargo?.cliente_id
@@ -282,7 +349,10 @@ function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
   const cambiar = (campo, valor) => setDatos((d) => ({ ...d, [campo]: valor }));
 
   useEffect(() => {
-    api.productos().then(setProductos).catch(() => {});
+    api
+      .productos()
+      .then((lista) => setProductos((lista || []).filter((p) => !esRespaldoLavanderia(p))))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -303,6 +373,10 @@ function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
     return productos.filter((p) => p.nombre.toLowerCase().includes(q) || String(p.codigo || '').toLowerCase().includes(q)).slice(0, 8);
   }, [productos, buscarProducto]);
 
+  // Lavandería: los servicios del negocio como botones (Lavado por kilo,
+  // Al seco, Planchado...), para agregarlos de un toque al recibir la ropa.
+  const rapidos = useMemo(() => (t.serviciosRapidos ? productos.slice(0, 12) : []), [t.serviciosRapidos, productos]);
+
   const agregar = (p) => {
     setBuscarProducto('');
     setDatos((d) => ({
@@ -313,6 +387,24 @@ function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
       ],
     }));
   };
+  // Lavandería: una prenda que no está en Servicios se escribe aquí mismo,
+  // con su cobro (por prenda o por kilo) y su precio.
+  const agregarEscrita = () =>
+    setDatos((d) => ({
+      ...d,
+      items: [
+        ...d.items,
+        { producto_id: null, libre: true, cobro: 'PRENDA', nombre: '', unidad_medida: 'PRENDA', cantidad: '1', precio: '', detalle: '' },
+      ],
+    }));
+  // Cambiar el cobro de una prenda escrita: el servidor le asigna el respaldo que corresponde.
+  const cambiarCobro = (idx, cobro) =>
+    setDatos((d) => ({
+      ...d,
+      items: d.items.map((i, n) =>
+        n === idx && i.cobro !== cobro ? { ...i, cobro, unidad_medida: cobro === 'KG' ? 'KG' : 'PRENDA', producto_id: null } : i
+      ),
+    }));
   const cambiarItem = (idx, campo, valor) =>
     setDatos((d) => ({ ...d, items: d.items.map((i, n) => (n === idx ? { ...i, [campo]: valor } : i)) }));
   const quitarItem = (idx) => setDatos((d) => ({ ...d, items: d.items.filter((_, n) => n !== idx) }));
@@ -323,7 +415,8 @@ function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
   const guardar = async () => {
     setError(null);
     if (!datos.cliente && !datos.cliente_nombre.trim()) return setError('Elige un cliente o escribe su nombre.');
-    if (datos.items.length === 0) return setError('Agrega lo que lleva el pedido.');
+    if (datos.items.length === 0) return setError(t.errorSinItems);
+    if (datos.items.some((i) => i.libre && !i.nombre.trim())) return setError(t.errorPrendaSinNombre);
     if (datos.items.some((i) => !(numeroDe(i.cantidad) > 0) || !(numeroDe(i.precio) >= 0))) return setError('Revisa las cantidades y los precios.');
     if (datos.entrega === 'DELIVERY' && !datos.direccion_entrega.trim()) return setError('Escribe la dirección del delivery.');
     if (!editando && adelanto > total + 0.005) return setError('El adelanto no puede ser mayor que el total.');
@@ -339,6 +432,7 @@ function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
       notas: datos.notas.trim() || null,
       items: datos.items.map((i) => ({
         producto_id: i.producto_id,
+        ...(i.libre ? { nombre: i.nombre.trim(), cobro: i.cobro } : {}),
         cantidad: numeroDe(i.cantidad),
         precio_unitario: numeroDe(i.precio),
         detalle: i.detalle.trim() || null,
@@ -357,10 +451,10 @@ function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
 
   return (
     <div className="pm-velo" onMouseDown={(e) => e.target === e.currentTarget && !ocupado && onCerrar()}>
-      <div className="pm-modal pm-modal-ancho" role="dialog" aria-modal="true" aria-label={editando ? 'Editar pedido' : 'Nuevo pedido'}>
+      <div className="pm-modal pm-modal-ancho" role="dialog" aria-modal="true" aria-label={editando ? t.ariaEditar : t.ariaNuevo}>
         <div className="pm-modal-cabecera">
-          <h2>{editando ? `Editar pedido N° ${encargo.numero}` : 'Nuevo pedido por encargo'}</h2>
-          <p>El precio de cada producto es el que acordaste con el cliente; al entregar se cobra ese.</p>
+          <h2>{editando ? t.tituloEditar(encargo.numero) : t.tituloNuevo}</h2>
+          <p>{t.ayudaPrecio}</p>
         </div>
         <div className="pm-modal-cuerpo">
           {error && <p className="pm-mensaje pm-mensaje-error">{error}</p>}
@@ -453,31 +547,70 @@ function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
             )}
           </div>
 
-          <p className="pm-seccion">Qué lleva</p>
-          {datos.items.length === 0 && <p className="pm-vacio">Busca abajo la torta o los productos del pedido.</p>}
+          <p className="pm-seccion">{t.seccionItems}</p>
+          {t.serviciosRapidos && rapidos.length > 0 && (
+            <div className="pm-opciones enc-rapidos" aria-label="Agregar un servicio">
+              {rapidos.map((p) => (
+                <button key={p.id} type="button" onClick={() => agregar(p)}>
+                  <Plus size={13} /> {p.nombre}
+                </button>
+              ))}
+            </div>
+          )}
+          {t.prendasEscritas && (
+            <button type="button" className="pm-boton-secundario enc-prenda-nueva" onClick={agregarEscrita}>
+              <Plus size={14} /> {t.botonPrendaNueva}
+            </button>
+          )}
+          {datos.items.length === 0 && <p className="pm-vacio">{t.vacioItems}</p>}
           {datos.items.map((i, idx) => (
             <div key={`${i.producto_id}-${idx}`} className="enc-item">
               <div className="enc-item-cabecera">
-                <strong>{i.nombre}</strong>
+                {i.libre ? (
+                  <label className="pm-campo enc-item-prenda">
+                    <span>{t.etiquetaPrenda}</span>
+                    <input
+                      value={i.nombre}
+                      maxLength={120}
+                      placeholder={t.ejemploPrenda}
+                      autoFocus={!i.nombre && idx === datos.items.length - 1}
+                      onChange={(e) => cambiarItem(idx, 'nombre', e.target.value)}
+                    />
+                  </label>
+                ) : (
+                  <strong>{i.nombre}</strong>
+                )}
                 <button type="button" className="pm-boton-secundario" onClick={() => quitarItem(idx)} aria-label={`Quitar ${i.nombre}`}>
                   <Trash2 size={14} />
                 </button>
               </div>
+              {i.libre && (
+                <div className="pm-opciones enc-item-cobro" aria-label="Cómo se cobra">
+                  {[
+                    ['PRENDA', 'Por prenda'],
+                    ['KG', 'Por kilo'],
+                  ].map(([valor, label]) => (
+                    <button key={valor} type="button" className={i.cobro === valor ? 'activo' : ''} onClick={() => cambiarCobro(idx, valor)}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="enc-item-campos">
                 <label className="pm-campo">
                   <span>Cantidad {abreviaturaUnidad(i.unidad_medida)}</span>
                   <input inputMode="decimal" value={i.cantidad} onChange={(e) => cambiarItem(idx, 'cantidad', e.target.value)} />
                 </label>
                 <label className="pm-campo">
-                  <span>Precio acordado (c/u)</span>
+                  <span>{t.etiquetaPrecio}</span>
                   <input inputMode="decimal" value={i.precio} onChange={(e) => cambiarItem(idx, 'precio', e.target.value)} />
                 </label>
                 <label className="pm-campo enc-item-detalle">
-                  <span>Detalle: sabor, relleno, cobertura, tamaño</span>
+                  <span>{i.libre ? t.etiquetaDetalleEscrita : t.etiquetaDetalle}</span>
                   <input
                     value={i.detalle}
                     maxLength={500}
-                    placeholder={idx === 0 ? 'Chocolate, relleno de manjar, cobertura de fondant, 20 porciones' : 'Opcional'}
+                    placeholder={i.libre ? t.ejemploDetalleEscrita : idx === 0 ? t.ejemploDetalle : 'Opcional'}
                     onChange={(e) => cambiarItem(idx, 'detalle', e.target.value)}
                   />
                 </label>
@@ -485,7 +618,7 @@ function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
             </div>
           ))}
           <div className="pm-campo" style={{ marginTop: 8 }}>
-            <input value={buscarProducto} placeholder="Agregar: busca la torta o el producto por nombre o código" onChange={(e) => setBuscarProducto(e.target.value)} />
+            <input value={buscarProducto} placeholder={t.buscarProducto} onChange={(e) => setBuscarProducto(e.target.value)} />
           </div>
           {encontrados.map((p) => (
             <button key={p.id} type="button" className="pm-fila" onClick={() => agregar(p)}>
@@ -501,16 +634,18 @@ function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
             </button>
           ))}
           <div className="pm-total">
-            <span>Total del pedido</span>
+            <span>{t.totalPedido}</span>
             <strong>{soles(total)}</strong>
           </div>
 
-          <p className="pm-seccion">Para el pastelero</p>
+          <p className="pm-seccion">{t.seccionNotas}</p>
           <div className="pm-campos">
-            <label className="pm-campo pm-campo-ancho">
-              <span>Dedicatoria (lo que va escrito)</span>
-              <input value={datos.dedicatoria} maxLength={200} placeholder="¡Feliz cumpleaños, Sofía!" onChange={(e) => cambiar('dedicatoria', e.target.value)} />
-            </label>
+            {(t.dedicatoria || datos.dedicatoria) && (
+              <label className="pm-campo pm-campo-ancho">
+                <span>Dedicatoria (lo que va escrito)</span>
+                <input value={datos.dedicatoria} maxLength={200} placeholder="¡Feliz cumpleaños, Sofía!" onChange={(e) => cambiar('dedicatoria', e.target.value)} />
+              </label>
+            )}
             <label className="pm-campo pm-campo-ancho">
               <span>Notas</span>
               <textarea rows={2} maxLength={1000} value={datos.notas} onChange={(e) => cambiar('notas', e.target.value)} />
@@ -549,7 +684,7 @@ function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
             Cancelar
           </button>
           <button className="pm-boton" onClick={guardar} disabled={ocupado}>
-            {ocupado ? 'Guardando...' : editando ? 'Guardar cambios' : 'Registrar pedido'}
+            {ocupado ? 'Guardando...' : editando ? 'Guardar cambios' : t.botonRegistrar}
           </button>
         </div>
       </div>
@@ -561,7 +696,8 @@ function FormularioEncargo({ encargo, onCerrar, onGuardado }) {
 // Detalle
 // ---------------------------------------------------------------------
 
-function DetalleEncargo({ encargo, nombreTienda, onCambio, onCerrar, onEditar, onImprimir, onEntregar }) {
+function DetalleEncargo({ t, encargo, nombreTienda, onCambio, onCerrar, onEditar, onImprimir, onEntregar }) {
+  const IconoOrden = t.IconoOrden;
   const activo = !['ENTREGADO', 'CANCELADO'].includes(encargo.estado);
   const [error, setError] = useState(null);
   const [ocupado, setOcupado] = useState(false);
@@ -609,21 +745,28 @@ function DetalleEncargo({ encargo, nombreTienda, onCambio, onCerrar, onEditar, o
   };
 
   const pagado = redondear2(encargo.adelantado - encargo.devuelto);
-  const mensajeListo = `Hola ${encargo.cliente_nombre.split(' ')[0]}, tu pedido N° ${encargo.numero} de ${nombreTienda || 'la pastelería'} ya está listo${
+  const mensajeListo = `Hola ${encargo.cliente_nombre.split(' ')[0]}, ${t.tuPedido(encargo.numero)} de ${nombreTienda || t.negocio} ${t.yaListo}${
     encargo.entrega === 'DELIVERY' ? ' y sale en camino' : ' para recoger'
   }.${encargo.saldo > 0 ? ` Saldo por pagar: ${soles(encargo.saldo)}.` : ''} ¡Gracias!`;
-  const mensajeRecordatorio = `Hola ${encargo.cliente_nombre.split(' ')[0]}, te recordamos tu pedido N° ${encargo.numero} de ${
-    nombreTienda || 'la pastelería'
+  const mensajeRecordatorio = `Hola ${encargo.cliente_nombre.split(' ')[0]}, te recordamos ${t.tuPedido(encargo.numero)} de ${
+    nombreTienda || t.negocio
   } para el ${fechaCorta(encargo.fecha_entrega)}${encargo.hora_entrega ? ` a las ${encargo.hora_entrega}` : ''}.${
     encargo.saldo > 0 ? ` Saldo por pagar: ${soles(encargo.saldo)}.` : ''
   }`;
-  const whatsapp = enlaceWhatsapp(encargo.cliente_telefono, encargo.estado === 'LISTO' ? mensajeListo : mensajeRecordatorio);
+  const whatsapp = enlaceWhatsapp(
+    encargo.cliente_telefono,
+    t.whatsappDetallado
+      ? mensajeLavanderia(encargo, nombreTienda || t.negocio)
+      : encargo.estado === 'LISTO'
+        ? mensajeListo
+        : mensajeRecordatorio
+  );
 
   const entregar = async () => {
     if (
       encargo.estado !== 'LISTO' &&
       !(await confirmar({
-        titulo: `El pedido N° ${encargo.numero} aún no está marcado como listo`,
+        titulo: t.avisoNoListo(encargo.numero),
         mensaje: '¿Lo entregas igual? Se abre el punto de venta para cobrar el saldo.',
         textoConfirmar: 'Entregar igual',
         tipo: 'normal',
@@ -636,10 +779,10 @@ function DetalleEncargo({ encargo, nombreTienda, onCambio, onCerrar, onEditar, o
 
   return (
     <div className="pm-velo" onMouseDown={(e) => e.target === e.currentTarget && onCerrar()}>
-      <div className="pm-modal pm-modal-ancho" role="dialog" aria-modal="true" aria-label={`Pedido ${encargo.numero}`}>
+      <div className="pm-modal pm-modal-ancho" role="dialog" aria-modal="true" aria-label={`${t.Pedido} ${encargo.numero}`}>
         <div className="pm-modal-cabecera">
           <h2>
-            Pedido N° {encargo.numero} · {encargo.cliente_nombre} <Estado estado={encargo.estado} />
+            {t.Pedido} N° {encargo.numero} · {encargo.cliente_nombre} <Estado estado={encargo.estado} t={t} />
           </h2>
           <p>
             Entrega: {cuando(encargo.fecha_entrega)} {fechaCorta(encargo.fecha_entrega)}
@@ -693,7 +836,7 @@ function DetalleEncargo({ encargo, nombreTienda, onCambio, onCerrar, onEditar, o
                 </dd>
               </dl>
 
-              <p className="pm-seccion">Qué lleva</p>
+              <p className="pm-seccion">{t.seccionItems}</p>
               <table className="pm-lineas">
                 <tbody>
                   {encargo.items.map((i) => (
@@ -722,18 +865,24 @@ function DetalleEncargo({ encargo, nombreTienda, onCambio, onCerrar, onEditar, o
                     <strong>{soles(encargo.saldo)}</strong>
                   </div>
                 )}
+                {encargo.estado === 'ENTREGADO' && encargo.saldo > 0 && (
+                  <div className={encargo.a_cuenta ? 'enc-montos-saldo' : 'enc-montos-pagado'}>
+                    <span>{encargo.a_cuenta ? 'Quedó a cuenta' : 'Cobrado al entregar'}</span>
+                    <strong>{soles(encargo.saldo)}</strong>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="enc-foto">
               {encargo.foto_url ? (
                 <a href={`${API_URL}${encargo.foto_url}`} target="_blank" rel="noreferrer">
-                  <img src={`${API_URL}${encargo.foto_url}`} alt="Foto de referencia del diseño" />
+                  <img src={`${API_URL}${encargo.foto_url}`} alt={t.altFoto} />
                 </a>
               ) : (
                 <div className="enc-foto-vacia">
                   <Camera size={26} />
-                  <span>Sin foto del diseño</span>
+                  <span>{t.sinFoto}</span>
                 </div>
               )}
               {activo && (
@@ -848,7 +997,7 @@ function DetalleEncargo({ encargo, nombreTienda, onCambio, onCerrar, onEditar, o
                   Volver
                 </button>
                 <button className="pm-boton-peligro" onClick={cancelar} disabled={ocupado}>
-                  Cancelar pedido
+                  {t.cancelar}
                 </button>
               </div>
             </div>
@@ -857,7 +1006,7 @@ function DetalleEncargo({ encargo, nombreTienda, onCambio, onCerrar, onEditar, o
         <div className="pm-modal-pie enc-pie">
           {activo && !cancelando && (
             <button className="pm-boton-peligro" onClick={() => setCancelando({ motivo: '', devolver: pagado > 0, metodo: 'EFECTIVO' })} disabled={ocupado}>
-              Cancelar pedido
+              {t.cancelar}
             </button>
           )}
           {activo && (
@@ -866,19 +1015,19 @@ function DetalleEncargo({ encargo, nombreTienda, onCambio, onCerrar, onEditar, o
             </button>
           )}
           <button className="pm-boton-secundario" onClick={() => onImprimir('PRODUCCION')}>
-            <ChefHat size={15} /> Orden de producción
+            <IconoOrden size={15} /> {t.ordenTrabajo}
           </button>
           <button className="pm-boton-secundario" onClick={() => onImprimir('CLIENTE')}>
             <Printer size={15} /> Ticket del cliente
           </button>
           {whatsapp && activo && (
             <a className="pm-boton-secundario" href={whatsapp} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-              <MessageCircle size={15} /> {encargo.estado === 'LISTO' ? 'Avisar que está listo' : 'Recordar por WhatsApp'}
+              <MessageCircle size={15} /> {encargo.estado === 'LISTO' ? 'Avisar que está listo' : t.whatsappDetallado ? 'Enviar la orden por WhatsApp' : 'Recordar por WhatsApp'}
             </a>
           )}
           {encargo.estado === 'PENDIENTE' && (
             <button className="pm-boton-secundario" onClick={() => ejecutar(() => api.encargoEstado(encargo.id, 'EN_PREPARACION'))} disabled={ocupado}>
-              En preparación
+              {t.botonPreparacion}
             </button>
           )}
           {(encargo.estado === 'PENDIENTE' || encargo.estado === 'EN_PREPARACION') && (
@@ -888,7 +1037,7 @@ function DetalleEncargo({ encargo, nombreTienda, onCambio, onCerrar, onEditar, o
           )}
           {encargo.estado === 'LISTO' && (
             <button className="pm-boton-secundario" onClick={() => ejecutar(() => api.encargoEstado(encargo.id, 'EN_PREPARACION'))} disabled={ocupado}>
-              Volver a preparación
+              {t.volverPreparacion}
             </button>
           )}
           <button className="pm-boton-secundario" onClick={onCerrar}>
@@ -914,7 +1063,7 @@ function DetalleEncargo({ encargo, nombreTienda, onCambio, onCerrar, onEditar, o
  * saldo (no es comprobante de pago). PRODUCCION: para el pastelero, sin
  * precios, con el detalle y la dedicatoria en grande.
  */
-function EncargoImprimible({ tipo, encargo, nombreTienda, direccion, telefono }) {
+function EncargoImprimible({ t, tipo, encargo, nombreTienda, direccion, telefono }) {
   const produccion = tipo === 'PRODUCCION';
   const pagado = redondear2(encargo.adelantado - encargo.devuelto);
   return (
@@ -927,7 +1076,7 @@ function EncargoImprimible({ tipo, encargo, nombreTienda, direccion, telefono })
           <div className="recibo-linea"></div>
         </>
       )}
-      <div className="recibo-centro recibo-comprobante-tipo">{produccion ? 'ORDEN DE PRODUCCIÓN' : 'PEDIDO POR ENCARGO'}</div>
+      <div className="recibo-centro recibo-comprobante-tipo">{produccion ? t.ticketTrabajo : t.ticketCliente}</div>
       <div className="recibo-centro recibo-comprobante-numero">N° {encargo.numero}</div>
       <div className="recibo-linea"></div>
       <div className="recibo-fila-meta">
@@ -994,17 +1143,37 @@ function EncargoImprimible({ tipo, encargo, nombreTienda, direccion, telefono })
             <span>Adelanto</span>
             <span>S/.{pagado.toFixed(2)}</span>
           </div>
-          <div className="recibo-total">
-            <span>SALDO</span>
-            <span>S/.{encargo.saldo.toFixed(2)}</span>
-          </div>
+          {/* Entregado: lo que faltaba ya se cobró en la venta (o quedó a cuenta). */}
+          {encargo.estado === 'ENTREGADO' && encargo.saldo > 0 && (
+            <div className="recibo-fila-meta">
+              <span>{encargo.a_cuenta ? 'A cuenta' : 'Pagado al entregar'}</span>
+              <span>S/.{encargo.saldo.toFixed(2)}</span>
+            </div>
+          )}
+          {encargo.estado === 'ENTREGADO' ? (
+            <div className="recibo-total">
+              <span>{encargo.a_cuenta ? 'DEBE (A CUENTA)' : 'PAGADO'}</span>
+              <span>{encargo.a_cuenta ? `S/.${encargo.saldo.toFixed(2)}` : `S/.${encargo.total.toFixed(2)}`}</span>
+            </div>
+          ) : (
+            <div className="recibo-total">
+              <span>SALDO</span>
+              <span>S/.{encargo.saldo.toFixed(2)}</span>
+            </div>
+          )}
+          {encargo.estado === 'ENTREGADO' && encargo.folio_venta && (
+            <div className="recibo-fila-meta">
+              <span>Venta</span>
+              <span>{encargo.folio_venta}</span>
+            </div>
+          )}
           <div className="recibo-linea"></div>
           <div className="recibo-centro recibo-disclaimer">
-            Este documento no es un comprobante de pago. La boleta o factura se entrega con el pedido.
+            {t.pieTicket}
           </div>
         </>
       )}
-      {produccion && encargo.foto_url && <div className="recibo-centro recibo-disclaimer">Ver foto del diseño en el sistema.</div>}
+      {produccion && encargo.foto_url && <div className="recibo-centro recibo-disclaimer">{t.fotoEnSistema}</div>}
     </div>
   );
 }

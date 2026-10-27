@@ -132,8 +132,15 @@ export function gruposParaUsuario(usuario, { restaurante = false, etiquetas = {}
   const almacen = esAlmacen(usuario);
   return GRUPOS_MENU.map((g) => ({
     ...g,
-    // El rubro puede renombrar pantallas ("Carta" en vez de "Productos").
-    items: g.items.map((i) => (etiquetas[i.id] ? { ...i, label: etiquetas[i.id] } : i)).filter((i) => {
+    // El rubro puede renombrar pantallas ("Carta" en vez de "Productos") y
+    // cambiarles el ícono (etiquetas.iconos, p. ej. la lavadora en lavandería).
+    items: g.items
+      .map((i) => {
+        const label = typeof etiquetas[i.id] === 'string' ? etiquetas[i.id] : i.label;
+        const icono = etiquetas.iconos?.[i.id] || i.icono;
+        return label === i.label && icono === i.icono ? i : { ...i, label, icono };
+      })
+      .filter((i) => {
       if (i.soloRestaurante && !restaurante) return false;
       if (i.modulo && !modulos.includes(i.modulo)) return false;
       if (almacen) return PANTALLAS_ALMACEN.includes(i.id);
@@ -142,7 +149,7 @@ export function gruposParaUsuario(usuario, { restaurante = false, etiquetas = {}
       // El cajero solo cobra: la carta del día la arman los demás.
       if (i.sinCajero && esCajero(usuario)) return false;
       return esAdmin || !i.soloAdmin;
-    }),
+      }),
   })).filter((g) => g.items.length > 0);
 }
 

@@ -52,6 +52,11 @@ export const GRUPOS_UNIDADES = [
     ],
   },
   {
+    titulo: 'Lavandería',
+    rubros: ['LAVANDERIA'],
+    unidades: [{ valor: 'PRENDA', label: 'Prenda', abrev: 'prenda' }],
+  },
+  {
     titulo: 'Básicas',
     unidades: [
       { valor: 'UNIDAD', label: 'Unidad', abrev: 'und' },
