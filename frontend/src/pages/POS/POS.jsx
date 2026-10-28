@@ -328,6 +328,7 @@ export default function POS({
   onCancelarCobroPedido,
   onPedidoCobrado,
   onVolverAMesas,
+  textoVolverAMesas = 'Volver a mesas',
 }) {
   const cobrandoPedido = !!pedidoACobrar;
   // El buscador solo se enfoca solo en desktop -- en celular, hacerlo
@@ -3103,7 +3104,7 @@ export default function POS({
                   buscadorRef.current?.focus();
                 }}
               >
-                {ultimaVentaParaImprimir.deMesa && onVolverAMesas ? 'Volver a mesas' : 'Nueva venta'}
+                {ultimaVentaParaImprimir.deMesa && onVolverAMesas ? textoVolverAMesas : 'Nueva venta'}
               </button>
             </div>
           </div>

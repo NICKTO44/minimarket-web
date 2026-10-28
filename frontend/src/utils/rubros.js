@@ -46,12 +46,15 @@ export const MODULO_ENCARGOS = 'ENCARGOS';
 // Producción del día y mermas; recetas de producción con insumos y costo.
 export const MODULO_PRODUCCION = 'PRODUCCION';
 export const MODULO_INSUMOS = 'INSUMOS';
+// Dark kitchen: pedidos por WhatsApp / delivery (necesita la atención en mesas).
+export const MODULO_DELIVERY = 'DELIVERY';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
   [MODULO_ALTERNATIVAS]: MODULO_FICHA_MEDICAMENTO,
   [MODULO_ORDENES_SERVICIO]: MODULO_VEHICULOS,
   [MODULO_INSUMOS]: MODULO_PRODUCCION,
+  [MODULO_DELIVERY]: MODULO_MESAS,
 };
 
 /**
@@ -207,6 +210,12 @@ export const MODULOS = [
     label: 'Recetas e insumos',
     descripcion:
       'La receta de producción de cada producto (cuánto rinde y qué insumos lleva): cuánto cuesta hacerlo y cuánto ganas. Al registrar la producción se descuentan los insumos. Enciende también Producción y mermas.',
+  },
+  {
+    valor: MODULO_DELIVERY,
+    label: 'Pedidos delivery (dark kitchen)',
+    descripcion:
+      'Para cocinas sin local que atienden por WhatsApp: el tablero de pedidos reemplaza a las mesas, con cliente, dirección y costo de envío; pago adelantado (no sale sin cobrar) o contra entrega con vuelto; repartidor, en camino y entregado; y "Por rendir": cuánto debe entregar cada repartidor. Enciende también la atención en mesas.',
   },
 ];
 

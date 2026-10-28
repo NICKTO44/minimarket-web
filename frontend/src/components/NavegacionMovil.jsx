@@ -19,6 +19,7 @@ import {
   esAlmacen,
   esMesero,
   esPreparacion,
+  esRepartidor,
   etiquetaRol,
   gruposParaUsuario,
   nivelAvisoSuscripcion,
@@ -100,7 +101,13 @@ export default function NavegacionMovil({
   const mesero = restaurante && esMesero(usuario);
   const preparacion = restaurante && esPreparacion(usuario);
   const almacen = esAlmacen(usuario);
-  const tabsFijas = almacen
+  const repartidor = restaurante && esRepartidor(usuario);
+  // El rubro o el módulo pueden renombrar Mesas ("Pedidos", "Mis entregas").
+  const etiquetaMesas = typeof etiquetas.MESAS === 'string' ? etiquetas.MESAS : 'Mesas';
+  const IconoMesas = etiquetas.iconos?.MESAS || UtensilsCrossed;
+  const tabsFijas = repartidor
+    ? ['MESAS']
+    : almacen
     ? PANTALLAS_ALMACEN
     : preparacion
     ? TABS_PREPARACION
@@ -162,14 +169,14 @@ export default function NavegacionMovil({
         ) : preparacion ? (
           <Tab id="PREPARACION" label="Preparación" Icono={ChefHat} pantalla={pantalla} onIr={ir} />
         ) : restaurante ? (
-          <Tab id="MESAS" label="Mesas" Icono={UtensilsCrossed} pantalla={pantalla} onIr={ir} insignia={insignias.MESAS} />
+          <Tab id="MESAS" label={etiquetaMesas} Icono={IconoMesas} pantalla={pantalla} onIr={ir} insignia={insignias.MESAS} />
         ) : (
           <Tab id="RESUMEN" label="Inicio" Icono={House} pantalla={pantalla} onIr={ir} />
         )}
         {(mesero || preparacion) && (
           <Tab id="CARTA" label="Carta de hoy" Icono={ClipboardList} pantalla={pantalla} onIr={ir} />
         )}
-        {!mesero && !preparacion && !almacen && (
+        {!mesero && !preparacion && !almacen && !repartidor && (
           <>
             <Tab id="CAJA" label="Caja" Icono={Wallet} pantalla={pantalla} onIr={ir} />
             <button

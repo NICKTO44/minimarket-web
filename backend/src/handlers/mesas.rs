@@ -534,14 +534,27 @@ pub async fn agregar_items(
 ) -> Resultado<PedidoDetalle> {
     let conn = tenant.0.connect().map_err(e500)?;
     exigir_modulo_y_pedido(&conn, pedido_id).await?;
+    insertar_items(&conn, pedido_id, &payload.items, claims.sub).await?;
+    Ok(Json(detalle_pedido(&conn, pedido_id).await?))
+}
 
-    if payload.items.is_empty() {
+/// Valida y agrega líneas PENDIENTES a un pedido (precio del producto +
+/// extras de sus opciones, calculado aquí). Lo usan agregar_items y los
+/// pedidos delivery (handlers/delivery.rs), que lo llaman dentro de su
+/// transacción. No revisa el estado del pedido: eso lo hace quien llama.
+pub async fn insertar_items(
+    conn: &libsql::Connection,
+    pedido_id: i64,
+    items: &[NuevoItemPedido],
+    usuario_id: i64,
+) -> Result<(), (StatusCode, String)> {
+    if items.is_empty() {
         return Err(error(StatusCode::BAD_REQUEST, "No hay productos para agregar."));
     }
-    if payload.items.len() > 100 {
+    if items.len() > 100 {
         return Err(error(StatusCode::BAD_REQUEST, "Demasiados productos en un solo envío."));
     }
-    for item in &payload.items {
+    for item in items {
         if !(item.cantidad > 0.0 && item.cantidad <= 999.0) {
             return Err(error(StatusCode::BAD_REQUEST, "La cantidad debe estar entre 1 y 999."));
         }
@@ -550,7 +563,7 @@ pub async fn agregar_items(
     // Todo en pocas consultas, sin importar cuántos productos vengan:
     // 1) productos + los grupos de opciones que les aplican (un JOIN),
     // 2) las opciones elegidas, 3) un solo INSERT con todas las líneas.
-    let mut ids_productos: Vec<i64> = payload.items.iter().map(|i| i.producto_id).collect();
+    let mut ids_productos: Vec<i64> = items.iter().map(|i| i.producto_id).collect();
     ids_productos.sort_unstable();
     ids_productos.dedup();
 
@@ -600,7 +613,7 @@ pub async fn agregar_items(
         }
     }
 
-    let mut ids_opciones: Vec<i64> = payload.items.iter().flat_map(|i| i.opcion_ids.iter().copied()).collect();
+    let mut ids_opciones: Vec<i64> = items.iter().flat_map(|i| i.opcion_ids.iter().copied()).collect();
     ids_opciones.sort_unstable();
     ids_opciones.dedup();
     // opcion_id -> (grupo_id, nombre, precio_extra)
@@ -627,7 +640,7 @@ pub async fn agregar_items(
 
     // Validar TODO antes de insertar, para no dejar el pedido a medias.
     let mut valores: Vec<libsql::Value> = Vec::new();
-    for item in &payload.items {
+    for item in items {
         let (nombre, precio, activo, grupos) = productos
             .get(&item.producto_id)
             .ok_or_else(|| error(StatusCode::NOT_FOUND, "Uno de los productos ya no existe."))?;
@@ -686,10 +699,10 @@ pub async fn agregar_items(
         valores.push(texto_limpio(&item.nota, 140).into());
         valores.push(item.cantidad.into());
         valores.push(redondear_2(precio + extras).into());
-        valores.push(claims.sub.into());
+        valores.push(usuario_id.into());
     }
 
-    let filas_sql = (0..payload.items.len())
+    let filas_sql = (0..items.len())
         .map(|n| format!("({})", marcadores(n * 8 + 1, 8)))
         .collect::<Vec<_>>()
         .join(", ");
@@ -703,8 +716,7 @@ pub async fn agregar_items(
     )
     .await
     .map_err(e500)?;
-
-    Ok(Json(detalle_pedido(&conn, pedido_id).await?))
+    Ok(())
 }
 
 /// Estado actual de una línea del pedido.
@@ -1190,6 +1202,11 @@ pub async fn listar_roles(
     exigir_admin(&claims)?;
     let conn = tenant.0.connect().map_err(e500)?;
     let restaurante = modo_restaurante(&conn).await;
+    let repartidores = crate::handlers::rubros::negocio(&conn)
+        .await
+        .modulos
+        .iter()
+        .any(|m| m == crate::handlers::rubros::MODULO_DELIVERY);
     let mut filas = conn
         .query("SELECT id, nombre FROM roles WHERE activo = 1 ORDER BY id", ())
         .await
@@ -1198,6 +1215,10 @@ pub async fn listar_roles(
     while let Some(f) = filas.next().await.map_err(e500)? {
         let nombre: String = f.get(1).unwrap_or_default();
         if (nombre == "MESERO" || nombre == "PREPARACION") && !restaurante {
+            continue;
+        }
+        // Repartidor: solo con Pedidos delivery (dark kitchen) encendido.
+        if nombre == "REPARTIDOR" && !(restaurante && repartidores) {
             continue;
         }
         roles.push(RolResumen { id: f.get(0).unwrap_or_default(), nombre });

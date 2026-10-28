@@ -95,6 +95,10 @@ pub const MODULO_PRODUCCION: &str = "PRODUCCION";
 /// Recetas de producción con sus insumos: costo de cada producto y
 /// descuento de insumos al producir (handlers/produccion.rs). Necesita PRODUCCION.
 pub const MODULO_INSUMOS: &str = "INSUMOS";
+/// Dark kitchen: pedidos por WhatsApp / delivery con datos de entrega,
+/// pago adelantado o contra entrega y repartidor (handlers/delivery.rs).
+/// Necesita la atención en mesas (sus pedidos, comandas y cocina).
+pub const MODULO_DELIVERY: &str = "DELIVERY";
 
 /// (módulo, el módulo que necesita encendido).
 const DEPENDENCIAS: &[(&str, &str)] = &[
@@ -102,6 +106,7 @@ const DEPENDENCIAS: &[(&str, &str)] = &[
     (MODULO_ALTERNATIVAS, MODULO_FICHA_MEDICAMENTO),
     (MODULO_ORDENES_SERVICIO, MODULO_VEHICULOS),
     (MODULO_INSUMOS, MODULO_PRODUCCION),
+    (MODULO_DELIVERY, MODULO_MESAS),
 ];
 
 const MODULOS: &[&str] = &[
@@ -129,6 +134,7 @@ const MODULOS: &[&str] = &[
     MODULO_ENCARGOS,
     MODULO_PRODUCCION,
     MODULO_INSUMOS,
+    MODULO_DELIVERY,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.

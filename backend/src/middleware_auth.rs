@@ -226,8 +226,29 @@ fn ruta_permitida(rol: &str, metodo: &Method, ruta: &str) -> bool {
                 || es_de(ruta, "/mermas")
                 || (lectura && es_de(ruta, "/formulas"))
         }
+        // Repartidor (dark kitchen, módulo DELIVERY): sus entregas y el cobro
+        // contra entrega delante del cliente (el punto de venta con el pedido
+        // cargado: carta, clientes para la boleta, la venta y su comprobante
+        // para enviarlo por WhatsApp). Qué pedido puede cobrar lo revisa
+        // ventas.rs (solo los suyos, en camino y contra entrega).
+        "REPARTIDOR" => {
+            basico
+                || es_de(ruta, "/reparto")
+                || (metodo == Method::POST && ruta == "/ventas")
+                || (metodo == Method::POST && ruta == "/clientes")
+                || (lectura
+                    && (matches!(ruta, "/productos" | "/categorias" | "/unidades" | "/clientes" | "/documentos/consultar" | "/negocio")
+                        || es_de(ruta, "/pedidos")
+                        || es_de(ruta, "/comprobantes")))
+        }
         _ => true,
     }
+}
+
+/// Nombre del rol (con la misma caché que el control de rutas), para los
+/// handlers que deciden algo según el rol. None = administrador.
+pub async fn rol_de(claims: &Claims, db: &libsql::Database) -> Option<String> {
+    nombre_rol_cacheado(claims.tienda_id, claims.rol_id, db).await
 }
 
 #[cfg(test)]
@@ -262,8 +283,22 @@ mod pruebas {
         assert!(ruta_permitida("CAJERO", &p, "/ventas"));
         assert!(ruta_permitida("CAJERO", &p, "/cajas/abrir"));
         assert!(ruta_permitida("CAJERO", &g, "/clientes/todos"));
+        // Repartidor: sus entregas y el cobro en la puerta; nada más.
+        assert!(ruta_permitida("REPARTIDOR", &g, "/reparto"));
+        assert!(ruta_permitida("REPARTIDOR", &p, "/reparto/5/salir"));
+        assert!(ruta_permitida("REPARTIDOR", &p, "/ventas"));
+        assert!(ruta_permitida("REPARTIDOR", &g, "/pedidos/5"));
+        assert!(ruta_permitida("REPARTIDOR", &g, "/comprobantes/9/documento"));
+        assert!(ruta_permitida("REPARTIDOR", &p, "/clientes"));
+        assert!(!ruta_permitida("REPARTIDOR", &p, "/pedidos/5/items"));
+        assert!(!ruta_permitida("REPARTIDOR", &g, "/delivery"));
+        assert!(!ruta_permitida("REPARTIDOR", &p, "/delivery/5/asignar"));
+        assert!(!ruta_permitida("REPARTIDOR", &g, "/ventas"));
+        assert!(!ruta_permitida("REPARTIDOR", &g, "/reportes/ventas"));
+        assert!(!ruta_permitida("REPARTIDOR", &p, "/cajas/abrir"));
+        assert!(!ruta_permitida("REPARTIDOR", &p, "/productos"));
         // Su propia cuenta: todos los roles.
-        for rol in ["MESERO", "PREPARACION", "INVENTARIO", "CAJERO"] {
+        for rol in ["MESERO", "PREPARACION", "INVENTARIO", "CAJERO", "REPARTIDOR"] {
             assert!(ruta_permitida(rol, &Method::PUT, "/mi-cuenta/clave"), "{}", rol);
             assert!(ruta_permitida(rol, &p, "/mi-cuenta/cerrar-sesiones"), "{}", rol);
         }

@@ -34,6 +34,7 @@ const NOMBRE_ROL = {
   INVENTARIO: 'Almacén (productos, proveedores y reportes)',
   MESERO: 'Mesero (toma pedidos, no cobra)',
   PREPARACION: 'Barra / Cocina (marca los pedidos listos)',
+  REPARTIDOR: 'Repartidor (sus entregas; cobra contra entrega)',
 };
 
 export default function Configuracion({ onIdentidadActualizada, usuarioActualId, onNegocioCambiado }) {

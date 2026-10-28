@@ -101,8 +101,18 @@ export function esAlmacen(usuario) {
   return usuario?.rol_nombre === 'INVENTARIO';
 }
 
+/**
+ * true si es repartidor (dark kitchen, módulo Pedidos delivery): solo ve sus
+ * entregas y cobra en la puerta los pedidos contra entrega que lleva.
+ */
+export function esRepartidor(usuario) {
+  return usuario?.rol_nombre === 'REPARTIDOR';
+}
+
 /** Pantallas que puede abrir cada rol limitado (modo restaurante). */
 export const PANTALLAS_MESERO = ['MESAS', 'CARTA'];
+/** El repartidor: "Mis entregas" (la pantalla MESAS de la dark kitchen). */
+export const PANTALLAS_REPARTIDOR = ['MESAS'];
 export const PANTALLAS_PREPARACION = ['PREPARACION', 'CARTA'];
 /** Pantallas de Almacén, en cualquier rubro (el backend bloquea el resto). */
 export const PANTALLAS_ALMACEN = ['PRODUCTOS', 'STOCK', 'PROVEEDORES', 'REPORTES', 'PRODUCCION'];
@@ -113,6 +123,7 @@ export function etiquetaRol(usuario) {
   if (esMesero(usuario)) return 'Mesero';
   if (esPreparacion(usuario)) return 'Barra / Cocina';
   if (esAlmacen(usuario)) return 'Almacén';
+  if (esRepartidor(usuario)) return 'Repartidor';
   return 'Cajero';
 }
 
@@ -130,6 +141,7 @@ export function gruposParaUsuario(usuario, { restaurante = false, etiquetas = {}
   const mesero = restaurante && esMesero(usuario);
   const preparacion = restaurante && esPreparacion(usuario);
   const almacen = esAlmacen(usuario);
+  const repartidor = restaurante && esRepartidor(usuario);
   return GRUPOS_MENU.map((g) => ({
     ...g,
     // El rubro puede renombrar pantallas ("Carta" en vez de "Productos") y
@@ -144,6 +156,7 @@ export function gruposParaUsuario(usuario, { restaurante = false, etiquetas = {}
       if (i.soloRestaurante && !restaurante) return false;
       if (i.modulo && !modulos.includes(i.modulo)) return false;
       if (almacen) return PANTALLAS_ALMACEN.includes(i.id);
+      if (repartidor) return PANTALLAS_REPARTIDOR.includes(i.id);
       if (mesero) return PANTALLAS_MESERO.includes(i.id);
       if (preparacion) return PANTALLAS_PREPARACION.includes(i.id);
       // El cajero solo cobra: la carta del día la arman los demás.

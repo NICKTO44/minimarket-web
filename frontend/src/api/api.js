@@ -289,6 +289,23 @@ export const api = {
   pedidosAbiertos: () => request('/pedidos/abiertos'),
   pedidoAbrir: (data) => request('/pedidos', { method: 'POST', body: JSON.stringify(data) }),
   pedido: (id) => request(`/pedidos/${id}`),
+  // Pedidos delivery (dark kitchen, módulo DELIVERY): handlers/delivery.rs
+  deliveryTablero: () => request('/delivery'),
+  deliveryCrear: (data) => request('/delivery', { method: 'POST', body: JSON.stringify(data) }),
+  deliveryActualizar: (id, data) => request(`/delivery/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deliveryResumen: (fecha) => request(`/delivery/resumen${fecha ? `?fecha=${encodeURIComponent(fecha)}` : ''}`),
+  deliveryListo: (id) => request(`/delivery/${id}/listo`, { method: 'POST' }),
+  // quien: { repartidor_id } (cuenta de repartidor) o { repartidor: 'Nombre' }
+  deliveryDespachar: (id, quien, paga_con = null) =>
+    request(`/delivery/${id}/despachar`, { method: 'POST', body: JSON.stringify({ ...quien, paga_con }) }),
+  deliveryAsignar: (id, repartidor_id) => request(`/delivery/${id}/asignar`, { method: 'POST', body: JSON.stringify({ repartidor_id }) }),
+  deliveryRendir: (repartidor_id) => request('/delivery/rendir', { method: 'POST', body: JSON.stringify({ repartidor_id }) }),
+  // El repartidor con su cuenta (rol REPARTIDOR)
+  repartoMisEntregas: () => request('/reparto'),
+  repartoSalir: (id, paga_con = null) => request(`/reparto/${id}/salir`, { method: 'POST', body: JSON.stringify({ paga_con }) }),
+  repartoEntregar: (id) => request(`/reparto/${id}/entregar`, { method: 'POST' }),
+  deliveryVolver: (id) => request(`/delivery/${id}/volver`, { method: 'POST' }),
+  deliveryEntregar: (id) => request(`/delivery/${id}/entregar`, { method: 'POST' }),
   pedidoAgregarItems: (id, items) => request(`/pedidos/${id}/items`, { method: 'POST', body: JSON.stringify({ items }) }),
   // nota: undefined = no tocarla; '' = borrarla.
   pedidoCambiarCantidad: (id, itemId, cantidad, nota) =>

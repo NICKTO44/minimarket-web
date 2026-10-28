@@ -28,6 +28,7 @@ import { imprimirTicket } from '../../utils/imprimirTicket';
 import ModalOpciones from './ModalOpciones';
 import DialogoTexto from './DialogoTexto';
 import { usePedidoOptimista } from './usePedidoOptimista';
+import { esRespaldoLavanderia } from '../../utils/textosEncargos';
 
 const TODAS = '__todas__';
 
@@ -80,7 +81,8 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
   useEffect(() => {
     Promise.all([cargar(), api.productos(), api.modificadores()])
       .then(([, p, g]) => {
-        setProductos(p);
+        // El costo de envío de Pedidos delivery no es un plato de la carta.
+        setProductos(p.filter((x) => !esRespaldoLavanderia(x)));
         setGrupos(g);
       })
       .catch((e) => setError(e.message));
@@ -94,7 +96,10 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
   // La cocina puede marcar platos agotados mientras se toma el pedido.
   useEffect(() => {
     const intervalo = setInterval(() => {
-      api.productos().then(setProductos).catch(() => {});
+      api
+        .productos()
+        .then((p) => setProductos(p.filter((x) => !esRespaldoLavanderia(x))))
+        .catch(() => {});
     }, REFRESCO_PRODUCTOS_MS);
     return () => clearInterval(intervalo);
   }, []);

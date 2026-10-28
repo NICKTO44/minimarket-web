@@ -25,6 +25,9 @@ import CompletarDatos from './pages/CompletarDatos/CompletarDatos';
 import { rucNecesitaCorreccion } from './utils/validacionRegistro';
 import BoletaPublica from './pages/BoletaPublica/BoletaPublica';
 import Mesas from './pages/Mesas/Mesas';
+import PedidosDelivery from './pages/Delivery/PedidosDelivery';
+import MisEntregas from './pages/Delivery/MisEntregas';
+import { Bike } from 'lucide-react';
 import Preparacion from './pages/Preparacion/Preparacion';
 import CartaDia from './pages/CartaDia/CartaDia';
 import Cotizaciones from './pages/Cotizaciones/Cotizaciones';
@@ -45,6 +48,7 @@ import {
   esCajero,
   esMesero,
   esPreparacion,
+  esRepartidor,
   PANTALLAS_ALMACEN,
   PANTALLAS_MESERO,
   PANTALLAS_PREPARACION,
@@ -57,6 +61,7 @@ import {
   MODULO_GUIAS,
   MODULO_MEDIDAS,
   MODULO_MESAS,
+  MODULO_DELIVERY,
   MODULO_SERVICIOS,
   MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VARIANTES, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
   MODULO_FICHA_MEDICAMENTO,
@@ -115,6 +120,9 @@ function App() {
   // pedido que se debe abrir en Mesas (al cancelar un cobro o desde un
   // aviso de "listo"). n cambia en cada pedido de apertura.
   const [pedidoACobrar, setPedidoACobrar] = useState(null);
+  // El repartidor entra al punto de venta solo para cobrar un pedido suyo
+  // (y se queda ahí hasta enviar el comprobante por WhatsApp).
+  const [cobroDeRepartidor, setCobroDeRepartidor] = useState(false);
   // Cotización abierta desde su pantalla para venderla en el punto de venta.
   const [cotizacionACargar, setCotizacionACargar] = useState(null);
   // Lubricentro: orden de servicio que se va a cobrar en el punto de venta.
@@ -479,14 +487,31 @@ function App() {
   const negocio = datosNegocio(configuracionTienda ?? tiendaRecordada);
   const restaurante = negocio.modulos.includes(MODULO_MESAS);
   // Nombres de pantalla propios del rubro ("Carta" en vez de "Productos").
-  const etiquetas = rubroDe(negocio.rubro).etiquetas;
+  // Dark kitchen (módulo DELIVERY): la pantalla de mesas pasa a ser el
+  // tablero de pedidos delivery.
+  const darkKitchen = restaurante && negocio.modulos.includes(MODULO_DELIVERY);
+  const etiquetasRubro = rubroDe(negocio.rubro).etiquetas;
+  // Repartidor (rol propio del módulo): solo "Mis entregas" y el cobro en
+  // la puerta de los pedidos que lleva.
+  const soloRepartidor = darkKitchen && esRepartidor(usuarioActual);
+  const etiquetas = darkKitchen
+    ? {
+        ...etiquetasRubro,
+        MESAS: soloRepartidor ? 'Mis entregas' : 'Pedidos',
+        iconos: { ...(etiquetasRubro.iconos || {}), MESAS: Bike },
+      }
+    : etiquetasRubro;
   // El mesero solo toma pedidos (Mesas) y barra/cocina solo ve
   // Preparación; ambos pueden además armar la Carta de hoy.
   const soloMesas = restaurante && esMesero(usuarioActual);
   const soloPreparacion = restaurante && esPreparacion(usuarioActual);
   // Almacén (en cualquier rubro): productos, stock, proveedores y reportes.
   const soloAlmacen = esAlmacen(usuarioActual);
-  const pantallaVisible = soloAlmacen
+  const pantallaVisible = soloRepartidor
+    ? pantalla === 'POS' && cobroDeRepartidor
+      ? 'POS'
+      : 'MESAS'
+    : soloAlmacen
     ? PANTALLAS_ALMACEN.includes(pantalla)
       ? pantalla
       : 'PRODUCTOS'
@@ -513,6 +538,7 @@ function App() {
 
   const handleCobrarPedido = (pedido) => {
     setPedidoACobrar(pedido);
+    setCobroDeRepartidor(true);
     setPantalla('POS');
   };
 
@@ -553,7 +579,20 @@ function App() {
         versionLogo={versionLogo}
       />
       <div className="app-contenido">
-        {pantallaVisible === 'MESAS' && (
+        {pantallaVisible === 'MESAS' && soloRepartidor && (
+          <MisEntregas nombreTienda={nombreTienda} onCobrar={handleCobrarPedido} />
+        )}
+        {pantallaVisible === 'MESAS' && darkKitchen && !soloRepartidor && (
+          <PedidosDelivery
+            usuario={usuarioActual}
+            nombreTienda={nombreTienda}
+            onCobrar={handleCobrarPedido}
+            abrirPedido={abrirPedido}
+            onAbrirPedidoUsado={() => setAbrirPedido(null)}
+            onIrACarta={esCajero(usuarioActual) ? null : () => setPantalla('CARTA')}
+          />
+        )}
+        {pantallaVisible === 'MESAS' && !darkKitchen && (
           <Mesas
             usuario={usuarioActual}
             nombreTienda={nombreTienda}
@@ -603,6 +642,7 @@ function App() {
               onCancelarCobroPedido={handleCancelarCobroPedido}
               onPedidoCobrado={() => setPedidoACobrar(null)}
               onVolverAMesas={restaurante ? () => setPantalla('MESAS') : null}
+              textoVolverAMesas={soloRepartidor ? 'Volver a mis entregas' : darkKitchen ? 'Volver a pedidos' : undefined}
             />
           ))}
         {pantallaVisible === 'RESUMEN' && (
@@ -758,7 +798,7 @@ function App() {
       </div>
       {/* Solo se ve en celular (<= 899px): barra superior + barra inferior */}
       {/* Avisos "pedido listo" para mozo y cajero, en cualquier pantalla */}
-      {restaurante && !soloPreparacion && !soloAlmacen && (
+      {restaurante && !soloPreparacion && !soloAlmacen && !soloRepartidor && (
         <AvisosListos usuario={usuarioActual} onAbrirPedido={irAPedido} onConteo={setPedidosListos} />
       )}
       <NavegacionMovil

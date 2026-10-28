@@ -1,0 +1,707 @@
+/* Módulo DELIVERY (dark kitchen): tablero de pedidos. Usa los tokens de
+   Mesas.css (--m-borde, --m-tenue...) y el color del negocio. */
+
+.dk-columnas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 8px;
+}
+
+@media (max-width: 860px) {
+  .dk-columnas {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.dk-layout .mesas-zona-titulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dk-tarjeta {
+  background: #fff;
+  border: 1px solid var(--m-borde);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dk-fase-esperando_pago {
+  border-color: #fca5a5;
+  box-shadow: inset 3px 0 0 #dc2626;
+}
+
+.dk-fase-listo {
+  border-color: #86efac;
+  box-shadow: inset 3px 0 0 #16a34a;
+}
+
+.dk-tarjeta-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.dk-tarjeta-titulo {
+  font-weight: 700;
+  font-size: 15px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dk-tarjeta-tiempo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--m-tenue);
+  white-space: nowrap;
+}
+
+.dk-tarjeta-entrega {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+
+.dk-tarjeta-entrega span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dk-tenue {
+  color: var(--m-tenue);
+  font-size: 13px;
+  margin: 0;
+}
+
+.dk-lineas {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.dk-lineas small {
+  color: var(--m-tenue);
+}
+
+.dk-nota {
+  font-style: italic;
+}
+
+.dk-notas {
+  font-style: italic;
+}
+
+.dk-tarjeta-estado {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.dk-total {
+  margin-left: auto;
+  font-size: 16px;
+}
+
+.dk-pago {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 8px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.dk-pago-ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.dk-pago-falta {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.dk-pago-entrega {
+  background: var(--m-ambar-bg);
+  color: var(--m-ambar);
+}
+
+.dk-aviso {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--m-ambar);
+}
+
+.dk-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.dk-acciones button,
+.dk-acciones a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dk-enlace {
+  text-decoration: none;
+}
+
+/* Por rendir: lo que cada repartidor debe entregar. */
+.dk-rendicion {
+  background: #fffbeb;
+  border: 1px solid var(--m-ambar-borde);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin: 12px 0 6px;
+}
+
+.dk-rendicion .mesas-zona-titulo {
+  margin-top: 0;
+}
+
+.dk-rendicion-fila {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.dk-rendicion-fila > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.dk-rendicion-pedidos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dk-entregados {
+  margin-top: 14px;
+}
+
+.dk-entregados-boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-size: 14px;
+  color: var(--m-tenue);
+  cursor: pointer;
+}
+
+.dk-entregados-lista {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  background: #fff;
+  border: 1px solid var(--m-borde);
+  border-radius: 10px;
+}
+
+.dk-entregados-lista li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-top: 1px solid var(--m-borde);
+}
+
+.dk-entregados-lista li:first-child {
+  border-top: none;
+}
+
+.dk-cliente-elegido {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.dk-cliente-elegido small {
+  color: #6b7280;
+}
+
+.dk-metodos {
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.dk-con-mesas {
+  position: relative;
+}
+
+.dk-volver-tablero {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 600px) {
+  .dk-layout {
+    padding: 16px 16px 40px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .dk-columnas-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dk-peligro {
+  color: #b91c1c;
+}
+
+/* Formulario: platos */
+.dk-rapidos {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.dk-rapidos button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dk-buscar-plato {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0 10px;
+  color: #6b7280;
+}
+
+.dk-buscar-plato input {
+  border: none !important;
+  box-shadow: none !important;
+  flex: 1;
+  min-width: 0;
+  padding-left: 0 !important;
+}
+
+.dk-platos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
+
+.dk-plato {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  flex-wrap: wrap;
+}
+
+.dk-plato-quitado {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.dk-plato-nombre {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dk-plato-nombre small {
+  font-weight: 400;
+  color: #6b7280;
+}
+
+.dk-plato-nota {
+  font-weight: 400;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.dk-en-cocina {
+  color: #047857 !important;
+}
+
+.dk-plato-precio {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dk-cantidad {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.dk-cantidad button {
+  border: none;
+  background: #f4f5f7;
+  padding: 6px 8px;
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.dk-cantidad input {
+  width: 38px;
+  text-align: center;
+  border: none;
+  padding: 6px 0;
+}
+
+/* ModalOpciones (Mesas.css) por encima del formulario */
+.dk-sobre .mesas-modal-velo {
+  z-index: 320;
+}
+
+/* Resumen del día */
+.dk-resumen-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dk-resumen-cabecera input {
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.dk-cifras {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 640px) {
+  .dk-cifras {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.dk-cifras div {
+  background: #f4f5f7;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dk-cifras span {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.dk-cifras strong {
+  font-size: 18px;
+}
+
+.dk-resumen-grupos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .dk-resumen-grupos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.dk-resumen-fila {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #eef0f3;
+  font-size: 14px;
+}
+
+.dk-resumen-fila small {
+  color: #6b7280;
+}
+
+.dk-tabla-envoltura {
+  overflow-x: auto;
+}
+
+.dk-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dk-tabla th,
+.dk-tabla td {
+  text-align: left;
+  padding: 7px 8px;
+  border-bottom: 1px solid #eef0f3;
+  white-space: nowrap;
+}
+
+.dk-tabla th {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.dk-tabla .pm-num {
+  text-align: right;
+}
+
+.dk-rendicion-pedidos button {
+  white-space: normal;
+  text-align: left;
+  max-width: 100%;
+}
+
+/* Atención: asignar repartidor */
+.dk-asignado {
+  font-weight: 600;
+  color: #1d4ed8;
+}
+
+.dk-asignar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--m-tenue);
+}
+
+.dk-asignar select {
+  flex: 1;
+  min-width: 0;
+  max-width: 260px;
+  padding: 6px 8px;
+  border: 1px solid var(--m-borde);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.dk-lo-cobra {
+  align-self: center;
+  font-style: italic;
+}
+
+/* Mis entregas (repartidor): tarjetas grandes para el celular */
+.dkr-layout {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.dkr-tarjeta {
+  background: #fff;
+  border: 1px solid var(--m-borde);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dkr-hecha {
+  opacity: 0.75;
+  padding: 10px 14px;
+}
+
+.dkr-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dkr-orden {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-primario, #0b6b49);
+  color: var(--color-sobre-primario, #fff);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 17px;
+}
+
+.dkr-titulo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dkr-titulo strong {
+  font-size: 16px;
+}
+
+.dkr-titulo span {
+  font-size: 14px;
+  color: var(--m-tenue);
+  overflow-wrap: anywhere;
+}
+
+.dkr-direccion {
+  margin: 0;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.dkr-direccion svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+.dkr-referencia {
+  margin: -4px 0 0 24px;
+  font-size: 14px;
+  color: var(--m-tenue);
+}
+
+.dkr-cocina {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--m-tenue);
+}
+
+.dkr-cocina-listo {
+  color: #047857;
+  font-weight: 700;
+}
+
+.dkr-cobro {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.dkr-cobro div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dkr-cobro strong {
+  font-size: 17px;
+}
+
+.dkr-cobro span {
+  font-size: 13px;
+}
+
+.dkr-cobro-ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.dkr-cobro-cobrar {
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.dkr-cobro-espera {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.dkr-contacto {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dkr-contacto a {
+  flex: 1 1 0;
+  justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dkr-acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dkr-boton {
+  width: 100%;
+  justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  font-size: 16px;
+}
+
+.dkr-boton-cobrar {
+  background: #c2410c;
+  border-color: #c2410c;
+  color: #fff;
+}

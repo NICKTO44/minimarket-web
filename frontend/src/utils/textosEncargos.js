@@ -114,11 +114,12 @@ export const TEXTOS_ENCARGOS_LAVANDERIA = {
 };
 
 /**
- * Servicios de respaldo de las prendas escritas en una orden de lavado
- * (backend: handlers/encargos.rs, RESPALDOS). No se muestran para elegir:
- * el nombre y el precio se ponen en cada orden.
+ * Servicios internos que no se eligen en pantalla: los respaldos de las
+ * prendas escritas en una orden de lavado (_LAV_…, handlers/encargos.rs) y el
+ * costo de envío de Pedidos delivery (_DLV_ENVIO, handlers/delivery.rs). Su
+ * nombre y precio se ponen en cada orden o pedido. Otro negocio no los tiene.
  */
-export const esRespaldoLavanderia = (p) => /^_LAV_/.test(String(p?.codigo || ''));
+export const esRespaldoLavanderia = (p) => /^_(LAV|DLV)_/.test(String(p?.codigo || ''));
 
 /** Los textos del rubro, completando con los de pastelería lo que falte. */
 export function textosEncargos(etiquetas) {

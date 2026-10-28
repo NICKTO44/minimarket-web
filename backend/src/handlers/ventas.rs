@@ -337,6 +337,15 @@ pub async fn procesar_venta(
         }
     };
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // Repartidor (dark kitchen): solo cobra en la puerta los pedidos que lleva
+    // (contra entrega, en camino). El rol sale de la misma caché del control
+    // de rutas: para los demás usuarios no hay consulta extra.
+    if crate::middleware_auth::rol_de(&claims, &tenant.0).await.as_deref() == Some("REPARTIDOR") {
+        if payload.credito.is_some() || payload.cotizacion_id.is_some() || payload.encargo_id.is_some() {
+            return Err((StatusCode::FORBIDDEN, "El repartidor solo cobra los pedidos que lleva.".into()));
+        }
+        crate::handlers::delivery::exigir_cobro_repartidor(&conn, payload.pedido_id, usuario_id).await?;
+    }
 
     // Cada consulta es un viaje a la base (0.1–0.2 s desde Perú), así que
     // una venta hace los menos posibles: 6 sin importar cuántos productos
@@ -722,6 +731,8 @@ pub async fn procesar_venta(
         if ((total_cobrado - total_pedido) * 100.0).round().abs() > 1.0 {
             return Err((StatusCode::CONFLICT, "El pedido cambió mientras cobrabas. Vuelve a abrir la mesa para cobrar lo actualizado.".into()));
         }
+        // Pedido delivery (módulo DELIVERY): no se cobra solo el envío.
+        crate::handlers::delivery::revisar_cobro(&conn, pedido_id).await?;
     }
 
     // 3. El folio del día ("V-20261003-0007") lo calcula la misma sentencia
@@ -985,6 +996,8 @@ pub async fn procesar_venta(
                 )
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+                // Delivery con pago adelantado: al cobrarse recién entra a cocina.
+                crate::handlers::delivery::al_cobrar(&conn, pedido_id, usuario_id).await;
 
                 // Si una MESA paga, lo que barra/cocina ya tenía LISTO se da por
                 // entregado (ya lo consumieron). Lo que aún se prepara sigue en
