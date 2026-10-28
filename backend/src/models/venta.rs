@@ -45,6 +45,11 @@ pub struct NuevaVenta {
     /// None en una venta normal del POS.
     #[serde(default)]
     pub pedido_id: Option<i64>,
+    /// Cuenta separada de un pedido de mesa: solo estas líneas (y cuántas de
+    /// cada una) paga esta persona; la mesa sigue abierta con el resto.
+    /// None = se cobra el pedido entero, como siempre.
+    #[serde(default)]
+    pub pedido_items: Option<Vec<crate::handlers::mesas::ItemCobro>>,
     /// Venta al crédito (módulo CREDITO): el pago queda pendiente y se
     /// cobra con abonos. Con esto se ignoran metodo_pago y el pago mixto.
     #[serde(default)]

@@ -328,6 +328,9 @@ export default function POS({
   onCancelarCobroPedido,
   onPedidoCobrado,
   onVolverAMesas,
+  // Cuenta separada (cada uno paga lo suyo): al terminar se vuelve a la mesa,
+  // que sigue abierta con el resto.
+  onVolverAPedido,
   textoVolverAMesas = 'Volver a mesas',
 }) {
   const cobrandoPedido = !!pedidoACobrar;
@@ -1456,6 +1459,7 @@ export default function POS({
         pago_otro_metodo: esMixto ? mixtoOtroMetodo : null,
         pago_efectivo_metodo: esMixto ? mixtoSegundoMetodo : null,
         pedido_id: pedidoACobrar?.id || null,
+        ...(pedidoACobrar?.parcial ? { pedido_items: pedidoACobrar.parcial } : {}),
         ...(receta ? { receta } : {}),
         // Solo con placa o al cobrar una orden: si no, la venta va como siempre.
         ...(placaVenta?.vehiculo ? { vehiculo: placaVenta.vehiculo } : {}),
@@ -1560,6 +1564,8 @@ export default function POS({
         errorComprobante: null,
         cliente,
         deMesa: cobrandoPedido,
+        // Cuenta separada: la mesa sigue abierta con el resto.
+        pedidoParcial: cobrandoPedido && pedidoACobrar?.parcial ? pedidoACobrar.id : null,
       };
 
       // El cambio quedó hecho: la pantalla vuelve a ser una venta normal.
@@ -2103,7 +2109,10 @@ export default function POS({
           <div className="pos-cobro-pedido">
             <div>
               <span className="pos-cobro-pedido-etiqueta">Cobrando</span>
-              <strong>{tituloPedido(pedidoACobrar)}</strong>
+              <strong>
+                {tituloPedido(pedidoACobrar)}
+                {pedidoACobrar.parcial ? ' · cuenta separada' : ''}
+              </strong>
             </div>
             <button type="button" onClick={onCancelarCobroPedido}>
               Volver a la mesa
@@ -3097,6 +3106,10 @@ export default function POS({
                 onClick={() => {
                   setMostrarModalVenta(false);
                   setCarritoAbierto(false);
+                  if (ultimaVentaParaImprimir.pedidoParcial && onVolverAPedido) {
+                    onVolverAPedido(ultimaVentaParaImprimir.pedidoParcial);
+                    return;
+                  }
                   if (ultimaVentaParaImprimir.deMesa && onVolverAMesas) {
                     onVolverAMesas();
                     return;
@@ -3104,7 +3117,11 @@ export default function POS({
                   buscadorRef.current?.focus();
                 }}
               >
-                {ultimaVentaParaImprimir.deMesa && onVolverAMesas ? textoVolverAMesas : 'Nueva venta'}
+                {ultimaVentaParaImprimir.pedidoParcial && onVolverAPedido
+                  ? 'Volver a la mesa (siguiente cuenta)'
+                  : ultimaVentaParaImprimir.deMesa && onVolverAMesas
+                    ? textoVolverAMesas
+                    : 'Nueva venta'}
               </button>
             </div>
           </div>

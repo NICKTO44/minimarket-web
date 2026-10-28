@@ -1354,3 +1354,158 @@ pub async fn marcar_entregado(
     .map_err(e500)?;
     Ok(Json(tickets_preparacion(&conn).await?))
 }
+
+// ============================================================
+// Cuentas separadas: un solo pedido, cada uno paga lo suyo.
+// ============================================================
+//
+// Se cobra con el POS de siempre (POST /ventas con pedido_id) y, además,
+// `pedido_items`: qué líneas (y cuántas de cada una) paga esta persona. Lo
+// cobrado pasa a un pedido aparte, ya COBRADO con su venta (misma mesa,
+// mismo mesero, mismo estado en cocina) y la mesa sigue abierta con el
+// resto. La última cuenta se cobra como siempre y libera la mesa.
+// No hace falta ninguna columna nueva: solo se mueven líneas entre pedidos.
+
+/// Una línea (y cuántas unidades) que paga esta persona.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ItemCobro {
+    pub item_id: i64,
+    pub cantidad: f64,
+}
+
+/// Línea revisada: lo que se cobra y lo que tenía la línea al revisarla.
+#[derive(Debug, Clone)]
+pub struct LineaSeparada {
+    pub item_id: i64,
+    pub cantidad: f64,
+    pub cantidad_linea: f64,
+}
+
+/// Revisa la cuenta separada antes de cobrar (sin escribir nada).
+/// Devuelve None si lo elegido es TODO el pedido: entonces es un cobro de
+/// siempre y la mesa queda libre.
+pub async fn revisar_cuenta_separada(
+    conn: &libsql::Connection,
+    pedido_id: i64,
+    elegidos: &[ItemCobro],
+    total_cobrado: f64,
+) -> Result<Option<Vec<LineaSeparada>>, (StatusCode, String)> {
+    if elegidos.len() > 200 {
+        return Err(error(StatusCode::BAD_REQUEST, "Demasiados productos a la vez."));
+    }
+    let mut filas = conn
+        .query("SELECT tipo FROM pedidos WHERE id = ?1", libsql::params![pedido_id])
+        .await
+        .map_err(e500)?;
+    let tipo: String = match filas.next().await.map_err(e500)? {
+        Some(f) => f.get(0).unwrap_or_default(),
+        None => return Err(error(StatusCode::NOT_FOUND, "El pedido no existe.")),
+    };
+    if tipo != "MESA" {
+        return Err(error(StatusCode::BAD_REQUEST, "Las cuentas separadas son para los pedidos de mesa."));
+    }
+
+    let items: Vec<ItemPedido> =
+        items_de_pedido(conn, pedido_id, None).await?.into_iter().filter(|i| i.estado != "ANULADO").collect();
+    let cambio = || error(StatusCode::CONFLICT, "El pedido cambió mientras cobrabas. Vuelve a la mesa y elige de nuevo.");
+    let mut lineas: Vec<LineaSeparada> = Vec::new();
+    let mut total = 0.0;
+    for e in elegidos {
+        if lineas.iter().any(|l| l.item_id == e.item_id) {
+            return Err(error(StatusCode::BAD_REQUEST, "Un producto se eligió dos veces."));
+        }
+        let item = items.iter().find(|i| i.id == e.item_id).ok_or_else(cambio)?;
+        // Se cobra la línea entera o unidades enteras de ella (2 de 3 cervezas).
+        let entera = (e.cantidad - item.cantidad).abs() < 1e-9;
+        if !entera && !(e.cantidad >= 1.0 && e.cantidad.fract() == 0.0 && e.cantidad < item.cantidad) {
+            if e.cantidad > item.cantidad {
+                return Err(cambio());
+            }
+            return Err(error(StatusCode::BAD_REQUEST, "Elige unidades enteras de cada producto."));
+        }
+        total += e.cantidad * item.precio_unitario;
+        lineas.push(LineaSeparada {
+            item_id: item.id,
+            cantidad: if entera { item.cantidad } else { e.cantidad },
+            cantidad_linea: item.cantidad,
+        });
+    }
+    if lineas.is_empty() {
+        return Err(error(StatusCode::BAD_REQUEST, "Elige qué productos paga esta cuenta."));
+    }
+    if ((total_cobrado - total) * 100.0).round().abs() > 1.0 {
+        return Err(cambio());
+    }
+    let es_todo = items.iter().all(|i| {
+        lineas.iter().any(|l| l.item_id == i.id && (l.cantidad - i.cantidad).abs() < 1e-9)
+    });
+    Ok(if es_todo { None } else { Some(lineas) })
+}
+
+/// Pasa lo cobrado a un pedido aparte, ya COBRADO con `venta_id`. Va dentro
+/// de la transacción de la venta: si algo cambió entretanto, falla y no se
+/// guarda nada. Devuelve el id del pedido nuevo.
+pub async fn separar_cuenta(
+    conn: &libsql::Connection,
+    pedido_id: i64,
+    venta_id: i64,
+    lineas: &[LineaSeparada],
+) -> Result<i64, (StatusCode, String)> {
+    let mut filas = conn
+        .query(
+            "INSERT INTO pedidos (tipo, mesa_id, cliente_nombre, estado, usuario_id, notas, venta_id, fecha_apertura, fecha_cierre)
+             SELECT tipo, mesa_id, cliente_nombre, 'COBRADO', usuario_id, 'Cuenta separada del pedido #' || id, ?2,
+                    fecha_apertura, datetime('now', 'localtime')
+             FROM pedidos WHERE id = ?1 AND estado = 'ABIERTO'
+             RETURNING id",
+            libsql::params![pedido_id, venta_id],
+        )
+        .await
+        .map_err(e500)?;
+    let nuevo: i64 = match filas.next().await.map_err(e500)? {
+        Some(f) => f.get(0).map_err(e500)?,
+        None => return Err(error(StatusCode::CONFLICT, "Este pedido ya fue cobrado o anulado.")),
+    };
+    drop(filas);
+
+    for l in lineas {
+        let tocadas = if (l.cantidad - l.cantidad_linea).abs() < 1e-9 {
+            // La línea entera pasa a la cuenta cobrada.
+            conn.execute(
+                "UPDATE pedido_items SET pedido_id = ?1
+                 WHERE id = ?2 AND pedido_id = ?3 AND estado != 'ANULADO' AND cantidad = ?4",
+                libsql::params![nuevo, l.item_id, pedido_id, l.cantidad_linea],
+            )
+            .await
+            .map_err(e500)?
+        } else {
+            // Parte de la línea: se descuenta aquí y pasa una copia (mismo
+            // estado en cocina, misma nota) con lo cobrado.
+            let n = conn
+                .execute(
+                    "UPDATE pedido_items SET cantidad = cantidad - ?1
+                     WHERE id = ?2 AND pedido_id = ?3 AND estado != 'ANULADO' AND cantidad = ?4",
+                    libsql::params![l.cantidad, l.item_id, pedido_id, l.cantidad_linea],
+                )
+                .await
+                .map_err(e500)?;
+            if n == 1 {
+                conn.execute(
+                    "INSERT INTO pedido_items (pedido_id, producto_id, nombre_producto, opciones, nota, cantidad, precio_unitario,
+                                               estado, usuario_id, fecha_creacion, fecha_envio, fecha_listo, fecha_entregado, listo_por)
+                     SELECT ?1, producto_id, nombre_producto, opciones, nota, ?2, precio_unitario,
+                            estado, usuario_id, fecha_creacion, fecha_envio, fecha_listo, fecha_entregado, listo_por
+                     FROM pedido_items WHERE id = ?3",
+                    libsql::params![nuevo, l.cantidad, l.item_id],
+                )
+                .await
+                .map_err(e500)?;
+            }
+            n
+        };
+        if tocadas == 0 {
+            return Err(error(StatusCode::CONFLICT, "El pedido cambió mientras cobrabas. Vuelve a la mesa y elige de nuevo."));
+        }
+    }
+    Ok(nuevo)
+}

@@ -18,6 +18,7 @@ import {
   Split,
   StickyNote,
   Trash2,
+  Users,
   X,
 } from 'lucide-react';
 import { api, API_URL } from '../../api/api';
@@ -28,6 +29,7 @@ import TicketMesa from '../../components/TicketMesa';
 import { imprimirTicket } from '../../utils/imprimirTicket';
 import ModalOpciones from './ModalOpciones';
 import DialogoTexto from './DialogoTexto';
+import CuentaSeparada from './CuentaSeparada';
 import { usePedidoOptimista } from './usePedidoOptimista';
 import { esRespaldoLavanderia } from '../../utils/textosEncargos';
 
@@ -61,6 +63,7 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
   const [ticket, setTicket] = useState(null);
   const [moverAbierto, setMoverAbierto] = useState(false);
   const [cuentaAbierta, setCuentaAbierta] = useState(false);
+  const [separarAbierto, setSepararAbierto] = useState(false);
   const [imagenesFallidas, setImagenesFallidas] = useState(() => new Set());
   // Cambia en cada impresión para volver a dibujar (e imprimir) el ticket.
   const numeroTicket = useRef(0);
@@ -355,6 +358,56 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
     onCobrar({ ...actual, items: lineas });
   };
 
+  // Cuentas separadas: lo que paga esta persona, con su cantidad.
+  const lineasDe = (seleccion) =>
+    seleccion.map(({ item, cantidad }) => ({
+      ...item,
+      cantidad,
+      subtotal: Math.round(cantidad * item.precio_unitario * 100) / 100,
+    }));
+
+  const precuentaSeparada = (seleccion) => {
+    setTicket({ tipo: 'PRECUENTA', pedido: detalle, items: lineasDe(seleccion), clave: ++numeroTicket.current });
+  };
+
+  const cobrarSeparado = async (seleccion) => {
+    if (seleccion.some((s) => s.item.estado === 'PENDIENTE')) {
+      const ok = await confirmar({
+        titulo: 'Hay productos sin enviar a preparar en esta cuenta',
+        mensaje: 'Si igual se cobran (por ejemplo, una bebida embotellada), continúa. Si no, envíalos primero.',
+        textoConfirmar: 'Cobrar igual',
+        icono: 'aviso',
+      });
+      if (!ok) return;
+    }
+    // Se revisa contra lo guardado en el servidor (otro pudo cambiar la mesa).
+    const actual = await ejecutar(() => api.pedido(pedidoId));
+    if (!actual) return;
+    const vigentes = actual.items.filter((i) => i.estado !== 'ANULADO');
+    const lineas = [];
+    for (const { item, cantidad } of seleccion) {
+      const i = vigentes.find((x) => x.id === item.id);
+      if (!i || i.cantidad < cantidad) {
+        setError('El pedido cambió. Vuelve a elegir lo que paga esta persona.');
+        setSepararAbierto(false);
+        return;
+      }
+      lineas.push({ item: i, cantidad });
+    }
+    setSepararAbierto(false);
+    // Si eligió todo lo que queda, es el cobro de siempre y la mesa se libera.
+    const esTodo = vigentes.every((i) => lineas.some((l) => l.item.id === i.id && l.cantidad === i.cantidad));
+    if (esTodo) {
+      onCobrar({ ...actual, items: vigentes });
+      return;
+    }
+    onCobrar({
+      ...actual,
+      items: lineasDe(lineas),
+      parcial: lineas.map((l) => ({ item_id: l.item.id, cantidad: l.cantidad })),
+    });
+  };
+
   if (!detalle) {
     return (
       <div className="pedido-layout">
@@ -603,6 +656,11 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
                 <ArrowRightLeft size={15} /> Mover
               </button>
             )}
+            {!mesero && detalle.tipo === 'MESA' && unidades > 1 && (
+              <button type="button" onClick={() => setSepararAbierto(true)} title="Cuentas separadas: cada uno paga lo suyo">
+                <Users size={15} /> Dividir
+              </button>
+            )}
             {!(mesero && enviados.length > 0) && (
               <button type="button" className="peligro" onClick={anularPedido}>
                 <Ban size={15} /> Anular
@@ -656,6 +714,16 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
             </div>
           </div>
         </div>
+      )}
+
+      {separarAbierto && (
+        <CuentaSeparada
+          items={activos}
+          ocupado={ocupado}
+          onPrecuenta={precuentaSeparada}
+          onCobrar={cobrarSeparado}
+          onCerrar={() => setSepararAbierto(false)}
+        />
       )}
 
       {dialogo && <DialogoTexto {...dialogo} onCerrar={() => setDialogo(null)} />}

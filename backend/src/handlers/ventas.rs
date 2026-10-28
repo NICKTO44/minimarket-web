@@ -707,7 +707,9 @@ pub async fn procesar_venta(
 
     // 2b. Cobro de un pedido de mesa: debe seguir abierto y lo que se cobra
     // debe ser exactamente lo que tiene el pedido (si alguien agregó algo
-    // mientras se cobraba, se pide volver a abrirlo).
+    // mientras se cobraba, se pide volver a abrirlo). Con cuenta separada
+    // (pedido_items) se cobra solo lo elegido y la mesa sigue abierta.
+    let mut cuenta_separada: Option<Vec<crate::handlers::mesas::LineaSeparada>> = None;
     if let Some(pedido_id) = payload.pedido_id {
         let mut rows = conn
             .query(
@@ -728,7 +730,11 @@ pub async fn procesar_venta(
             return Err((StatusCode::CONFLICT, "Este pedido ya fue cobrado o anulado.".into()));
         }
         let total_cobrado: f64 = payload.productos.iter().map(|p| p.precio * p.cantidad).sum();
-        if ((total_cobrado - total_pedido) * 100.0).round().abs() > 1.0 {
+        if let Some(elegidos) = payload.pedido_items.as_deref().filter(|e| !e.is_empty()) {
+            cuenta_separada =
+                crate::handlers::mesas::revisar_cuenta_separada(&conn, pedido_id, elegidos, total_cobrado).await?;
+        }
+        if cuenta_separada.is_none() && ((total_cobrado - total_pedido) * 100.0).round().abs() > 1.0 {
             return Err((StatusCode::CONFLICT, "El pedido cambió mientras cobrabas. Vuelve a abrir la mesa para cobrar lo actualizado.".into()));
         }
         // Pedido delivery (módulo DELIVERY): no se cobra solo el envío.
@@ -985,19 +991,27 @@ pub async fn procesar_venta(
             }
 
             // 7. Si fue el cobro de un pedido de mesa: se cierra y la mesa queda libre.
-            if let Some(pedido_id) = payload.pedido_id {
+            if let Some(pedido_mesa) = payload.pedido_id {
+                // Cuenta separada: lo cobrado pasa a su propio pedido (ya
+                // cobrado) y la mesa sigue abierta con el resto.
+                let pedido_id = match &cuenta_separada {
+                    Some(lineas) => crate::handlers::mesas::separar_cuenta(&conn, pedido_mesa, venta_id, lineas).await?,
+                    None => pedido_mesa,
+                };
                 conn.execute("UPDATE ventas SET pedido_id = ?1 WHERE id = ?2", libsql::params![pedido_id, venta_id])
                     .await
                     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-                conn.execute(
-                    "UPDATE pedidos SET estado = 'COBRADO', venta_id = ?1, fecha_cierre = datetime('now', 'localtime')
-                     WHERE id = ?2 AND estado = 'ABIERTO'",
-                    libsql::params![venta_id, pedido_id],
-                )
-                .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-                // Delivery con pago adelantado: al cobrarse recién entra a cocina.
-                crate::handlers::delivery::al_cobrar(&conn, pedido_id, usuario_id).await;
+                if cuenta_separada.is_none() {
+                    conn.execute(
+                        "UPDATE pedidos SET estado = 'COBRADO', venta_id = ?1, fecha_cierre = datetime('now', 'localtime')
+                         WHERE id = ?2 AND estado = 'ABIERTO'",
+                        libsql::params![venta_id, pedido_id],
+                    )
+                    .await
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+                    // Delivery con pago adelantado: al cobrarse recién entra a cocina.
+                    crate::handlers::delivery::al_cobrar(&conn, pedido_id, usuario_id).await;
+                }
 
                 // Si una MESA paga, lo que barra/cocina ya tenía LISTO se da por
                 // entregado (ya lo consumieron). Lo que aún se prepara sigue en

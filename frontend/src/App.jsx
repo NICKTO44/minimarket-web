@@ -646,6 +646,7 @@ function App() {
               onCancelarCobroPedido={handleCancelarCobroPedido}
               onPedidoCobrado={() => setPedidoACobrar(null)}
               onVolverAMesas={restaurante ? () => setPantalla('MESAS') : null}
+              onVolverAPedido={restaurante ? irAPedido : null}
               textoVolverAMesas={soloRepartidor ? 'Volver a mis entregas' : darkKitchen ? 'Volver a pedidos' : undefined}
             />
           ))}

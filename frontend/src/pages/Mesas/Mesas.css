@@ -1159,3 +1159,113 @@
     padding-bottom: 0;
   }
 }
+
+/* ---------- Cuentas separadas ---------- */
+.cs-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.cs-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--m-borde);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.cs-fila.elegida {
+  border-color: #16181d;
+  background: #f6f7f9;
+}
+
+.cs-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cs-nombre {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.cs-cant {
+  margin-right: 5px;
+  color: #6b7280;
+}
+
+.cs-de {
+  font-weight: 500;
+  font-size: 11.5px;
+  color: #6b7280;
+}
+
+.cs-marca {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--m-borde);
+  border-radius: 8px;
+  background: #fff;
+  color: #fff;
+  cursor: pointer;
+}
+
+.cs-marca.activa {
+  border-color: #16181d;
+  background: #16181d;
+}
+
+.cs-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0 4px;
+  border-top: 1px solid var(--m-borde);
+}
+
+.cs-total span {
+  display: flex;
+  flex-direction: column;
+  font-weight: 700;
+}
+
+.cs-total small {
+  font-weight: 500;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.cs-total strong {
+  font-size: 20px;
+}
+
+.cs-acciones {
+  flex-wrap: wrap;
+}
+
+.cs-acciones button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+@media (max-width: 480px) {
+  .cs-acciones > * {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
