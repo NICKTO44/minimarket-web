@@ -28,6 +28,7 @@ import {
   PackageOpen,
   CakeSlice,
   Wheat,
+  Smartphone,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
@@ -51,6 +52,8 @@ export const GRUPOS_MENU = [
       { id: 'VEHICULOS', label: 'Vehículos', icono: Car, modulo: 'VEHICULOS' },
       // Pastelería.
       { id: 'ENCARGOS', label: 'Pedidos por encargo', icono: CakeSlice, modulo: 'ENCARGOS' },
+      // Tecnología.
+      { id: 'REPARACIONES', label: 'Reparaciones', icono: Smartphone, modulo: 'REPARACIONES' },
     ],
   },
   {

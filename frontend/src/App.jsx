@@ -37,6 +37,7 @@ import Gastos from './pages/Gastos/Gastos';
 import Vehiculos from './pages/Vehiculos/Vehiculos';
 import Ordenes from './pages/Ordenes/Ordenes';
 import Encargos from './pages/Encargos/Encargos';
+import Reparaciones from './pages/Reparaciones/Reparaciones';
 import Produccion from './pages/Produccion/Produccion';
 import Paquetes from './pages/Paquetes/Paquetes';
 import AvisosListos from './components/AvisosListos';
@@ -63,7 +64,7 @@ import {
   MODULO_MESAS,
   MODULO_DELIVERY,
   MODULO_SERVICIOS,
-  MODULO_GANANCIAS, MODULO_COSTEO, MODULO_PRECIO_VENTA, MODULO_VARIANTES, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
+  MODULO_GANANCIAS, MODULO_COSTEO, MODULO_REPARACIONES, MODULO_PRECIO_VENTA, MODULO_VARIANTES, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
   MODULO_FICHA_MEDICAMENTO,
   MODULO_RECETAS,
   MODULO_ALTERNATIVAS,
@@ -94,6 +95,7 @@ const MODULO_DE_PANTALLA = {
   ORDENES: MODULO_ORDENES_SERVICIO,
   PAQUETES: MODULO_PAQUETES,
   ENCARGOS: MODULO_ENCARGOS,
+  REPARACIONES: MODULO_REPARACIONES,
   PRODUCCION: MODULO_PRODUCCION,
 };
 
@@ -633,7 +635,9 @@ function App() {
               paquetes={negocio.modulos.includes(MODULO_PAQUETES)}
               ordenACargar={negocio.modulos.includes(MODULO_ORDENES_SERVICIO) ? ordenACargar : null}
               onOrdenUsada={() => setOrdenACargar(null)}
-              encargoACargar={negocio.modulos.includes(MODULO_ENCARGOS) ? encargoACargar : null}
+              encargoACargar={
+                negocio.modulos.includes(MODULO_ENCARGOS) || negocio.modulos.includes(MODULO_REPARACIONES) ? encargoACargar : null
+              }
               onEncargoUsado={() => setEncargoACargar(null)}
               cambios={negocio.modulos.includes(MODULO_CAMBIOS)}
               cambioEnCurso={negocio.modulos.includes(MODULO_CAMBIOS) ? cambioEnCurso : null}
@@ -736,6 +740,20 @@ function App() {
               setCotizacionACargar(null);
               setOrdenACargar(null);
               setEncargoACargar(encargo);
+              setPantalla('POS');
+            }}
+          />
+        )}
+        {pantallaVisible === 'REPARACIONES' && (
+          <Reparaciones
+            nombreTienda={nombreTienda}
+            direccion={configuracionTienda?.direccion}
+            telefono={configuracionTienda?.telefono}
+            onEntregar={(orden) => {
+              setPedidoACobrar(null);
+              setCotizacionACargar(null);
+              setOrdenACargar(null);
+              setEncargoACargar(orden);
               setPantalla('POS');
             }}
           />

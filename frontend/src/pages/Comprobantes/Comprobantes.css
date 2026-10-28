@@ -713,3 +713,10 @@
   background: #fee2e2;
   color: #991b1b;
 }
+
+/* Nota de venta: emitir su boleta o factura después. */
+.comp-boton-emitir {
+  border-color: var(--color-primario, #16181d) !important;
+  color: var(--color-primario-texto, #16181d) !important;
+  font-weight: 700;
+}

@@ -228,6 +228,7 @@ pub async fn identificar_usuario(
         rubro: crate::handlers::rubros::RUBRO_GENERAL.to_string(),
         modulos: Vec::new(),
         modo_negocio: "TIENDA".to_string(),
+        rubro_fijo: false,
     };
     let (logo_url, color_acento, negocio) = match state.tiendas.conectar_cacheado(&tienda).await {
         Ok(db) => match db.connect() {

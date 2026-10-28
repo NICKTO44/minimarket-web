@@ -18,8 +18,8 @@ const DEBOUNCE_MS = 500;
 const DEBOUNCE_RUC_MS = 300;
 
 // El rubro decide con qué módulos, unidades y nombres de pantalla arranca
-// el negocio (utils/rubros.js). Se puede cambiar después en Configuración,
-// así que no es una decisión para siempre.
+// el negocio (utils/rubros.js). Queda fijo: dentro del sistema ya no se
+// cambia (solo se encienden o apagan módulos en Configuración).
 
 // "QUISPE MAMANI JUAN CARLOS" (como lo da SUNAT) -> "Juan Carlos Quispe Mamani".
 function nombreDePersonaNatural(razonSocial) {
@@ -233,6 +233,7 @@ export default function Registro({ onRegistroExitoso, onIrALogin }) {
         {/* La descripción solo del rubro elegido: la lista queda corta y el
             formulario no se va hacia abajo. */}
         <p className="registro-rubro-descripcion">{RUBROS.find((r) => r.valor === rubro)?.descripcion}</p>
+        <p className="registro-rubro-aviso">Elige bien: el rubro queda fijo. Lo que necesites de más lo enciendes después como módulo.</p>
 
         <div className="registro-campo">
           <label className="registro-etiqueta" htmlFor="registro-negocio">Nombre del negocio</label>

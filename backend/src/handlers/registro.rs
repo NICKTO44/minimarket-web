@@ -418,7 +418,8 @@ async fn registrar_negocio_interno(
     //     activa la atención en mesas y deja 6 mesas de ejemplo; cualquier
     //     otro valor deja el sistema de siempre (TIENDA).
     //     El RUBRO es la plantilla: enciende sus módulos y carga sus
-    //     unidades sugeridas (se cambian luego en Configuración).
+    //     unidades sugeridas. El rubro ya no se cambia desde el sistema;
+    //     los módulos y las unidades sí, en Configuración.
     use crate::handlers::rubros;
     let rubro = payload
         .rubro

@@ -54,3 +54,5 @@ pub mod produccion;
 pub mod paquetes;
 pub mod delivery;
 pub mod costeo;
+pub mod reparaciones;
+pub mod desde_nota;

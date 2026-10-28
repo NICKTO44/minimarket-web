@@ -1,0 +1,49 @@
+/* Emitir boleta o factura de una nota de venta (se apoya en FormularioGasto.css). */
+.edn-elegido {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 10px;
+  background: #f9fafb;
+  font-size: 14px;
+}
+
+.edn-elegido small {
+  color: #6b7280;
+}
+
+.edn-elegido .fg-boton {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.edn-fila {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #eef0f3;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.edn-fila:hover {
+  background: #f6f7f9;
+}
+
+.edn-fila small {
+  color: #6b7280;
+}
+
+.edn-de-venta {
+  margin: 0;
+}

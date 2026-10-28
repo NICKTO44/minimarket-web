@@ -1,0 +1,161 @@
+/* Órdenes de reparación (módulo REPARACIONES). Se apoya en
+   components/PantallaModulo.css (pm-*) y pages/Encargos/Encargos.css (enc-*). */
+
+.rp-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  margin-right: 10px;
+  border-radius: 10px;
+  background: #eef1f6;
+  color: #374151;
+}
+
+.rp-icono-grande {
+  width: 46px;
+  height: 46px;
+  margin: 2px 12px 0 0;
+}
+
+/* Fila del listado: ícono del equipo, datos y monto. */
+.pm-fila.rp-fila {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.rp-fila .rp-icono {
+  align-self: start;
+  margin-right: 0;
+}
+
+.rp-fecha {
+  font-size: 12px;
+}
+
+.rp-atrasada {
+  color: #b91c1c !important;
+  font-weight: 700;
+}
+
+.pm-chip.rp-chip-espera {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.pm-fila-titulo .pm-chip svg,
+.pm-mensaje svg {
+  vertical-align: -2px;
+}
+
+.rp-tipos {
+  margin-bottom: 10px;
+}
+
+.rp-tipos button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.rp-clave {
+  display: flex;
+  gap: 6px;
+}
+
+.rp-clave input {
+  flex: 1;
+  min-width: 0;
+}
+
+.rp-clave button {
+  flex-shrink: 0;
+  padding: 0 12px;
+}
+
+.rp-aviso-garantia {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #fcd9a0;
+  border-radius: 10px;
+  background: #fff7e8;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #6b4208;
+}
+
+.rp-aviso-garantia.vigente {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #14532d;
+}
+
+.rp-aviso-garantia svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.rp-sin-stock {
+  font-weight: 600;
+  color: #b45309;
+}
+
+/* Siguiente paso de la orden, arriba del detalle */
+.rp-pasos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f6f7f9;
+}
+
+.rp-whatsapp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.rp-equipo {
+  display: flex;
+  align-items: flex-start;
+}
+
+.rp-equipo .pm-pares {
+  flex: 1;
+  min-width: 0;
+}
+
+.rp-serie {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+}
+
+.rp-ver {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-primario-texto, #1d4ed8);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .rp-equipo .rp-icono-grande {
+    display: none;
+  }
+
+  .rp-pasos > * {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}

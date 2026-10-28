@@ -4,7 +4,7 @@
 // arrancan encendidos, qué unidades se sugieren y cómo se llaman algunas
 // pantallas ("Carta" en vez de "Productos" en un restaurante).
 // Debe coincidir con backend/src/handlers/rubros.rs.
-import { Axe, CakeSlice, Hammer, Pill, Shirt, ShoppingBasket, Store, UtensilsCrossed, WashingMachine, Wrench } from 'lucide-react';
+import { Axe, CakeSlice, Hammer, Pill, Shirt, ShoppingBasket, Smartphone, Store, UtensilsCrossed, WashingMachine, Wrench } from 'lucide-react';
 import { UNIDADES_CLASICAS } from './unidades';
 import { TEXTOS_ENCARGOS_LAVANDERIA } from './textosEncargos';
 
@@ -50,6 +50,8 @@ export const MODULO_INSUMOS = 'INSUMOS';
 export const MODULO_DELIVERY = 'DELIVERY';
 // Restaurante: margen por plato (costo por receta, costo fijo o %; alertas).
 export const MODULO_COSTEO = 'COSTEO';
+// Tecnología: órdenes de reparación (equipo, diagnóstico, presupuesto, garantía).
+export const MODULO_REPARACIONES = 'REPARACIONES';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
@@ -227,6 +229,13 @@ export const MODULOS = [
     // Solo se ofrece en estos rubros (el servidor tampoco lo deja en otros).
     rubros: ['RESTAURANTE'],
   },
+  {
+    valor: MODULO_REPARACIONES,
+    label: 'Órdenes de reparación',
+    descripcion:
+      'El cliente deja su celular, laptop o impresora: tipo, marca, modelo, N° de serie o IMEI, lo que trae, cómo llega, la falla y su clave. Diagnóstico, presupuesto con repuestos del stock y mano de obra, aprobación por WhatsApp, técnico, adelanto sin comprobante, aviso de listo, garantía por IMEI y cobro del saldo al entregar.',
+    rubros: ['TECNOLOGIA'],
+  },
 ];
 
 /** ¿El módulo se puede encender en ese rubro? */
@@ -352,6 +361,18 @@ export const RUBROS = [
       // Créditos: pestaña "Por cliente" y estado de cuenta del mes (solo aquí;
       // los demás rubros ven Créditos como siempre).
       cierreMes: true,
+    },
+  },
+  {
+    valor: 'TECNOLOGIA',
+    label: 'Tecnología / Reparaciones',
+    descripcion:
+      'Accesorios de celulares, laptops e impresoras (cargadores, cables, tóner, tintas) y servicio técnico: órdenes de reparación con el equipo, diagnóstico, presupuesto, garantía y cobro al entregar. Con proformas, crédito y precio por mayor.',
+    Icono: Smartphone,
+    modulos: [MODULO_SERVICIOS, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_PRECIO_MAYOR, MODULO_REPARACIONES],
+    unidades: ['UNIDAD', 'PAQUETE', 'CAJA', 'PAR', 'JUEGO', 'METRO', 'ROLLO', 'PIEZA'],
+    etiquetas: {
+      sinStock: 'Es un servicio (mano de obra, instalación, revisión): se vende sin controlar stock',
     },
   },
   {

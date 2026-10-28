@@ -177,3 +177,38 @@
     display: none;
   }
 }
+
+/* Rubro ya elegido al crear la cuenta: solo se muestra. */
+.neg-rubro-fijo {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  border: 1px solid var(--color-primario-borde, #d0d4db);
+  border-radius: 12px;
+  background: var(--color-primario-suave, #f6f7f9);
+}
+
+.neg-rubro-fijo > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-primario-texto, #16181d);
+}
+
+.neg-rubro-fijo strong {
+  font-size: 15px;
+  color: #16181d;
+}
+
+.neg-rubro-fijo p {
+  margin: 4px 0 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #4b5563;
+}
+
+.neg-rubro-fijo small {
+  font-size: 12px;
+  color: #6b7280;
+}

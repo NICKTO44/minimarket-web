@@ -63,13 +63,22 @@ const ACTIVOS: &[&str] = &["PENDIENTE", "EN_PREPARACION", "LISTO"];
 // stock, que se crean solos la primera vez: "Servicio por kilo" y "Servicio
 // por prenda". En la orden, el ticket y el comprobante sale lo que se
 // escribió ("Lavado de terno negro"), con el precio puesto ese día.
+//
+// Tecnología (órdenes de reparación, handlers/reparaciones.rs) usa lo mismo
+// para la mano de obra escrita en la orden ("Cambio de pantalla"): se apoya
+// en "Servicio técnico".
 const RUBRO_LAVANDERIA: &str = "LAVANDERIA";
-const CATEGORIA_RESPALDO: &str = "Servicios de lavandería";
-/// (cobro, código, nombre, unidad)
-const RESPALDOS: &[(&str, &str, &str, &str)] = &[
-    ("KG", "_LAV_KG", "Servicio por kilo", "KG"),
-    ("PRENDA", "_LAV_PRENDA", "Servicio por prenda", "PRENDA"),
+/// (cobro, código, nombre, unidad, rubro, categoría)
+const RESPALDOS: &[(&str, &str, &str, &str, &str, &str)] = &[
+    ("KG", "_LAV_KG", "Servicio por kilo", "KG", RUBRO_LAVANDERIA, "Servicios de lavandería"),
+    ("PRENDA", "_LAV_PRENDA", "Servicio por prenda", "PRENDA", RUBRO_LAVANDERIA, "Servicios de lavandería"),
+    ("SERVICIO", "_REP_SERVICIO", "Servicio técnico", "UNIDAD", crate::handlers::rubros::RUBRO_TECNOLOGIA, "Servicio técnico"),
 ];
+
+/// Rubro al que pertenece un respaldo (por su código).
+fn rubro_del_respaldo(codigo: &str) -> Option<&'static str> {
+    RESPALDOS.iter().find(|r| r.1 == codigo).map(|r| r.4)
+}
 
 /// ¿Es uno de los servicios de respaldo de las prendas escritas?
 pub fn es_respaldo(codigo: &str) -> bool {
@@ -78,22 +87,33 @@ pub fn es_respaldo(codigo: &str) -> bool {
 
 /// Id del servicio de respaldo para ese cobro (KG o PRENDA). Lo crea si no
 /// existe y lo vuelve a activar si alguien lo desactivó.
-async fn respaldo(conn: &libsql::Connection, cobro: &str) -> Result<i64, Fallo> {
-    let (_, codigo, nombre, unidad) = RESPALDOS
+async fn respaldo(conn: &libsql::Connection, cobro: &str, rubro: &str) -> Result<i64, Fallo> {
+    let (_, codigo, nombre, unidad, _, categoria) = RESPALDOS
         .iter()
-        .find(|r| r.0 == cobro)
-        .ok_or_else(|| malo("Elige si la prenda se cobra por kilo o por prenda."))?;
+        .find(|r| r.0 == cobro && r.4 == rubro)
+        .ok_or_else(|| {
+            malo(if rubro == RUBRO_LAVANDERIA {
+                "Elige si la prenda se cobra por kilo o por prenda."
+            } else {
+                "Elige un producto de la lista o escribe el servicio."
+            })
+        })?;
+    let (creada_por, uso) = if rubro == RUBRO_LAVANDERIA {
+        ("Creada por Órdenes de lavado", "Uso interno de Órdenes de lavado: el nombre y el precio se ponen en cada orden.")
+    } else {
+        ("Creada por Órdenes de reparación", "Uso interno de Órdenes de reparación: el nombre y el precio se ponen en cada orden.")
+    };
     conn.execute(
-        "INSERT OR IGNORE INTO categorias (nombre, descripcion) VALUES (?1, 'Creada por Órdenes de lavado')",
-        libsql::params![CATEGORIA_RESPALDO],
+        "INSERT OR IGNORE INTO categorias (nombre, descripcion) VALUES (?1, ?2)",
+        libsql::params![*categoria, creada_por],
     )
     .await
     .map_err(e500)?;
     conn.execute(
         "INSERT OR IGNORE INTO productos (codigo, nombre, descripcion, precio, stock, stock_minimo, unidad_medida, categoria_id)
-         VALUES (?1, ?2, 'Uso interno de Órdenes de lavado: el nombre y el precio se ponen en cada orden.', 1, 0, 0, ?3,
+         VALUES (?1, ?2, ?5, 1, 0, 0, ?3,
                  (SELECT id FROM categorias WHERE nombre = ?4))",
-        libsql::params![*codigo, *nombre, *unidad, CATEGORIA_RESPALDO],
+        libsql::params![*codigo, *nombre, *unidad, *categoria, uso],
     )
     .await
     .map_err(e500)?;
@@ -129,7 +149,11 @@ fn r2(n: f64) -> f64 {
     (n * 100.0).round() / 100.0
 }
 
+/// Encargos, o las órdenes de reparación (que son encargos por dentro).
 async fn exigir(conn: &libsql::Connection) -> Result<(), Fallo> {
+    if crate::handlers::rubros::negocio(conn).await.modulos.iter().any(|m| m == crate::handlers::rubros::MODULO_REPARACIONES) {
+        return Ok(());
+    }
     exigir_modulo(conn, MODULO_ENCARGOS, NOMBRE_MODULO).await
 }
 
@@ -283,7 +307,7 @@ async fn items_de(conn: &libsql::Connection, ids: &[i64]) -> Result<HashMap<i64,
     Ok(mapa)
 }
 
-async fn leer(conn: &libsql::Connection, id: i64) -> Result<Encargo, Fallo> {
+pub(crate) async fn leer(conn: &libsql::Connection, id: i64) -> Result<Encargo, Fallo> {
     let mut filas = conn
         .query(&format!("{} WHERE e.id = ?1", SELECT_ENCARGO), libsql::params![id])
         .await
@@ -345,6 +369,10 @@ pub async fn listar(
         _ => return Err(malo("Estado no válido.")),
     };
     let mut condiciones = vec![donde.to_string()];
+    // Las órdenes de reparación tienen su propia pantalla.
+    if con_reparaciones(&conn).await {
+        condiciones.push("e.id NOT IN (SELECT encargo_id FROM reparaciones)".to_string());
+    }
     let mut valores: Vec<libsql::Value> = Vec::new();
     if let Some(cliente) = q.cliente_id {
         valores.push(cliente.into());
@@ -374,6 +402,17 @@ pub async fn listar(
         e.items = items.remove(&e.id).unwrap_or_default();
     }
     Ok(Json(lista))
+}
+
+/// ¿La base ya tiene la tabla de reparaciones (migración 0048)?
+async fn con_reparaciones(conn: &libsql::Connection) -> bool {
+    conn.query("SELECT 1 FROM reparaciones LIMIT 0", ()).await.is_ok()
+}
+
+/// La clave de desbloqueo del equipo solo se guarda mientras está en el
+/// taller: al entregar o cancelar la orden se borra.
+pub(crate) async fn olvidar_clave(conn: &libsql::Connection, id: i64) {
+    let _ = conn.execute("UPDATE reparaciones SET clave = NULL WHERE encargo_id = ?1", libsql::params![id]).await;
 }
 
 /// GET /encargos/:id
@@ -439,19 +478,19 @@ pub struct DatosEncargo {
 }
 
 /// Datos revisados, listos para guardar.
-struct Listo {
-    cliente_id: Option<i64>,
-    cliente_nombre: String,
-    cliente_telefono: Option<String>,
-    fecha_entrega: String,
-    hora_entrega: Option<String>,
-    entrega: String,
-    direccion_entrega: Option<String>,
-    dedicatoria: Option<String>,
-    notas: Option<String>,
+pub(crate) struct Listo {
+    pub(crate) cliente_id: Option<i64>,
+    pub(crate) cliente_nombre: String,
+    pub(crate) cliente_telefono: Option<String>,
+    pub(crate) fecha_entrega: String,
+    pub(crate) hora_entrega: Option<String>,
+    pub(crate) entrega: String,
+    pub(crate) direccion_entrega: Option<String>,
+    pub(crate) dedicatoria: Option<String>,
+    pub(crate) notas: Option<String>,
     /// (producto_id, nombre, cantidad, precio, detalle)
-    items: Vec<(i64, String, f64, f64, Option<String>)>,
-    total: f64,
+    pub(crate) items: Vec<(i64, String, f64, f64, Option<String>)>,
+    pub(crate) total: f64,
 }
 
 fn hora_valida(h: &str) -> bool {
@@ -466,6 +505,12 @@ fn hora_valida(h: &str) -> bool {
 /// Revisa lo que manda la pantalla (sin escribir nada). Los nombres de los
 /// productos y del cliente se toman de la base.
 async fn revisar(conn: &libsql::Connection, d: &DatosEncargo, es_nuevo: bool) -> Result<Listo, Fallo> {
+    revisar_con(conn, d, es_nuevo, false).await
+}
+
+/// `permitir_vacio`: una orden de reparación se recibe antes del
+/// diagnóstico, todavía sin repuestos ni mano de obra (total 0).
+pub(crate) async fn revisar_con(conn: &libsql::Connection, d: &DatosEncargo, es_nuevo: bool, permitir_vacio: bool) -> Result<Listo, Fallo> {
     let fecha = d.fecha_entrega.trim().to_string();
     if !tiempo::fecha_valida(&fecha) {
         return Err(malo("Elige la fecha de entrega."));
@@ -505,15 +550,15 @@ async fn revisar(conn: &libsql::Connection, d: &DatosEncargo, es_nuevo: bool) ->
     }
     let cliente_nombre = nombre.ok_or_else(|| malo("Escribe el nombre del cliente."))?;
 
-    if d.items.is_empty() {
+    if d.items.is_empty() && !permitir_vacio {
         return Err(malo("Agrega lo que lleva el pedido."));
     }
     if d.items.len() > MAX_ITEMS {
         return Err(malo(format!("Un pedido puede llevar hasta {} productos.", MAX_ITEMS)));
     }
     let ids: Vec<String> = d.items.iter().filter_map(|i| i.producto_id).map(|id| id.to_string()).collect();
-    // id -> (nombre, ¿es respaldo de prendas escritas?)
-    let mut nombres: HashMap<i64, (String, bool)> = HashMap::new();
+    // id -> (nombre, rubro del respaldo si es de líneas escritas)
+    let mut nombres: HashMap<i64, (String, Option<&'static str>)> = HashMap::new();
     if !ids.is_empty() {
         let mut filas = conn
             .query(
@@ -525,14 +570,20 @@ async fn revisar(conn: &libsql::Connection, d: &DatosEncargo, es_nuevo: bool) ->
         while let Some(f) = filas.next().await.map_err(e500)? {
             nombres.insert(
                 f.get(0).unwrap_or_default(),
-                (f.get(1).unwrap_or_default(), es_respaldo(&f.get::<String>(2).unwrap_or_default())),
+                (f.get(1).unwrap_or_default(), rubro_del_respaldo(&f.get::<String>(2).unwrap_or_default())),
             );
         }
     }
-    // Prendas escritas en la orden: solo en una lavandería.
-    let hay_escritas = d.items.iter().any(|i| i.producto_id.is_none() || i.producto_id.and_then(|id| nombres.get(&id)).is_some_and(|n| n.1));
-    if hay_escritas && crate::handlers::rubros::negocio(conn).await.rubro != RUBRO_LAVANDERIA {
+    // Líneas escritas en la orden: prendas en una lavandería, mano de obra en
+    // un taller de tecnología. En otro rubro no hay.
+    let hay_escritas = d.items.iter().any(|i| i.producto_id.is_none() || i.producto_id.and_then(|id| nombres.get(&id)).is_some_and(|n| n.1.is_some()));
+    let rubro = if hay_escritas { crate::handlers::rubros::negocio(conn).await.rubro } else { String::new() };
+    if hay_escritas && !RESPALDOS.iter().any(|r| r.4 == rubro) {
         return Err(malo("Las prendas escritas en la orden son solo para lavanderías. Elige un producto de la lista."));
+    }
+    // Un respaldo de otro rubro (una prenda en un taller) no entra.
+    if d.items.iter().any(|i| i.producto_id.and_then(|id| nombres.get(&id)).and_then(|n| n.1).is_some_and(|r| r != rubro)) {
+        return Err(malo("Una línea del pedido no es de este negocio. Quítala y vuelve a agregarla."));
     }
     let mut respaldos: HashMap<String, i64> = HashMap::new();
     let mut items = Vec::new();
@@ -545,7 +596,7 @@ async fn revisar(conn: &libsql::Connection, d: &DatosEncargo, es_nuevo: bool) ->
                 let id = match respaldos.get(&cobro) {
                     Some(id) => *id,
                     None => {
-                        let id = respaldo(conn, &cobro).await?;
+                        let id = respaldo(conn, &cobro, &rubro).await?;
                         respaldos.insert(cobro, id);
                         id
                     }
@@ -557,7 +608,7 @@ async fn revisar(conn: &libsql::Connection, d: &DatosEncargo, es_nuevo: bool) ->
                     .get(&id)
                     .cloned()
                     .ok_or_else(|| malo("Un producto del pedido no existe o está desactivado. Quítalo y vuelve a agregarlo."))?;
-                let nombre = if libre {
+                let nombre = if libre.is_some() {
                     texto(i.nombre.as_deref(), 120, "Prenda")?.ok_or_else(|| malo("Escribe qué prenda o servicio es."))?
                 } else {
                     nombre_producto
@@ -591,7 +642,7 @@ async fn revisar(conn: &libsql::Connection, d: &DatosEncargo, es_nuevo: bool) ->
     })
 }
 
-async fn guardar_items(conn: &libsql::Connection, id: i64, items: &[(i64, String, f64, f64, Option<String>)]) -> Result<(), Fallo> {
+pub(crate) async fn guardar_items(conn: &libsql::Connection, id: i64, items: &[(i64, String, f64, f64, Option<String>)]) -> Result<(), Fallo> {
     conn.execute("DELETE FROM encargo_items WHERE encargo_id = ?1", libsql::params![id]).await.map_err(e500)?;
     for (producto_id, nombre, cantidad, precio, detalle) in items {
         conn.execute(
@@ -630,7 +681,7 @@ fn metodo_valido(metodo: Option<&str>) -> Result<String, Fallo> {
 /// saldo se revisa en la misma sentencia que lo suma: dos adelantos a la vez
 /// no pueden pasar del total. En efectivo exige caja abierta y entra a ella
 /// como ingreso.
-async fn registrar_adelanto(conn: &libsql::Connection, id: i64, numero: i64, cliente: &str, a: &Adelanto, usuario_id: i64) -> Result<(), Fallo> {
+pub(crate) async fn registrar_adelanto(conn: &libsql::Connection, id: i64, numero: i64, cliente: &str, a: &Adelanto, usuario_id: i64) -> Result<(), Fallo> {
     let monto = r2(a.monto);
     if !(monto > 0.0) || !monto.is_finite() {
         return Err(malo("El adelanto debe ser mayor a 0."));
@@ -741,7 +792,7 @@ pub async fn crear(
     Ok(Json(leer(&conn, id).await?))
 }
 
-async fn estado_y_numero(conn: &libsql::Connection, id: i64) -> Result<(String, i64, String), Fallo> {
+pub(crate) async fn estado_y_numero(conn: &libsql::Connection, id: i64) -> Result<(String, i64, String), Fallo> {
     let mut filas = conn
         .query("SELECT estado, numero, cliente_nombre FROM encargos WHERE id = ?1", libsql::params![id])
         .await
@@ -752,7 +803,7 @@ async fn estado_y_numero(conn: &libsql::Connection, id: i64) -> Result<(String, 
     }
 }
 
-fn activo(estado: &str) -> Result<(), Fallo> {
+pub(crate) fn activo(estado: &str) -> Result<(), Fallo> {
     match estado {
         "ENTREGADO" => Err((StatusCode::CONFLICT, "El pedido ya se entregó: no se puede cambiar.".into())),
         "CANCELADO" => Err((StatusCode::CONFLICT, "El pedido está cancelado.".into())),
@@ -914,6 +965,7 @@ pub async fn cancelar(
             .await
             .map_err(e500)?;
         }
+        olvidar_clave(tx, id).await;
         Ok(())
     });
     Ok(Json(leer(&conn, id).await?))
@@ -1029,7 +1081,7 @@ pub async fn preparar_cobro(
     encargo_id: Option<i64>,
 ) -> Result<Option<CobroEncargo>, Fallo> {
     let Some(id) = encargo_id else { return Ok(None) };
-    if !modulos.is_some_and(|m| m.split(',').any(|x| x.trim() == MODULO_ENCARGOS)) {
+    if !modulos.is_some_and(|m| m.split(',').any(|x| x.trim() == MODULO_ENCARGOS || x.trim() == crate::handlers::rubros::MODULO_REPARACIONES)) {
         return Err((
             StatusCode::FORBIDDEN,
             format!("Este negocio no tiene encendido el módulo \"{}\". Actívalo en Configuración → Datos del negocio.", NOMBRE_MODULO),
@@ -1084,6 +1136,7 @@ pub async fn marcar_entregado(conn: &libsql::Connection, cobro: &CobroEncargo, v
             "El pedido cambió mientras cobrabas (ya se entregó, se canceló o recibió otro adelanto). Vuelve a abrirlo desde Pedidos.".into(),
         ));
     }
+    olvidar_clave(conn, cobro.id).await;
     Ok(())
 }
 

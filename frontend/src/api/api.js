@@ -145,6 +145,8 @@ export const api = {
   cajaAbrir: (data) => request('/cajas/abrir', { method: 'POST', body: JSON.stringify(data) }),
   cajaCerrar: (data) => request('/cajas/cerrar', { method: 'POST', body: JSON.stringify(data) }),
   comprobanteEmitir: (data) => request('/comprobantes', { method: 'POST', body: JSON.stringify(data) }),
+  // Boleta o factura de una venta cobrada como nota de venta: { venta_id, tipo, cliente_id }
+  comprobanteDesdeNota: (data) => request('/comprobantes/desde-nota', { method: 'POST', body: JSON.stringify(data) }),
   // Emisión directa: el documento tal como se envió a SUNAT (para el A4).
   comprobanteDocumento: (id) => request(`/comprobantes/${id}/documento`),
   // Emisión directa: reenviar un comprobante PENDIENTE y avisos de plazos.
@@ -398,6 +400,18 @@ export const api = {
   reportesGanancias: (mes) => request(`/reportes/ganancias${mes ? `?mes=${mes}` : ''}`),
   // Costo promedio de cada producto: [{ producto_id, costo_promedio }]
   gananciasCostos: () => request('/ganancias/costos'),
+  // Tecnología: órdenes de reparación (módulo REPARACIONES). Adelantos,
+  // cancelar y foto usan las rutas de encargos (son encargos por dentro).
+  reparaciones: (estado = 'ACTIVOS', buscar = '') =>
+    request(`/reparaciones?estado=${estado}${buscar ? `&buscar=${encodeURIComponent(buscar)}` : ''}`),
+  reparacion: (id) => request(`/reparaciones/${id}`),
+  reparacionCrear: (data) => request('/reparaciones', { method: 'POST', body: JSON.stringify(data) }),
+  reparacionActualizar: (id, data) => request(`/reparaciones/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  reparacionEtapa: (id, etapa) => request(`/reparaciones/${id}/etapa`, { method: 'POST', body: JSON.stringify({ etapa }) }),
+  reparacionDevolver: (id) => request(`/reparaciones/${id}/devolver`, { method: 'POST' }),
+  reparacionGarantia: (serie, excluir) =>
+    request(`/reparaciones/garantia?serie=${encodeURIComponent(serie)}${excluir ? `&excluir=${excluir}` : ''}`),
+  reparacionTecnicos: () => request('/reparaciones/tecnicos'),
   // Restaurante: margen por plato (módulo COSTEO, solo administrador).
   costeoConfig: () => request('/costeo/config'),
   costeoGuardarConfig: (data) => request('/costeo/config', { method: 'PUT', body: JSON.stringify(data) }),

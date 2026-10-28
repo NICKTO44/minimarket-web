@@ -338,6 +338,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
       {vista === 'NEGOCIO' && formConfig && (
         <ConfiguracionNegocio
           rubro={negocio.rubro}
+          rubroFijo={!!negocio.rubro_fijo}
           modulos={negocio.modulos}
           onCambiado={alCambiarNegocio}
           onMensaje={setMensaje}

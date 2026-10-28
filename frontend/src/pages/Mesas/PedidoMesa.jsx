@@ -15,6 +15,7 @@ import {
   Printer,
   ReceiptText,
   Send,
+  Split,
   StickyNote,
   Trash2,
   X,
@@ -253,10 +254,29 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
     });
   };
 
+  // Una línea de varios platos iguales se parte en dos: uno queda aparte para
+  // ponerle su propia nota ("uno sin cebolla"). Solo sin opciones elegidas
+  // (las opciones tienen su propio precio y se eligen al agregar).
+  const separarUno = (item) => {
+    if (item.cantidad < 2 || item.opciones) return;
+    cambiarCantidad(item, item.cantidad - 1);
+    agregar({
+      producto_id: item.producto_id,
+      nombre_producto: item.nombre_producto,
+      precio_unitario: item.precio_unitario,
+      cantidad: 1,
+      opcion_ids: [],
+      nota: null,
+    });
+  };
+
   const editarNota = (item) => {
     setDialogo({
       titulo: `Nota para ${item.nombre_producto}`,
-      mensaje: 'Sale en la comanda de barra/cocina.',
+      mensaje:
+        item.cantidad > 1
+          ? `Sale en la comanda de barra/cocina y va para los ${item.cantidad}. Si uno lleva algo distinto, primero toca “Separar” y ponle su nota.`
+          : 'Sale en la comanda de barra/cocina.',
       placeholder: 'Ej. sin azúcar, bien caliente',
       valorInicial: item.nota || '',
       textoConfirmar: 'Guardar nota',
@@ -375,6 +395,16 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
             <button type="button" onClick={() => editarNota(item)} aria-label="Nota" title="Nota para cocina">
               <StickyNote size={15} />
             </button>
+            {item.cantidad > 1 && !item.opciones && (
+              <button
+                type="button"
+                onClick={() => separarUno(item)}
+                aria-label="Separar uno"
+                title="Separar uno para ponerle su propia nota"
+              >
+                <Split size={15} />
+              </button>
+            )}
             <button type="button" onClick={() => cambiarCantidadLinea(item, item.cantidad - 1)} aria-label="Menos">
               {item.cantidad === 1 ? <Trash2 size={15} /> : <Minus size={15} />}
             </button>

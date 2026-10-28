@@ -260,6 +260,13 @@ async fn main() {
         .route("/encargos", get(handlers::encargos::listar).post(handlers::encargos::crear))
         .route("/encargos/:id", get(handlers::encargos::obtener).put(handlers::encargos::actualizar))
         .route("/encargos/:id/estado", post(handlers::encargos::cambiar_estado))
+        // Tecnología: órdenes de reparación (módulo REPARACIONES; son encargos por dentro).
+        .route("/reparaciones", get(handlers::reparaciones::listar).post(handlers::reparaciones::crear))
+        .route("/reparaciones/garantia", get(handlers::reparaciones::garantia))
+        .route("/reparaciones/tecnicos", get(handlers::reparaciones::tecnicos))
+        .route("/reparaciones/:id", get(handlers::reparaciones::obtener).put(handlers::reparaciones::actualizar))
+        .route("/reparaciones/:id/etapa", post(handlers::reparaciones::cambiar_etapa))
+        .route("/reparaciones/:id/devolver", post(handlers::reparaciones::devolver))
         .route("/encargos/:id/adelantos", post(handlers::encargos::agregar_adelanto))
         .route("/encargos/:id/cancelar", post(handlers::encargos::cancelar))
         .route(
@@ -361,6 +368,8 @@ async fn main() {
         .route("/costeo/platos/:producto_id", get(handlers::costeo::plato).put(handlers::costeo::guardar_plato))
         .route("/costeo/reporte", get(handlers::costeo::reporte))
         .route("/comprobantes", post(handlers::facturacion::emitir_comprobante_con_enlace))
+        // Boleta o factura de una venta que se cobró como nota de venta.
+        .route("/comprobantes/desde-nota", post(handlers::desde_nota::emitir))
         .route("/comprobantes", get(handlers::comprobantes::listar_comprobantes))
         .route("/comprobantes/:id/pdf", get(handlers::comprobantes::descargar_pdf))
         .route("/comprobantes/:id/xml", get(handlers::comprobantes::descargar_xml))

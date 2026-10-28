@@ -104,8 +104,16 @@ pub const MODULO_DELIVERY: &str = "DELIVERY";
 /// (handlers/costeo.rs). Solo para el rubro Restaurante.
 pub const MODULO_COSTEO: &str = "COSTEO";
 
+/// Tecnología: órdenes de reparación (celulares, laptops, impresoras) con
+/// datos del equipo, diagnóstico, presupuesto, técnico y garantía. Cada orden
+/// es un encargo: adelanto sin comprobante y cobro del saldo en el punto de
+/// venta (handlers/reparaciones.rs). Solo para el rubro Tecnología.
+pub const MODULO_REPARACIONES: &str = "REPARACIONES";
+
+pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
+
 /// (módulo, único rubro donde se puede encender).
-const SOLO_EN_RUBRO: &[(&str, &str)] = &[(MODULO_COSTEO, RUBRO_RESTAURANTE)];
+const SOLO_EN_RUBRO: &[(&str, &str)] = &[(MODULO_COSTEO, RUBRO_RESTAURANTE), (MODULO_REPARACIONES, RUBRO_TECNOLOGIA)];
 
 /// (módulo, el módulo que necesita encendido).
 const DEPENDENCIAS: &[(&str, &str)] = &[
@@ -143,6 +151,7 @@ const MODULOS: &[&str] = &[
     MODULO_INSUMOS,
     MODULO_DELIVERY,
     MODULO_COSTEO,
+    MODULO_REPARACIONES,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
@@ -210,6 +219,11 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
         &[MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_ENCARGOS, MODULO_CREDITO],
         &["UNIDAD", "KG", "PRENDA", "PAR", "JUEGO", "PIEZA"],
     ),
+    (
+        RUBRO_TECNOLOGIA,
+        &[MODULO_SERVICIOS, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_PRECIO_MAYOR, MODULO_REPARACIONES],
+        &["UNIDAD", "PAQUETE", "CAJA", "PAR", "JUEGO", "METRO", "ROLLO", "PIEZA"],
+    ),
     (RUBRO_GENERAL, &[], &[]),
 ];
 
@@ -267,6 +281,7 @@ pub async fn negocio(conn: &libsql::Connection) -> Negocio {
             });
         }
     }
+    let rubro_fijo = rubro.is_some();
     let rubro = rubro.unwrap_or_else(|| if mesas { RUBRO_RESTAURANTE } else { RUBRO_GENERAL }.to_string());
     // Nunca configurado: el restaurante ya vendía productos "preparados" sin stock.
     let extra = extra.unwrap_or_else(|| if mesas { vec![MODULO_SERVICIOS.to_string()] } else { Vec::new() });
@@ -275,7 +290,7 @@ pub async fn negocio(conn: &libsql::Connection) -> Negocio {
         .filter(|m| if **m == MODULO_MESAS { mesas } else { extra.iter().any(|x| x == *m) })
         .map(|m| m.to_string())
         .collect();
-    Negocio { rubro, modulos, modo_negocio: if mesas { "RESTAURANTE" } else { "TIENDA" }.to_string() }
+    Negocio { rubro, modulos, modo_negocio: if mesas { "RESTAURANTE" } else { "TIENDA" }.to_string(), rubro_fijo }
 }
 
 /// Corta con 403 si el negocio no tiene encendido ese módulo.
@@ -325,6 +340,15 @@ pub async fn guardar_negocio(
     let actualizando = || (StatusCode::CONFLICT, "Aún no se puede guardar: el sistema se está actualizando. Intenta en un minuto.".to_string());
     // Si la base todavía no tiene la migración 0011, no se toca nada.
     conn.query("SELECT rubro FROM configuracion_tienda LIMIT 1", ()).await.map_err(|_| actualizando())?;
+    // El rubro se elige al crear la cuenta y no se cambia desde el sistema
+    // (solo los módulos). Un negocio antiguo que nunca eligió puede hacerlo una vez.
+    let actual = negocio(&conn).await;
+    if actual.rubro_fijo && actual.rubro != rubro {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "El rubro del negocio se eligió al crear la cuenta y no se cambia. Puedes encender o apagar los módulos que necesites.".to_string(),
+        ));
+    }
 
     let quiere_mesas = payload.modulos.iter().any(|m| m == MODULO_MESAS);
     if quiere_mesas != modo_restaurante(&conn).await {

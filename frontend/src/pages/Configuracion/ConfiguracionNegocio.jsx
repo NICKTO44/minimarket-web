@@ -20,11 +20,13 @@ function nombresModulos(valores) {
 
 /**
  * Configuración → Rubro y módulos. El rubro es una plantilla (módulos,
- * unidades sugeridas y nombres de pantalla); los módulos se pueden encender
- * o apagar por separado. Lo universal (ventas, caja, productos, clientes,
- * reportes) no depende de nada de esto.
+ * unidades sugeridas y nombres de pantalla) que se elige al crear la cuenta
+ * y ya no se cambia aquí (rubroFijo); los módulos se pueden encender o apagar
+ * por separado. Un negocio antiguo que nunca eligió rubro lo elige una vez.
+ * Lo universal (ventas, caja, productos, clientes, reportes) no depende de
+ * nada de esto.
  */
-export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMensaje }) {
+export default function ConfiguracionNegocio({ rubro, rubroFijo = false, modulos, onCambiado, onMensaje }) {
   const [guardando, setGuardando] = useState(false);
   // La lista de módulos es larga: se abre solo cuando se quiere cambiar algo,
   // para que no empuje hacia abajo los datos del negocio.
@@ -48,14 +50,14 @@ export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMen
   const elegirRubro = async (nuevo) => {
     if (nuevo.valor === rubro || guardando) return;
     const ok = await confirmar({
-      titulo: `¿Cambiar el rubro a ${nuevo.label}?`,
-      mensaje: `Quedarán encendidos los módulos de ese rubro: ${nombresModulos(nuevo.modulos)}. Tus productos, ventas, caja y clientes no se tocan; no se borra nada. Las unidades sugeridas del rubro las aplicas en la pestaña "Unidades".`,
-      textoConfirmar: 'Cambiar rubro',
+      titulo: `¿Tu negocio es ${nuevo.label}?`,
+      mensaje: `Quedarán encendidos los módulos de ese rubro: ${nombresModulos(nuevo.modulos)}. El rubro se elige una sola vez; después solo enciendes o apagas módulos. Tus productos, ventas, caja y clientes no se tocan. Las unidades sugeridas del rubro las aplicas en la pestaña "Unidades".`,
+      textoConfirmar: 'Sí, elegir este rubro',
       icono: 'aviso',
     });
     // Hay módulos que no dependen del rubro: si estaban encendidos, siguen.
     const conservados = modulos.filter((m) => MODULOS_SIN_RUBRO.includes(m));
-    if (ok) guardar(nuevo.valor, [...nuevo.modulos, ...conservados], `Rubro cambiado a ${nuevo.label}.`);
+    if (ok) guardar(nuevo.valor, [...nuevo.modulos, ...conservados], `Rubro elegido: ${nuevo.label}.`);
   };
 
   const alternarModulo = async (modulo) => {
@@ -114,9 +116,29 @@ export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMen
   return (
     <div className="cfg-card cfg-card-tipo">
       <h3 className="cfg-subtitulo-seccion">Rubro del negocio</h3>
+      {rubroFijo ? (
+        <div className="neg-rubro-fijo">
+          {(() => {
+            const actual = rubroDe(rubro);
+            return (
+              <>
+                <actual.Icono size={20} aria-hidden="true" />
+                <div>
+                  <strong>{actual.label}</strong>
+                  <p>{actual.descripcion}</p>
+                  <small>
+                    El rubro se eligió al crear la cuenta. Lo que necesites de más lo enciendes abajo, en Módulos.
+                  </small>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      ) : (
+        <>
       <p className="cfg-nota-moneda">
-        Define qué módulos vienen encendidos, las unidades sugeridas y cómo se llaman algunas pantallas. Puedes
-        cambiarlo cuando quieras; no se borra nada.
+        Elige a qué se dedica tu negocio: define qué módulos vienen encendidos, las unidades sugeridas y cómo se llaman
+        algunas pantallas. Se elige una sola vez; después solo enciendes o apagas módulos.
       </p>
       <div className="cfg-tipos neg-rubros" role="radiogroup" aria-label="Rubro del negocio">
         {RUBROS.map((r) => (
@@ -135,6 +157,8 @@ export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMen
         ))}
       </div>
       <p className="neg-rubro-descripcion">{rubroDe(rubro).descripcion}</p>
+        </>
+      )}
 
       <div className="neg-modulos-cabecera">
         <div>

@@ -116,10 +116,11 @@ export const TEXTOS_ENCARGOS_LAVANDERIA = {
 /**
  * Servicios internos que no se eligen en pantalla: los respaldos de las
  * prendas escritas en una orden de lavado (_LAV_…, handlers/encargos.rs) y el
- * costo de envío de Pedidos delivery (_DLV_ENVIO, handlers/delivery.rs). Su
+ * costo de envío de Pedidos delivery (_DLV_ENVIO, handlers/delivery.rs) y la
+ * mano de obra de las órdenes de reparación (_REP_SERVICIO). Su
  * nombre y precio se ponen en cada orden o pedido. Otro negocio no los tiene.
  */
-export const esRespaldoLavanderia = (p) => /^_(LAV|DLV)_/.test(String(p?.codigo || ''));
+export const esRespaldoLavanderia = (p) => /^_(LAV|DLV|REP)_/.test(String(p?.codigo || ''));
 
 /** Los textos del rubro, completando con los de pastelería lo que falte. */
 export function textosEncargos(etiquetas) {

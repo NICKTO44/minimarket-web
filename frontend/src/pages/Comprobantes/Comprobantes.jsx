@@ -6,6 +6,7 @@ import { datosA4DeDocumento, imprimirComprobanteA4 } from '../../utils/facturaA4
 import Recibo from '../../components/Recibo';
 import FormularioNotaCredito from '../../components/FormularioNotaCredito';
 import FormularioAnulacion from '../../components/FormularioAnulacion';
+import EmitirDesdeNota from '../../components/EmitirDesdeNota';
 import { imprimirNotaCredito } from '../../utils/notaCredito';
 import '../../components/Recibo.css';
 import { fechaHoraLima, hoyLima } from '../../utils/formato';
@@ -62,6 +63,9 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   // Comprobante que se está anulando.
   const [anularPara, setAnularPara] = useState(null);
   const cerrarAnular = useCallback(() => setAnularPara(null), []);
+  // Nota de venta a la que se le emite su boleta o factura (el cliente la pidió después).
+  const [emitirPara, setEmitirPara] = useState(null);
+  const cerrarEmitir = useCallback(() => setEmitirPara(null), []);
 
   useEffect(() => {
     api
@@ -516,6 +520,24 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
       {avisos?.pendientes > 0 && <AvisoSunat avisos={avisos} />}
 
       {anularPara && <FormularioAnulacion comprobante={anularPara} onHecho={() => cargar()} onCerrar={cerrarAnular} />}
+      {emitirPara && (
+        <EmitirDesdeNota
+          venta={emitirPara}
+          onCerrar={cerrarEmitir}
+          onHecho={(r) => {
+            setEmitirPara(null);
+            const nombre = `${r.tipo === 'FACTURA' ? 'Factura' : 'Boleta'} ${r.serie}-${r.numero}`;
+            setMensaje(
+              r.estado === 'RECHAZADO'
+                ? { tipo: 'error', texto: `${nombre} rechazada: ${r.mensaje}` }
+                : r.estado === 'PENDIENTE'
+                  ? { tipo: 'exito', texto: `${nombre} registrada para la venta ${emitirPara.folio_venta}; se enviará a SUNAT.` }
+                  : { tipo: 'exito', texto: `${nombre} emitida para la venta ${emitirPara.folio_venta}.` }
+            );
+            cargar();
+          }}
+        />
+      )}
 
       {notaPara && (
         <FormularioNotaCredito
@@ -641,6 +663,13 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                     <button className="comp-boton-whatsapp" onClick={() => abrirEnvioWhatsapp(c)}>
                       📲
                     </button>
+                    {c.tipo === 'NINGUNO' && (
+                      <div className="comp-acciones-sunat">
+                        <button className="comp-boton-imprimir comp-boton-emitir" onClick={() => setEmitirPara(c)}>
+                          Emitir boleta / factura
+                        </button>
+                      </div>
+                    )}
                     {c.proveedor === 'SUNAT_DIRECTO' && c.id && ['ACEPTADO', 'PENDIENTE'].includes(c.estado) && (
                       <div className="comp-acciones-sunat">
                         {c.estado === 'ACEPTADO' && vigente(c) && (
