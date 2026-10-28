@@ -398,6 +398,17 @@ export const api = {
   reportesGanancias: (mes) => request(`/reportes/ganancias${mes ? `?mes=${mes}` : ''}`),
   // Costo promedio de cada producto: [{ producto_id, costo_promedio }]
   gananciasCostos: () => request('/ganancias/costos'),
+  // Restaurante: margen por plato (módulo COSTEO, solo administrador).
+  costeoConfig: () => request('/costeo/config'),
+  costeoGuardarConfig: (data) => request('/costeo/config', { method: 'PUT', body: JSON.stringify(data) }),
+  costeoCarta: () => request('/costeo/carta'),
+  costeoInsumos: () => request('/costeo/insumos'),
+  costeoCrearInsumo: (data) => request('/costeo/insumos', { method: 'POST', body: JSON.stringify(data) }),
+  costeoActualizarInsumo: (id, data) => request(`/costeo/insumos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  costeoBorrarInsumo: (id) => request(`/costeo/insumos/${id}`, { method: 'DELETE' }),
+  costeoPlato: (productoId) => request(`/costeo/platos/${productoId}`),
+  costeoGuardarPlato: (productoId, data) => request(`/costeo/platos/${productoId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  costeoReporte: (mes) => request(`/costeo/reporte${mes ? `?mes=${mes}` : ''}`),
   comprobantesListar: (filtros = {}) => {
     const params = new URLSearchParams(filtros).toString();
     return request(`/comprobantes${params ? `?${params}` : ''}`);

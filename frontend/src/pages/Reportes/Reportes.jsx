@@ -4,6 +4,7 @@ import './Reportes.css';
 import { nombreMetodo, partesDelPago } from '../../utils/metodoPago';
 import { fechaHoraLima, hoyLima } from '../../utils/formato';
 import Ganancias from './Ganancias';
+import MargenPlatos from './MargenPlatos';
 import VerComprobanteVenta from '../../components/VerComprobanteVenta';
 
 // Nombres de la tabla "Ventas por método de pago" que piden aclaración.
@@ -49,7 +50,8 @@ function ayudaDelMetodo(metodo) {
 // quien mira es el administrador. Sin eso, esta pantalla es la de siempre.
 // metodoInicial: abrir con las ventas ya filtradas por ese medio (desde el
 // Resumen); onFiltroUsado avisa que ya se aplicó, para no repetirlo.
-export default function Reportes({ ganancias = false, onVerSinPrecio, metodoInicial = null, onFiltroUsado }) {
+// costeo: restaurante con el módulo "Margen por plato" (solo administrador).
+export default function Reportes({ ganancias = false, costeo = false, onVerSinPrecio, metodoInicial = null, onFiltroUsado }) {
   const [pestana, setPestana] = useState('VENTAS');
   const [fechaInicio, setFechaInicio] = useState(hoy());
   const [fechaFin, setFechaFin] = useState(hoy());
@@ -127,12 +129,13 @@ export default function Reportes({ ganancias = false, onVerSinPrecio, metodoInic
     setFechaFin(hoyLima());
   };
 
-  const pestanas = ganancias && (
+  const pestanas = (ganancias || costeo) && (
     <div className="rep-pestanas" role="tablist" aria-label="Tipo de reporte">
       {[
         ['VENTAS', 'Ventas'],
-        ['GANANCIAS', 'Ganancias'],
-      ].map(([valor, texto]) => (
+        ganancias && ['GANANCIAS', 'Ganancias'],
+        costeo && ['MARGEN', 'Margen por plato'],
+      ].filter(Boolean).map(([valor, texto]) => (
         <button
           key={valor}
           type="button"
@@ -146,6 +149,18 @@ export default function Reportes({ ganancias = false, onVerSinPrecio, metodoInic
       ))}
     </div>
   );
+
+  if (costeo && pestana === 'MARGEN') {
+    return (
+      <div className="rep-layout">
+        <div className="rep-header">
+          <h1>Reportes</h1>
+        </div>
+        {pestanas}
+        <MargenPlatos />
+      </div>
+    );
+  }
 
   if (ganancias && pestana === 'GANANCIAS') {
     return (

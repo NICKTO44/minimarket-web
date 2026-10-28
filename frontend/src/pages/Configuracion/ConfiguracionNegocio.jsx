@@ -9,6 +9,7 @@ import {
   RUBROS,
   alternarConDependencias,
   rubroDe,
+  moduloDisponible,
 } from '../../utils/rubros';
 import './ConfiguracionNegocio.css';
 
@@ -153,7 +154,7 @@ export default function ConfiguracionNegocio({ rubro, modulos, onCambiado, onMen
         usa tu negocio ({rubroDe(rubro).label}).
       </p>
       <div className="neg-modulos">
-        {MODULOS.map((m) => {
+        {MODULOS.filter((m) => moduloDisponible(m, rubro)).map((m) => {
           const encendido = modulos.includes(m.valor);
           return (
             <button

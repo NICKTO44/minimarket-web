@@ -349,30 +349,59 @@ function letraColumna(indice) {
  * (así un código "007501" no pierde sus ceros).
  */
 export function escribirXlsx(filas, { hoja = 'Productos', anchos = [] } = {}) {
-  const cuerpo = filas
-    .map((fila, f) => {
-      const celdas = fila
-        .map((valor, c) => {
-          if (valor === null || valor === undefined || valor === '') return '';
-          const ref = `${letraColumna(c)}${f + 1}`;
-          const estilo = f === 0 ? ' s="1"' : '';
-          if (typeof valor === 'number' && Number.isFinite(valor)) return `<c r="${ref}"${estilo}><v>${valor}</v></c>`;
-          return `<c r="${ref}"${estilo} t="inlineStr"><is><t xml:space="preserve">${escapar(valor)}</t></is></c>`;
-        })
-        .join('');
-      return `<row r="${f + 1}">${celdas}</row>`;
-    })
-    .join('');
-  const columnas = anchos.length
-    ? `<cols>${anchos.map((a, i) => `<col min="${i + 1}" max="${i + 1}" width="${a}" customWidth="1"/>`).join('')}</cols>`
-    : '';
+  return escribirLibro([{ nombre: hoja, filas, anchos }]);
+}
+
+/**
+ * Un .xlsx con varias hojas: [{ nombre, filas, anchos, soles, negritas }].
+ *   soles    : índices de columna con formato de dinero (1,234.50).
+ *   negritas : índices de fila en negrita, además de la primera.
+ */
+export function escribirLibro(hojas) {
+  const hojaXml = ({ filas, anchos = [], soles = [], negritas = [] }) => {
+    const enDinero = new Set(soles);
+    const enNegrita = new Set([0, ...negritas]);
+    const cuerpo = filas
+      .map((fila, f) => {
+        const celdas = fila
+          .map((valor, c) => {
+            if (valor === null || valor === undefined || valor === '') return '';
+            const ref = `${letraColumna(c)}${f + 1}`;
+            const esNumero = typeof valor === 'number' && Number.isFinite(valor);
+            // 0 normal, 1 negrita, 2 dinero, 3 dinero en negrita.
+            const indice = (enNegrita.has(f) ? 1 : 0) + (esNumero && enDinero.has(c) && f > 0 ? 2 : 0);
+            const estilo = indice ? ` s="${indice}"` : '';
+            if (esNumero) return `<c r="${ref}"${estilo}><v>${valor}</v></c>`;
+            return `<c r="${ref}"${estilo} t="inlineStr"><is><t xml:space="preserve">${escapar(valor)}</t></is></c>`;
+          })
+          .join('');
+        return `<row r="${f + 1}">${celdas}</row>`;
+      })
+      .join('');
+    const columnas = anchos.length
+      ? `<cols>${anchos.map((a, i) => `<col min="${i + 1}" max="${i + 1}" width="${a}" customWidth="1"/>`).join('')}</cols>`
+      : '';
+    return `${cabeceraXml}<worksheet xmlns="${principal}"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${columnas}<sheetData>${cuerpo}</sheetData></worksheet>`;
+  };
   const cabeceraXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
   const principal = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
   const relacionesNs = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  // Nombres de hoja: sin []:*?/\, hasta 31 letras y sin repetirse.
+  const usados = new Set();
+  const nombres = hojas.map((h, i) => {
+    let nombre = String(h.nombre || `Hoja${i + 1}`).replace(/[[\]:*?/\\]/g, ' ').trim().slice(0, 31) || `Hoja${i + 1}`;
+    while (usados.has(nombre.toLowerCase())) nombre = `${nombre.slice(0, 28)} ${i + 1}`;
+    usados.add(nombre.toLowerCase());
+    return nombre;
+  });
+  const n = hojas.length;
+  const indices = [...Array(n).keys()];
   return zip([
     [
       '[Content_Types].xml',
-      `${cabeceraXml}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
+      `${cabeceraXml}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${indices
+        .map((i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`)
+        .join('')}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
     ],
     [
       '_rels/.rels',
@@ -380,20 +409,21 @@ export function escribirXlsx(filas, { hoja = 'Productos', anchos = [] } = {}) {
     ],
     [
       'xl/workbook.xml',
-      `${cabeceraXml}<workbook xmlns="${principal}" xmlns:r="${relacionesNs}"><bookViews><workbookView/></bookViews><sheets><sheet name="${escapar(hoja).slice(0, 31)}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+      `${cabeceraXml}<workbook xmlns="${principal}" xmlns:r="${relacionesNs}"><bookViews><workbookView/></bookViews><sheets>${indices
+        .map((i) => `<sheet name="${escapar(nombres[i])}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+        .join('')}</sheets></workbook>`,
     ],
     [
       'xl/_rels/workbook.xml.rels',
-      `${cabeceraXml}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${relacionesNs}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${relacionesNs}/styles" Target="styles.xml"/></Relationships>`,
+      `${cabeceraXml}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${indices
+        .map((i) => `<Relationship Id="rId${i + 1}" Type="${relacionesNs}/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`)
+        .join('')}<Relationship Id="rId${n + 1}" Type="${relacionesNs}/styles" Target="styles.xml"/></Relationships>`,
     ],
     [
       'xl/styles.xml',
-      `${cabeceraXml}<styleSheet xmlns="${principal}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
+      `${cabeceraXml}<styleSheet xmlns="${principal}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="4" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
     ],
-    [
-      'xl/worksheets/sheet1.xml',
-      `${cabeceraXml}<worksheet xmlns="${principal}"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${columnas}<sheetData>${cuerpo}</sheetData></worksheet>`,
-    ],
+    ...hojas.map((h, i) => [`xl/worksheets/sheet${i + 1}.xml`, hojaXml(h)]),
   ]);
 }
 

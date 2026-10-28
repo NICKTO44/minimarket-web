@@ -63,7 +63,7 @@ import {
   MODULO_MESAS,
   MODULO_DELIVERY,
   MODULO_SERVICIOS,
-  MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VARIANTES, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
+  MODULO_GANANCIAS, MODULO_COSTEO, MODULO_PRECIO_VENTA, MODULO_VARIANTES, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
   MODULO_FICHA_MEDICAMENTO,
   MODULO_RECETAS,
   MODULO_ALTERNATIVAS,
@@ -771,6 +771,7 @@ function App() {
         {pantallaVisible === 'REPORTES' && (
           <Reportes
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS) && usuarioActual?.rol_id === 1}
+            costeo={negocio.rubro === 'RESTAURANTE' && negocio.modulos.includes(MODULO_COSTEO) && usuarioActual?.rol_id === 1}
             metodoInicial={metodoReporte}
             onFiltroUsado={() => setMetodoReporte(null)}
             onVerSinPrecio={() => {

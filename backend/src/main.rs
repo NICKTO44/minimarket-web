@@ -353,6 +353,13 @@ async fn main() {
         .route("/reportes/estadisticas", get(handlers::reportes::estadisticas_completas))
         .route("/reportes/ganancias", get(handlers::ganancias::reporte))
         .route("/ganancias/costos", get(handlers::ganancias::costos))
+        // Restaurante: margen por plato (módulo COSTEO).
+        .route("/costeo/config", get(handlers::costeo::obtener_config).put(handlers::costeo::guardar_config))
+        .route("/costeo/carta", get(handlers::costeo::carta))
+        .route("/costeo/insumos", get(handlers::costeo::insumos).post(handlers::costeo::crear_insumo))
+        .route("/costeo/insumos/:id", axum::routing::put(handlers::costeo::actualizar_insumo).delete(handlers::costeo::borrar_insumo))
+        .route("/costeo/platos/:producto_id", get(handlers::costeo::plato).put(handlers::costeo::guardar_plato))
+        .route("/costeo/reporte", get(handlers::costeo::reporte))
         .route("/comprobantes", post(handlers::facturacion::emitir_comprobante_con_enlace))
         .route("/comprobantes", get(handlers::comprobantes::listar_comprobantes))
         .route("/comprobantes/:id/pdf", get(handlers::comprobantes::descargar_pdf))

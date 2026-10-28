@@ -290,9 +290,12 @@ export default function PedidosDelivery({ usuario, nombreTienda, onCobrar, abrir
   if (verMesas) {
     return (
       <div className="dk-con-mesas">
-        <button type="button" className="mesas-boton-secundario dk-volver-tablero" onClick={() => setVerMesas(false)}>
-          <Bike size={16} /> Volver a pedidos delivery
-        </button>
+        <div className="dk-barra-mesas">
+          <span>Atención en mesas</span>
+          <button type="button" className="mesas-boton-secundario dk-volver-tablero" onClick={() => setVerMesas(false)}>
+            <Bike size={16} /> Volver a pedidos delivery
+          </button>
+        </div>
         <Mesas usuario={usuario} nombreTienda={nombreTienda} onCobrar={onCobrar} onIrACarta={onIrACarta} />
       </div>
     );

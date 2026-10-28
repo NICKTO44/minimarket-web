@@ -48,6 +48,8 @@ export const MODULO_PRODUCCION = 'PRODUCCION';
 export const MODULO_INSUMOS = 'INSUMOS';
 // Dark kitchen: pedidos por WhatsApp / delivery (necesita la atención en mesas).
 export const MODULO_DELIVERY = 'DELIVERY';
+// Restaurante: margen por plato (costo por receta, costo fijo o %; alertas).
+export const MODULO_COSTEO = 'COSTEO';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
@@ -217,7 +219,18 @@ export const MODULOS = [
     descripcion:
       'Para cocinas sin local que atienden por WhatsApp: el tablero de pedidos reemplaza a las mesas, con cliente, dirección y costo de envío; pago adelantado (no sale sin cobrar) o contra entrega con vuelto; repartidor, en camino y entregado; y "Por rendir": cuánto debe entregar cada repartidor. Enciende también la atención en mesas.',
   },
+  {
+    valor: MODULO_COSTEO,
+    label: 'Margen por plato',
+    descripcion:
+      'Cuánto te cuesta y cuánto ganas en cada plato: costo por receta (insumos en gramos), un costo fijo o un % aproximado. Margen sin IGV (18 %, 10.5 % o Nuevo RUS), alerta de los platos que ganan menos de lo que quieres, precio sugerido, ganancia del mes y descarga en Excel.',
+    // Solo se ofrece en estos rubros (el servidor tampoco lo deja en otros).
+    rubros: ['RESTAURANTE'],
+  },
 ];
+
+/** ¿El módulo se puede encender en ese rubro? */
+export const moduloDisponible = (modulo, rubro) => !modulo.rubros || modulo.rubros.includes(rubro);
 
 export const RUBRO_GENERAL = 'GENERAL';
 

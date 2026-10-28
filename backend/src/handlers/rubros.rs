@@ -99,6 +99,13 @@ pub const MODULO_INSUMOS: &str = "INSUMOS";
 /// pago adelantado o contra entrega y repartidor (handlers/delivery.rs).
 /// Necesita la atención en mesas (sus pedidos, comandas y cocina).
 pub const MODULO_DELIVERY: &str = "DELIVERY";
+/// Restaurante: margen por plato. Costo de cada plato por receta, costo
+/// fijo o un % aproximado, margen sin IGV, alertas y descarga en Excel
+/// (handlers/costeo.rs). Solo para el rubro Restaurante.
+pub const MODULO_COSTEO: &str = "COSTEO";
+
+/// (módulo, único rubro donde se puede encender).
+const SOLO_EN_RUBRO: &[(&str, &str)] = &[(MODULO_COSTEO, RUBRO_RESTAURANTE)];
 
 /// (módulo, el módulo que necesita encendido).
 const DEPENDENCIAS: &[(&str, &str)] = &[
@@ -135,6 +142,7 @@ const MODULOS: &[&str] = &[
     MODULO_PRODUCCION,
     MODULO_INSUMOS,
     MODULO_DELIVERY,
+    MODULO_COSTEO,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
@@ -309,6 +317,9 @@ pub async fn guardar_negocio(
             StatusCode::BAD_REQUEST,
             format!("El módulo {} necesita encendido también el módulo {}.", modulo, necesita),
         ));
+    }
+    if let Some((modulo, _)) = SOLO_EN_RUBRO.iter().find(|(m, r)| *r != rubro && payload.modulos.iter().any(|x| x == m)) {
+        return Err((StatusCode::BAD_REQUEST, format!("El módulo {} es solo para el rubro Restaurante.", modulo)));
     }
     let conn = tenant.0.connect().map_err(e500)?;
     let actualizando = || (StatusCode::CONFLICT, "Aún no se puede guardar: el sistema se está actualizando. Intenta en un minuto.".to_string());
