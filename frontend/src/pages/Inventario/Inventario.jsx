@@ -28,6 +28,8 @@ import {
 } from '../../utils/medicamentos';
 import FichaRepuesto from './FichaRepuesto';
 import { esRespaldoLavanderia } from '../../utils/textosEncargos';
+import PreciosVentaCampos from './PreciosVentaCampos';
+import { useFormPreciosVenta } from '../../utils/tresPrecios';
 import {
   FICHA_REPUESTO_VACIA,
   compatibilidadCoincide,
@@ -150,12 +152,15 @@ export default function Inventario({
   // Módulo "Ficha del medicamento" (farmacia): su sección en el formulario,
   // el principio activo bajo el nombre y la búsqueda por principio activo.
   fichaMedicamento = false,
+  // Módulo "3 precios de venta": Precio 2 y 3 en el formulario.
+  tresPrecios = false,
   // Lubricentro / Repuestos: ficha del repuesto (marca, n.° de parte,
   // códigos alternos, ubicación, garantía) y vehículos compatibles.
   fichaRepuesto = false,
   compatibilidad = false,
 }) {
   const conOpcionesVenta = presentaciones || precioMayor;
+  const preciosVenta = useFormPreciosVenta(tresPrecios);
   // producto_id -> ficha del repuesto / [compatibilidades] (solo con sus módulos).
   const [repuestos, setRepuestos] = useState(() => new Map());
   const [compatibilidades, setCompatibilidades] = useState(() => new Map());
@@ -365,6 +370,7 @@ export default function Inventario({
     setFichaOriginal(JSON.stringify(FICHA_VACIA));
     setRepuestoForm(FICHA_REPUESTO_VACIA);
     setRepuestoOriginal(JSON.stringify(FICHA_REPUESTO_VACIA));
+    preciosVenta.abrir(null);
     setCompatForm([]);
     setCompatOriginal('[]');
     setOpcionesVenta(OPCIONES_VACIAS);
@@ -437,6 +443,7 @@ export default function Inventario({
     const camposRepuesto = repuestoAFormulario(repuestos.get(p.id));
     setRepuestoForm(camposRepuesto);
     setRepuestoOriginal(JSON.stringify(camposRepuesto));
+    preciosVenta.abrir(p.id);
     const filasCompat = compatibilidadesAFormulario(compatibilidades.get(p.id));
     setCompatForm(filasCompat);
     setCompatOriginal(JSON.stringify(filasCompat));
@@ -622,6 +629,11 @@ export default function Inventario({
       setMensaje({ tipo: 'error', texto: compatAGuardar.error });
       return;
     }
+    const preciosAGuardar = preciosVenta.paraGuardar();
+    if (preciosAGuardar?.error) {
+      setMensaje({ tipo: 'error', texto: preciosAGuardar.error });
+      return;
+    }
 
     const payload = {
       codigo: form.codigo.trim(),
@@ -742,6 +754,21 @@ export default function Inventario({
           setMensaje({
             tipo: 'error',
             texto: `Producto guardado, pero no se pudo guardar su ficha de repuesto o sus vehículos compatibles (${e.message}). Toca Guardar para intentarlo de nuevo.`,
+          });
+          cargarTodo();
+          return;
+        }
+      }
+
+      // Precio 2 y 3 (solo si cambiaron).
+      if (preciosAGuardar && idParaImagen) {
+        try {
+          await preciosVenta.guardar(idParaImagen, preciosAGuardar);
+        } catch (e) {
+          setEditandoId(idParaImagen);
+          setMensaje({
+            tipo: 'error',
+            texto: `Producto guardado, pero no se pudieron guardar su Precio 2 y Precio 3 (${e.message}). Toca Guardar para intentarlo de nuevo.`,
           });
           cargarTodo();
           return;
@@ -1090,6 +1117,7 @@ export default function Inventario({
           fichaMedicamento={fichaMedicamento}
           fichaRepuesto={fichaRepuesto}
           compatibilidad={compatibilidad}
+          tresPrecios={tresPrecios}
           onCerrar={() => setImportando(false)}
           onTerminado={(resultado) => {
             setImportando(false);
@@ -1339,6 +1367,8 @@ export default function Inventario({
                 vehiculos={vehiculosUsados}
               />
             )}
+
+            {tresPrecios && <PreciosVentaCampos campos={preciosVenta.campos} onCambiar={preciosVenta.setCampos} />}
 
             {form.lleva_vencimiento && !editandoId && (!servicios || form.controla_stock) && (
               <div className="inv-lote-caja">

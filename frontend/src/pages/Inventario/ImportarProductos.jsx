@@ -33,8 +33,9 @@ export default function ImportarProductos({
   fichaMedicamento = false,
   fichaRepuesto = false,
   compatibilidad = false,
+  tresPrecios = false,
 }) {
-  const CAMPOS = camposImportacion({ ficha: fichaMedicamento, repuesto: fichaRepuesto, compatibilidad });
+  const CAMPOS = camposImportacion({ ficha: fichaMedicamento, repuesto: fichaRepuesto, compatibilidad, tresPrecios });
   const OBLIGATORIOS = CAMPOS.filter((c) => c.obligatorio);
   const [paso, setPaso] = useState('ARCHIVO');
   const [ocupado, setOcupado] = useState(false);

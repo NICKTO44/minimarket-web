@@ -73,6 +73,9 @@ pub const MODULO_FICHA_REPUESTO: &str = "FICHA_REPUESTO";
 /// es compatible cada repuesto, y búsqueda por vehículo en el punto de
 /// venta (handlers/compatibilidad.rs).
 pub const MODULO_COMPATIBILIDAD: &str = "COMPATIBILIDAD";
+/// Lubricentro / Repuestos: Precio 2 y Precio 3 de referencia por producto;
+/// el vendedor elige cuál cobrar en el punto de venta (handlers/precios_venta.rs).
+pub const MODULO_TRES_PRECIOS: &str = "TRES_PRECIOS";
 /// Lubricentro: vehículos de los clientes (placa), kilometraje y próximo
 /// cambio en la venta, historial por placa y recordatorios
 /// (handlers/vehiculos.rs).
@@ -113,7 +116,8 @@ pub const MODULO_REPARACIONES: &str = "REPARACIONES";
 pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
 
 /// (módulo, único rubro donde se puede encender).
-const SOLO_EN_RUBRO: &[(&str, &str)] = &[(MODULO_COSTEO, RUBRO_RESTAURANTE), (MODULO_REPARACIONES, RUBRO_TECNOLOGIA)];
+const SOLO_EN_RUBRO: &[(&str, &str)] =
+    &[(MODULO_COSTEO, RUBRO_RESTAURANTE), (MODULO_REPARACIONES, RUBRO_TECNOLOGIA), (MODULO_TRES_PRECIOS, "LUBRICENTRO")];
 
 /// (módulo, el módulo que necesita encendido).
 const DEPENDENCIAS: &[(&str, &str)] = &[
@@ -143,6 +147,7 @@ const MODULOS: &[&str] = &[
     MODULO_ALTERNATIVAS,
     MODULO_FICHA_REPUESTO,
     MODULO_COMPATIBILIDAD,
+    MODULO_TRES_PRECIOS,
     MODULO_VEHICULOS,
     MODULO_ORDENES_SERVICIO,
     MODULO_PAQUETES,
@@ -197,6 +202,7 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
         &[
             MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
             MODULO_FICHA_REPUESTO, MODULO_COMPATIBILIDAD, MODULO_VEHICULOS, MODULO_ORDENES_SERVICIO, MODULO_PAQUETES,
+            MODULO_TRES_PRECIOS,
         ],
         &[
             "UNIDAD", "LITRO", "GALON", "ML", "KG", "PAR", "JUEGO", "CAJA", "PAQUETE", "BALDE", "LATA", "TUBO", "BOTELLA",

@@ -643,6 +643,10 @@ pub async fn procesar_venta(
                 cotizados.entry(*producto).or_default().extend(lista.iter().copied());
             }
         }
+        let tres_precios = modulos
+            .as_deref()
+            .is_some_and(|m| m.split(',').any(|x| x.trim() == crate::handlers::rubros::MODULO_TRES_PRECIOS));
+        let mut precios_extra: Option<std::collections::HashMap<i64, Vec<f64>>> = None;
         for p in &payload.productos {
             // Las de presentación ya se revisaron arriba.
             if p.presentacion_id.is_some() {
@@ -653,6 +657,16 @@ pub async fn procesar_venta(
             let de_cotizacion = cotizados.get(&p.id).map(Vec::as_slice).unwrap_or(&[]);
             if precio_permitido(p.precio, precio_producto, de_cotizacion) {
                 continue;
+            }
+            // Módulo "3 precios de venta": también vale el Precio 2 o 3 del
+            // producto. Se consulta solo si el precio no es el de siempre.
+            if tres_precios {
+                if precios_extra.is_none() {
+                    precios_extra = Some(crate::handlers::precios_venta::de_productos(&conn, &ids).await);
+                }
+                if precios_extra.as_ref().and_then(|m| m.get(&p.id)).is_some_and(|l| precio_permitido(p.precio, -1.0, l)) {
+                    continue;
+                }
             }
             // Precio por mayor (o el de una presentación cuando se lleva su
             // cantidad o más): se consulta solo si el precio no es el de siempre.

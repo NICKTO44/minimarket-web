@@ -43,13 +43,20 @@ export const CAMPOS_REPUESTO = [
 /** Lubricentro: vehículos compatibles (módulo "Compatibilidad con vehículos"). */
 export const CAMPOS_COMPATIBILIDAD = [{ valor: 'compatible', label: 'Compatible con (vehículos)', compatibilidad: true }];
 
+/** Módulo "3 precios de venta": Precio 2 y 3 (el Precio 1 es el precio de venta). */
+export const CAMPOS_TRES_PRECIOS = [
+  { valor: 'precio_2', label: 'Precio 2', tresPrecios: true },
+  { valor: 'precio_3', label: 'Precio 3', tresPrecios: true },
+];
+
 /** Los campos que se pueden elegir en este negocio. */
-export function camposImportacion({ ficha = false, repuesto = false, compatibilidad = false } = {}) {
+export function camposImportacion({ ficha = false, repuesto = false, compatibilidad = false, tresPrecios = false } = {}) {
   return [
     ...CAMPOS,
     ...(ficha ? CAMPOS_FICHA : []),
     ...(repuesto ? CAMPOS_REPUESTO : []),
     ...(compatibilidad ? CAMPOS_COMPATIBILIDAD : []),
+    ...(tresPrecios ? CAMPOS_TRES_PRECIOS : []),
   ];
 }
 
@@ -88,6 +95,9 @@ const NOMBRES = {
   garantia: ['garantia', 'garantiadias', 'diasgarantia', 'garantiaendias', 'diasdegarantia'],
   compatible: ['compatiblecon', 'compatible', 'compatibilidad', 'aplicacion', 'aplicaciones', 'vehiculos', 'vehiculo',
     'modelos', 'paravehiculo', 'usoen', 'vehiculoscompatibles'],
+  // Módulo "3 precios de venta" (solo si el negocio lo tiene).
+  precio_2: ['precio2', 'precio02', 'preciodos', 'p2', 'precioventa2', 'pventa2'],
+  precio_3: ['precio3', 'precio03', 'preciotres', 'p3', 'precioventa3', 'pventa3'],
   // Farmacia (solo se usan si el negocio tiene la ficha del medicamento).
   principio_activo: ['principioactivo', 'principio', 'dci', 'nombregenerico', 'denominacioncomuninternacional', 'sustancia', 'compuesto'],
   concentracion: ['concentracion', 'conc', 'dosis', 'potencia', 'mg'],
@@ -124,6 +134,8 @@ function campoParecido(clave, permitidos = new Set()) {
   if (clave.includes('generic') && !clave.includes('nombre')) return 'es_generico';
   if (clave.includes('minim')) return 'stock_minimo';
   if (clave.includes('compra') || clave.includes('costo')) return 'precio_compra';
+  if (/precio0?2|preciodos/.test(clave) && lubricentro('precio_2')) return 'precio_2';
+  if (/precio0?3|preciotres/.test(clave) && lubricentro('precio_3')) return 'precio_3';
   if (clave.includes('precio') || clave.includes('pventa')) return 'precio';
   if (clave.includes('sunat')) return null; // el código de producto de SUNAT no es el código de venta
   if (clave.includes('barra') || clave.startsWith('codigo') || clave.startsWith('cod')) return 'codigo';
@@ -289,6 +301,12 @@ function repuestoDeFila(fila, texto, columna) {
   return salida;
 }
 
+// "3 precios de venta": Precio 2 y 3 de una fila, solo si el archivo trae esas columnas.
+function preciosDeFila(fila, numero, columna) {
+  if (columna.precio_2 === undefined && columna.precio_3 === undefined) return {};
+  return { precios: { precio_2: numero(fila, 'precio_2'), precio_3: numero(fila, 'precio_3') } };
+}
+
 /**
  * Las filas que se mandan al servidor. mapa: { indiceDeColumna: campo }.
  * Devuelve también cuántas unidades no se reconocieron (entran con la unidad
@@ -323,6 +341,7 @@ export function armarFilas(filas, filaTitulos, mapa) {
       vencimiento: texto(fila, 'vencimiento') || null,
       ...fichaDeFila(fila, texto, columna),
       ...repuestoDeFila(fila, texto, columna),
+      ...preciosDeFila(fila, numero, columna),
     });
   });
   return { filas: salida, unidadesRaras };

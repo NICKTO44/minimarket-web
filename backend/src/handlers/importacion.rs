@@ -64,6 +64,9 @@ pub struct FilaImportada {
     /// "Toyota Hilux 2005-2015; Nissan Frontier 2010".
     #[serde(default)]
     pub compatible: Option<String>,
+    /// Columnas "Precio 2" y "Precio 3" (solo con el módulo TRES_PRECIOS).
+    #[serde(default)]
+    pub precios: Option<crate::handlers::precios_venta::PreciosVenta>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -728,6 +731,10 @@ pub async fn importar_productos(
         }
     }
     let (fichas_repuesto, compatibilidades) = revisar_lubricentro(&payload.filas, &mut revisadas, con_repuesto, con_compatibilidad);
+    // Módulo "3 precios de venta": Precio 2 y 3 de cada fila (si el archivo los trae).
+    let con_tres_precios = modulos.iter().any(|m| m == crate::handlers::rubros::MODULO_TRES_PRECIOS)
+        && payload.filas.iter().any(|f| f.precios.is_some());
+    let precios_extra = crate::handlers::precios_venta::revisar_importados(&payload.filas, &mut revisadas, con_tres_precios);
 
     let nuevos: Vec<&Revisada> = revisadas.iter().filter(|r| r.estado == "LISTO").collect();
     let a_actualizar: Vec<&Revisada> = if actualizar { revisadas.iter().filter(|r| r.estado == "EXISTE").collect() } else { Vec::new() };
@@ -922,6 +929,21 @@ pub async fn importar_productos(
             }
         }
 
+        // 4c. Precio 2 y 3 (módulo "3 precios de venta"), igual que 4b.
+        if con_tres_precios {
+            let guardar_fila = |r: &Revisada| r.padre.is_none() && (r.estado == "LISTO" || (actualizar && r.estado == "EXISTE"));
+            let ids = ids_por_codigo(&tx, revisadas.iter().filter(|r| guardar_fila(r) && r.existente.is_none()).map(|r| r.codigo.clone()).collect()).await?;
+            let precios: Vec<(i64, crate::handlers::precios_venta::PreciosVenta)> = revisadas
+                .iter()
+                .zip(precios_extra.iter())
+                .filter(|(r, _)| guardar_fila(r))
+                .filter_map(|(r, p)| Some((r.existente.map(|e| e.id).or_else(|| ids.get(&r.codigo.to_lowercase()).copied())?, p.clone()?)))
+                .collect();
+            if !precios.is_empty() {
+                crate::handlers::precios_venta::guardar_en(&tx, &precios).await?;
+            }
+        }
+
         // 5. Lotes con su vencimiento (el stock lo recalculan los triggers).
         //    Un lote que el producto ya tiene (mismo n.° y vencimiento) toma
         //    la cantidad del archivo en vez de duplicarse: importar dos veces
@@ -1030,6 +1052,7 @@ mod pruebas {
             vencimiento: vence.map(Into::into),
             repuesto: None,
             compatible: None,
+            precios: None,
         }
     }
 

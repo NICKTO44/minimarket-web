@@ -232,6 +232,9 @@ async fn main() {
         // Lubricentro / Repuestos (handlers/repuestos.rs).
         .route("/repuestos/fichas", get(handlers::repuestos::todas))
         .route("/repuestos/compatibilidades", get(handlers::compatibilidad::todas))
+        // Módulo "3 precios de venta" (handlers/precios_venta.rs).
+        .route("/precios-venta", get(handlers::precios_venta::todos))
+        .route("/productos/:id/precios-venta", axum::routing::put(handlers::precios_venta::guardar))
         .route("/productos/:id/compatibilidad", axum::routing::put(handlers::compatibilidad::guardar))
         .route("/vehiculos", get(handlers::vehiculos::listar).post(handlers::vehiculos::crear))
         .route("/vehiculos/recordatorios", get(handlers::vehiculos::recordatorios))

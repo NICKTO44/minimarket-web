@@ -28,6 +28,8 @@ import { imprimirTicket } from '../../utils/imprimirTicket';
 import { etiquetaTicket, papelTicket } from '../../utils/papelTicket';
 import { alternativasDe, etiquetaCondicion, fichaCoincide, mapaFichas, resumenFicha, textoPlano } from '../../utils/medicamentos';
 import AlternativasMedicamento from '../../components/AlternativasMedicamento';
+import SelectorPrecio from '../../components/SelectorPrecio';
+import { opcionesDePrecio, usePreciosVenta } from '../../utils/tresPrecios';
 import EquivalentesRepuesto from '../../components/EquivalentesRepuesto';
 import VehiculoVenta from '../../components/VehiculoVenta';
 import ElegirPaquete from '../../components/ElegirPaquete';
@@ -309,6 +311,8 @@ export default function POS({
   // equivalentes cuando no hay stock, y búsqueda por vehículo compatible.
   fichaRepuesto = false,
   compatibilidad = false,
+  // Módulo "3 precios de venta": en cada línea, P1 / P2 / P3 para elegir.
+  tresPrecios = false,
   // Lubricentro: placa y kilometraje en la venta, paquetes y el cobro de
   // una orden de servicio (viene de Órdenes de servicio).
   vehiculos = false,
@@ -334,6 +338,8 @@ export default function POS({
   textoVolverAMesas = 'Volver a mesas',
 }) {
   const cobrandoPedido = !!pedidoACobrar;
+  // producto_id -> { precio_2, precio_3 } (solo con el módulo "3 precios de venta").
+  const { mapa: preciosExtra } = usePreciosVenta(tresPrecios);
   // El buscador solo se enfoca solo en desktop -- en celular, hacerlo
   // abre el teclado apenas se entra a la pantalla y tapa la grilla de
   // productos antes de que el usuario haya tocado nada. Se calcula una
@@ -2353,6 +2359,14 @@ export default function POS({
                       Ver equivalentes
                     </button>
                   )}
+                {tresPrecios && !item.clave && !item.presentacion && !cobrandoPedido && preciosExtra.has(item.id) && (
+                  <SelectorPrecio
+                    nombre={item.nombre}
+                    opciones={opcionesDePrecio(item.precioNormal ?? item.precioOriginal ?? item.precio, preciosExtra.get(item.id))}
+                    actual={item.precio}
+                    onElegir={(precio) => fijarPrecio(claveDe(item), precio)}
+                  />
+                )}
                 {item.porMayor && (
                   <span className="pos-carrito-item-detalle">
                     {item.origenPrecio === 'mayor' ? 'Precio por mayor' : `Al precio de ${item.origenPrecio}`} · normal S/{' '}

@@ -198,6 +198,9 @@ export const api = {
   repuestosFichas: () => request('/repuestos/fichas'),
   repuestoGuardar: (id, ficha) => request(`/productos/${id}/repuesto`, { method: 'PUT', body: JSON.stringify(ficha) }),
   repuestoQuitar: (id) => request(`/productos/${id}/repuesto`, { method: 'DELETE' }),
+  // Módulo "3 precios de venta": Precio 2 y 3 de cada producto.
+  preciosVenta: () => request('/precios-venta'),
+  preciosVentaGuardar: (id, precios) => request(`/productos/${id}/precios-venta`, { method: 'PUT', body: JSON.stringify(precios) }),
   compatibilidades: () => request('/repuestos/compatibilidades'),
   compatibilidadGuardar: (id, lista) =>
     request(`/productos/${id}/compatibilidad`, { method: 'PUT', body: JSON.stringify({ lista }) }),

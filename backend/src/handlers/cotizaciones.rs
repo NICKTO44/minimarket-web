@@ -217,11 +217,15 @@ pub async fn crear(
     // Sin el módulo "Cambiar precio al vender", el precio cotizado es el del
     // producto (como al vender): una cotización con otro precio se podía
     // cobrar después a ese precio.
-    let precio_libre = crate::handlers::rubros::negocio(&conn)
-        .await
-        .modulos
-        .iter()
-        .any(|m| m == crate::handlers::rubros::MODULO_PRECIO_VENTA);
+    let modulos = crate::handlers::rubros::negocio(&conn).await.modulos;
+    let precio_libre = modulos.iter().any(|m| m == crate::handlers::rubros::MODULO_PRECIO_VENTA);
+    // Módulo "3 precios de venta": también vale el Precio 2 o 3 del producto.
+    let precios_extra = if modulos.iter().any(|m| m == crate::handlers::rubros::MODULO_TRES_PRECIOS) {
+        let ids: Vec<i64> = payload.items.iter().map(|it| it.id).collect();
+        crate::handlers::precios_venta::de_productos(&conn, &ids).await
+    } else {
+        std::collections::HashMap::new()
+    };
 
     // Nombre y unidad reales de cada producto (no los que mande el navegador).
     let mut lineas: Vec<ItemCotizacion> = Vec::new();
@@ -244,7 +248,8 @@ pub async fn crear(
             ),
             None => return Err(malo("Uno de los productos ya no existe.")),
         };
-        if !precio_libre && (it.precio - precio_producto).abs() >= 1e-6 {
+        let es_precio_extra = precios_extra.get(&it.id).is_some_and(|l| l.iter().any(|x| (x - it.precio).abs() < 1e-6));
+        if !precio_libre && (it.precio - precio_producto).abs() >= 1e-6 && !es_precio_extra {
             return Err((
                 StatusCode::CONFLICT,
                 format!("El precio de {} cambió: ahora es S/ {:.2}. Quítalo del carrito y vuelve a agregarlo.", nombre, precio_producto),

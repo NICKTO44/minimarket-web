@@ -34,6 +34,8 @@ export const MODULO_ALTERNATIVAS = 'ALTERNATIVAS';
 export const MODULO_FICHA_REPUESTO = 'FICHA_REPUESTO';
 // Lubricentro / Repuestos: vehículos compatibles y búsqueda por vehículo.
 export const MODULO_COMPATIBILIDAD = 'COMPATIBILIDAD';
+// Lubricentro / Repuestos: Precio 2 y Precio 3 por producto; el vendedor elige cuál cobrar.
+export const MODULO_TRES_PRECIOS = 'TRES_PRECIOS';
 // Lubricentro: vehículos de los clientes, placa y kilometraje en la venta.
 export const MODULO_VEHICULOS = 'VEHICULOS';
 // Lubricentro: órdenes de servicio, mecánicos y comisiones. Necesita Vehículos.
@@ -180,6 +182,13 @@ export const MODULOS = [
       'Con qué vehículos va cada repuesto (marca, modelo, años y motor). En el punto de venta eliges el vehículo y ves solo lo que le sirve.',
   },
   {
+    valor: MODULO_TRES_PRECIOS,
+    label: '3 precios de venta',
+    descripcion:
+      'Además del precio de venta (Precio 1), cada producto puede tener un Precio 2 y un Precio 3 (por ejemplo para talleres o por mayor). Al vender, el vendedor ve los tres y elige cuál cobrar con un toque; también se cargan desde Excel.',
+    rubros: ['LUBRICENTRO'],
+  },
+  {
     valor: MODULO_VEHICULOS,
     label: 'Vehículos y kilometraje',
     descripcion:
@@ -319,6 +328,7 @@ export const RUBROS = [
     modulos: [
       MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
       MODULO_FICHA_REPUESTO, MODULO_COMPATIBILIDAD, MODULO_VEHICULOS, MODULO_ORDENES_SERVICIO, MODULO_PAQUETES,
+      MODULO_TRES_PRECIOS,
     ],
     unidades: [
       'UNIDAD', 'LITRO', 'GALON', 'ML', 'KG', 'PAR', 'JUEGO', 'CAJA', 'PAQUETE', 'BALDE', 'LATA', 'TUBO', 'BOTELLA',

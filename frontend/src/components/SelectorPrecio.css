@@ -1,0 +1,39 @@
+/* Módulo "3 precios de venta": P1 / P2 / P3 en una línea del carrito. */
+.selector-precio {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.selector-precio-opcion {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 1px solid var(--color-primario-borde, #b9e3c9);
+  border-radius: 999px;
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.selector-precio-opcion:hover {
+  background: var(--color-primario-suave, #e8f6ed);
+}
+
+.selector-precio-opcion.elegido {
+  border-color: var(--color-primario, #16a34a);
+  background: var(--color-primario, #16a34a);
+  color: var(--color-sobre-primario, #fff);
+  cursor: default;
+}
+
+.selector-precio-numero {
+  font-weight: 800;
+  opacity: 0.8;
+}
