@@ -80,7 +80,10 @@ export default function ImportarProductos({
       const primera = titulos >= 0 ? titulos : filas.findIndex((f) => f.some((c) => c !== ''));
       if (primera < 0) throw new ErrorDeArchivo('El archivo no tiene datos.');
       const cols = columnasDe(filas, titulos);
-      const sugeridos = titulos >= 0 ? sugerirCampos(cols.map((c) => c.titulo), CAMPOS) : cols.map(() => '');
+      // Algunos valores de cada columna: en Lubricentro ayudan a reconocer "Aplicación" y "Proveedor".
+      const datos = filas.slice(titulos + 1, titulos + 41);
+      const muestras = cols.map((c) => datos.map((f) => f?.[c.indice]));
+      const sugeridos = titulos >= 0 ? sugerirCampos(cols.map((c) => c.titulo), CAMPOS, muestras) : cols.map(() => '');
       const nuevoMapa = {};
       const auto = {};
       cols.forEach((c, i) => {

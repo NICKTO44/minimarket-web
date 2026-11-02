@@ -146,11 +146,46 @@ function campoParecido(clave, permitidos = new Set()) {
   return null;
 }
 
+// Lubricentro: ¿la mayoría de los valores de la columna cumple la prueba?
+function mayoria(valores, prueba) {
+  const llenos = (valores || []).map((v) => String(v ?? '').trim()).filter(Boolean);
+  return llenos.length > 0 && llenos.filter(prueba).length >= Math.ceil(llenos.length * 0.8);
+}
+// "716CV01B200", "9968407": sin espacios y con algún número.
+const pareceCodigo = (t) => t.length >= 4 && t.length <= 25 && !/\s/.test(t) && /\d/.test(t);
+// "Toyota Hilux 2005-2015" sí se puede leer como vehículos; "AVEO 05/UP SAIL 11/15" no.
+const traeAnios = (t) => /(^|\D)(19|20)\d{2}(\D|$)/.test(t);
+
 /**
- * Qué campo es cada columna, según su título. Devuelve una lista del mismo
- * largo: el campo, o '' si no se reconoció. Ningún campo se repite.
+ * Lubricentro: columnas de las listas de repuestos que el título solo no
+ * resuelve. Usa los valores de la columna (`muestras`) cuando hacen falta.
+ *  - "Aplicación" en texto libre ("CHEVROLET AVEO 05/UP SAIL 11/15") va a la
+ *    descripción, donde se guarda tal cual y el buscador la encuentra; solo
+ *    va a "Compatible con" si trae años de 4 cifras que se puedan leer.
+ *  - "Precio público" es el Precio 1, "Precio tienda" el 2 y "Precio x mayor"
+ *    el 3 (con el módulo "3 precios de venta").
+ *  - "Proveedor" con códigos (716CV01B200) es el n.° de parte.
  */
-export function sugerirCampos(titulos, campos = CAMPOS) {
+function camposDeRepuestos(claves, muestras, asignar, permitidos) {
+  claves.forEach((c, i) => {
+    const valores = muestras[i];
+    if (c.includes('aplicacion') && permitidos.has('compatible') && valores?.length) {
+      asignar(i, mayoria(valores, traeAnios) ? 'compatible' : 'descripcion');
+    }
+    if (c.includes('proveedor') && permitidos.has('numero_parte') && mayoria(valores, pareceCodigo)) asignar(i, 'numero_parte');
+    if (!permitidos.has('precio_2') || !c.includes('precio') || c.includes('compra') || c.includes('costo')) return;
+    if (c.includes('publico')) asignar(i, 'precio');
+    else if (c.includes('tienda')) asignar(i, 'precio_2');
+    else if (c.includes('mayor')) asignar(i, 'precio_3');
+  });
+}
+
+/**
+ * Qué campo es cada columna, según su título (y, en Lubricentro, sus
+ * valores: `muestras[i]` son algunos valores de la columna i). Devuelve una
+ * lista del mismo largo: el campo, o '' si no se reconoció. Ningún campo se repite.
+ */
+export function sugerirCampos(titulos, campos = CAMPOS, muestras = []) {
   const permitidos = new Set(campos.map((c) => c.valor));
   const claves = titulos.map(normalizar);
   const mapa = claves.map(() => '');
@@ -160,6 +195,7 @@ export function sugerirCampos(titulos, campos = CAMPOS) {
     mapa[i] = campo;
     usados.add(campo);
   };
+  camposDeRepuestos(claves, muestras, asignar, permitidos);
   // Primero los nombres exactos, en orden de preferencia ("Precio" gana a
   // "Importe" aunque "Importe" esté antes en el archivo).
   for (const [campo, nombres] of Object.entries(NOMBRES)) {
@@ -178,6 +214,11 @@ export function sugerirCampos(titulos, campos = CAMPOS) {
   });
   claves.forEach((c, i) => {
     if (SOLO_DESCRIPCION.includes(c) || (c.includes('descripcion') && !mapa[i])) asignar(i, usados.has('nombre') ? 'descripcion' : 'nombre');
+  });
+  // "3 precios de venta": otras columnas de precio que sobren son el Precio 2 y el 3.
+  claves.forEach((c, i) => {
+    if (mapa[i] || !c.includes('precio') || c.includes('compra') || c.includes('costo')) return;
+    asignar(i, usados.has('precio_2') ? 'precio_3' : 'precio_2');
   });
   return mapa;
 }
