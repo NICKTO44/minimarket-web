@@ -199,3 +199,125 @@
     display: none;
   }
 }
+
+/* Al cargar el Excel del proveedor: 🟡 subió el costo y 🟢 productos nuevos. */
+.pedido-revisar {
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  font-size: 13.5px;
+}
+.pedido-revisar-subio {
+  background: #fffbeb;
+  border: 1px solid #f5d77a;
+}
+.pedido-revisar-nuevos {
+  background: #f0fdf4;
+  border: 1px solid #9fdcb4;
+}
+.pedido-revisar-titulo {
+  margin: 0;
+  font-weight: 700;
+}
+.pedido-revisar-ayuda {
+  margin: 2px 0 8px;
+  color: #4b5563;
+  font-size: 12.5px;
+}
+.pedido-revisar-caja {
+  max-height: 240px;
+  overflow: auto;
+}
+.pedido-revisar-tabla {
+  width: 100%;
+  border-collapse: collapse;
+}
+.pedido-revisar-tabla th {
+  text-align: left;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 600;
+  padding: 4px 6px;
+}
+.pedido-revisar-tabla td {
+  padding: 4px 6px;
+  border-top: 1px solid #f1e3b0;
+  vertical-align: middle;
+}
+.pedido-revisar-costo {
+  white-space: nowrap;
+}
+.pedido-campo {
+  width: 100%;
+  min-width: 70px;
+  padding: 6px 8px;
+  border: 1px solid #d5d8de;
+  border-radius: 7px;
+  font-size: 13.5px;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+.pedido-campo-falta {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+.pedido-nuevos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow: auto;
+}
+.pedido-nuevo {
+  background: #ffffff;
+  border: 1px solid #d1eedb;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.pedido-nuevo-cabeza {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.pedido-nuevo-nombre {
+  font-weight: 600;
+}
+.pedido-nuevo-quitar {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.pedido-nuevo-datos {
+  margin: 4px 0 6px;
+  color: #4b5563;
+  font-size: 12.5px;
+}
+.pedido-nuevo-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 6px;
+}
+.pedido-nuevo-campos label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4b5563;
+}
+.pedido-nuevo-falta {
+  margin: 6px 0 0;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pedido-falta-registrar {
+  align-self: center;
+  margin-right: auto;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 600;
+}

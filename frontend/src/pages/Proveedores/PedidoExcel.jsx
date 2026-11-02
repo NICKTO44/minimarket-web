@@ -24,7 +24,6 @@ async function datosExtra() {
 export function ExportarPedido({ productos, categorias, onCerrar }) {
   const [filtro, setFiltro] = useState('BAJO_MINIMO');
   const [categoriaId, setCategoriaId] = useState('');
-  const [completo, setCompleto] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState(null);
 
@@ -37,8 +36,8 @@ export function ExportarPedido({ productos, categorias, onCerrar }) {
     try {
       const { fichas, precios } = await datosExtra();
       // La cantidad sugerida solo con "bajo stock mínimo"; con todos o una categoría la columna va vacía.
-      const hoja = hojaPedido(lista, { completo, fichas, precios, sugerir: filtro === 'BAJO_MINIMO' });
-      const nombre = `Pedido-${completo ? 'completo-' : ''}${hoyLima()}.xlsx`;
+      const hoja = hojaPedido(lista, { completo: false, fichas, precios, sugerir: filtro === 'BAJO_MINIMO' });
+      const nombre = `Pedido-${hoyLima()}.xlsx`;
       descargarArchivo(escribirLibro([hoja]), nombre, { tipo: TIPO_XLSX });
       onCerrar();
     } catch (e) {
@@ -53,8 +52,9 @@ export function ExportarPedido({ productos, categorias, onCerrar }) {
       <div className="prov-modal pedido-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="pedido-titulo">
         <h2 id="pedido-titulo">Exportar pedido</h2>
         <p className="pedido-ayuda">
-          Descarga un Excel con tus productos y una columna <strong>Cantidad a pedir</strong>. Complétala y súbela en
-          <strong> Nueva compra → Cargar desde Excel</strong>.
+          Envíale este Excel a tu proveedor. Él lo devuelve con <strong>la cantidad</strong> y <strong>el precio unitario</strong>{' '}
+          (y abajo puede agregar productos nuevos). Luego súbelo en <strong>Nueva compra → Cargar desde Excel</strong>. No lleva tu
+          stock ni tus precios de venta.
         </p>
 
         <fieldset className="pedido-grupo">
@@ -75,22 +75,6 @@ export function ExportarPedido({ productos, categorias, onCerrar }) {
               ))}
             </select>
           )}
-        </fieldset>
-
-        <fieldset className="pedido-grupo">
-          <legend>¿Para quién?</legend>
-          <label className="pedido-opcion">
-            <input type="radio" name="pedido-tipo" checked={!completo} onChange={() => setCompleto(false)} />
-            <span>
-              <strong>Para el proveedor</strong> — código, N.° de parte, marca, producto, aplicación y cantidad. Sin tu stock ni tus precios.
-            </span>
-          </label>
-          <label className="pedido-opcion">
-            <input type="radio" name="pedido-tipo" checked={completo} onChange={() => setCompleto(true)} />
-            <span>
-              <strong>Completo (solo para ti)</strong> — además stock, stock mínimo, costo actual y P1 / P2 / P3.
-            </span>
-          </label>
         </fieldset>
 
         <p className="pedido-cuenta">
@@ -138,20 +122,23 @@ export function CargarPedido({ productos, onCargar }) {
         onAviso({ tipo: 'error', texto: r.error });
         return;
       }
-      if (r.items.length === 0 && r.precios.length === 0 && r.sinReconocer.length === 0 && r.malas.length === 0) {
+      if (r.items.length === 0 && r.nuevos.length === 0 && r.precios.length === 0 && r.sinReconocer.length === 0 && r.ambiguos.length === 0 && r.malas.length === 0) {
         onAviso({ tipo: 'error', texto: 'El Excel no tiene ninguna fila con "Cantidad a pedir".' });
         return;
       }
-      onCargar(r.items, r.precios);
+      onCargar(r.items, r.precios, r.subidas, r.nuevos, precios.size > 0);
       const partes = [`Se cargaron ${r.items.length} producto${r.items.length === 1 ? '' : 's'}. Revisa cantidades y costos antes de guardar.`];
+      if (r.subidas.length > 0) partes.push(`${r.subidas.length} subieron de costo: revisa sus precios de venta (recuadro amarillo).`);
+      if (r.nuevos.length > 0) partes.push(`${r.nuevos.length} producto${r.nuevos.length === 1 ? ' nuevo' : 's nuevos'}: completa sus datos (recuadro verde).`);
       if (r.precios.length > 0) {
         partes.push(`${r.precios.length} producto${r.precios.length === 1 ? '' : 's'} con precio de venta nuevo (ver abajo).`);
       }
       if (r.sinCosto > 0) partes.push(`${r.sinCosto} sin costo: escríbelo en la lista.`);
       const lista = (xs) => xs.slice(0, 6).map((x) => `fila ${x.fila} (${x.texto})`).join(', ') + (xs.length > 6 ? `… y ${xs.length - 6} más` : '');
       if (r.sinReconocer.length) partes.push(`No se reconocieron: ${lista(r.sinReconocer)}.`);
+      if (r.ambiguos.length) partes.push(`N.° de parte en más de un producto (agrégalos a mano): ${lista(r.ambiguos)}.`);
       if (r.malas.length) partes.push(`Con error: ${lista(r.malas)}.`);
-      onAviso({ tipo: r.sinReconocer.length || r.malas.length || r.sinCosto ? 'error' : 'exito', texto: partes.join(' ') });
+      onAviso({ tipo: r.sinReconocer.length || r.ambiguos.length || r.malas.length || r.sinCosto ? 'error' : 'exito', texto: partes.join(' ') });
     } catch (e) {
       onAviso({
         tipo: 'error',
@@ -243,6 +230,172 @@ export function PreciosNuevos({ cambios, aplicar, onAplicar }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+/** Campo de precio que se aplica al salir (deja escribir decimales). */
+function CampoPrecio({ valor, onCambio, etiqueta, requerido }) {
+  return (
+    <input
+      key={`${etiqueta}-${valor ?? ''}`}
+      type="number"
+      min="0"
+      step="any"
+      inputMode="decimal"
+      className={`pedido-campo${requerido && !(Number(valor) > 0) ? ' pedido-campo-falta' : ''}`}
+      aria-label={etiqueta}
+      defaultValue={valor ?? ''}
+      onBlur={(e) => {
+        const n = parseFloat(e.target.value);
+        onCambio(Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null);
+      }}
+    />
+  );
+}
+
+/**
+ * 🟡 Productos que suben de costo con esta compra: se muestran sus 3 precios
+ * de venta para que el dueño los suba ahí mismo (se aplican al registrar).
+ */
+export function SubioCosto({ subidas, tresPrecios, onCambio }) {
+  if (!subidas?.length) return null;
+  const poner = (id, campo, n) =>
+    onCambio(subidas.map((s) => (s.producto_id === id ? { ...s, despues: { ...s.despues, [campo]: n ?? (campo === 'p1' ? s.antes.p1 : null) } } : s)));
+  return (
+    <div className="pedido-revisar pedido-revisar-subio">
+      <p className="pedido-revisar-titulo">🟡 Subieron de costo ({subidas.length}): ¿subes tus precios de venta?</p>
+      <p className="pedido-revisar-ayuda">Cambia los precios que quieras. Si no tocas nada, se quedan igual.</p>
+      <div className="pedido-revisar-caja">
+        <table className="pedido-revisar-tabla">
+          <thead>
+            <tr>
+              <th scope="col">Producto</th>
+              <th scope="col">Costo</th>
+              <th scope="col">P1</th>
+              {tresPrecios && <th scope="col">P2</th>}
+              {tresPrecios && <th scope="col">P3</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {subidas.map((s) => (
+              <tr key={s.producto_id}>
+                <td>
+                  <span className="prov-codigo">{s.codigo}</span>
+                  {s.nombre}
+                </td>
+                <td className="pedido-revisar-costo">
+                  {soles(s.costoAntes)} → <strong>{soles(s.costoNuevo)}</strong>
+                </td>
+                <td>
+                  <CampoPrecio valor={s.despues.p1} etiqueta={`Precio 1 de ${s.nombre}`} onCambio={(n) => poner(s.producto_id, 'p1', n)} />
+                </td>
+                {tresPrecios && (
+                  <td>
+                    <CampoPrecio valor={s.despues.p2} etiqueta={`Precio 2 de ${s.nombre}`} onCambio={(n) => poner(s.producto_id, 'p2', n)} />
+                  </td>
+                )}
+                {tresPrecios && (
+                  <td>
+                    <CampoPrecio valor={s.despues.p3} etiqueta={`Precio 3 de ${s.nombre}`} onCambio={(n) => poner(s.producto_id, 'p3', n)} />
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 🟢 Productos que el negocio aún no tiene: llegan con lo que escribió el
+ * proveedor; el dueño elige la categoría y pone sus precios de venta. Se
+ * crean al registrar la compra.
+ */
+export function ProductosNuevos({ nuevos, categorias, tresPrecios, faltas, onCambio }) {
+  if (!nuevos?.length) return null;
+  const poner = (idx, campo, valor) => onCambio(nuevos.map((n, i) => (i === idx ? { ...n, [campo]: valor } : n)));
+  return (
+    <div className="pedido-revisar pedido-revisar-nuevos">
+      <p className="pedido-revisar-titulo">🟢 Productos nuevos ({nuevos.length}): completa lo marcado en rojo</p>
+      <p className="pedido-revisar-ayuda">Se crean en Productos al registrar la compra. El código lo pone el sistema (puedes cambiarlo).</p>
+      <div className="pedido-nuevos-lista">
+        {nuevos.map((n, idx) => {
+          const falta = faltas[idx] || [];
+          return (
+            <div key={n.fila} className="pedido-nuevo">
+              <div className="pedido-nuevo-cabeza">
+                <input
+                  className={`pedido-campo pedido-nuevo-nombre${falta.includes('Nombre') ? ' pedido-campo-falta' : ''}`}
+                  aria-label="Nombre del producto nuevo"
+                  value={n.nombre}
+                  onChange={(e) => poner(idx, 'nombre', e.target.value)}
+                />
+                <button type="button" className="pedido-nuevo-quitar" aria-label={`Quitar ${n.nombre}`} onClick={() => onCambio(nuevos.filter((_, i) => i !== idx))}>
+                  ✕
+                </button>
+              </div>
+              <p className="pedido-nuevo-datos">
+                {[n.marca, n.numero_parte && `N.° parte ${n.numero_parte}`, n.aplicacion].filter(Boolean).join(' · ') || 'Sin marca ni N.° de parte'}
+                {' · '}
+                <strong>
+                  {n.cantidad} × S/ {soles(n.precio_compra)}
+                </strong>
+              </p>
+              <div className="pedido-nuevo-campos">
+                <label>
+                  Código
+                  <input
+                    className={`pedido-campo${falta.some((f) => f.startsWith('Código')) ? ' pedido-campo-falta' : ''}`}
+                    value={n.codigo}
+                    onChange={(e) => poner(idx, 'codigo', e.target.value)}
+                  />
+                </label>
+                <label>
+                  Categoría
+                  <select
+                    className={`pedido-campo${falta.includes('Categoría') ? ' pedido-campo-falta' : ''}`}
+                    value={n.categoria_id}
+                    onChange={(e) => poner(idx, 'categoria_id', e.target.value)}
+                  >
+                    <option value="">Elige…</option>
+                    {categorias.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {!(Number(n.precio_compra) > 0) && (
+                  <label>
+                    Costo c/u
+                    <CampoPrecio valor={n.precio_compra} etiqueta={`Costo de ${n.nombre}`} requerido onCambio={(v) => poner(idx, 'precio_compra', v || 0)} />
+                  </label>
+                )}
+                <label>
+                  P1
+                  <CampoPrecio valor={n.precio} etiqueta={`Precio 1 de ${n.nombre}`} requerido onCambio={(v) => poner(idx, 'precio', v)} />
+                </label>
+                {tresPrecios && (
+                  <label>
+                    P2
+                    <CampoPrecio valor={n.precio_2} etiqueta={`Precio 2 de ${n.nombre}`} onCambio={(v) => poner(idx, 'precio_2', v)} />
+                  </label>
+                )}
+                {tresPrecios && (
+                  <label>
+                    P3
+                    <CampoPrecio valor={n.precio_3} etiqueta={`Precio 3 de ${n.nombre}`} onCambio={(v) => poner(idx, 'precio_3', v)} />
+                  </label>
+                )}
+              </div>
+              {falta.length > 0 && <p className="pedido-nuevo-falta">Falta: {falta.join(', ')}</p>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

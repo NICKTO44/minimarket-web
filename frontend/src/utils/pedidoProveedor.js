@@ -7,7 +7,7 @@
 import { leerNumero, normalizar } from './importacion';
 import { claveCodigo } from './repuestos';
 import { seVendeFraccionado } from './medidas';
-import { etiquetaUnidad } from './unidades';
+import { GRUPOS_UNIDADES, etiquetaUnidad } from './unidades';
 
 export const FILTROS_PEDIDO = [
   { valor: 'BAJO_MINIMO', label: 'Solo los que están en el stock mínimo o debajo' },
@@ -39,6 +39,9 @@ export function productosDelPedido(productos, { filtro, categoriaId }) {
         String(a.nombre).localeCompare(String(b.nombre), 'es')
     );
 }
+
+/** Fila guía al final del Excel del proveedor (no es un producto). */
+export const TITULO_NUEVOS = 'PRODUCTOS NUEVOS: agrega debajo los que no están en la lista (deja el Código vacío)';
 
 const COLUMNAS_PROVEEDOR = ['Código', 'N.° de parte', 'Marca', 'Producto', 'Aplicación', 'Unidad', 'Cantidad a pedir', 'Precio unitario'];
 const COLUMNAS_COMPLETO = [
@@ -73,6 +76,12 @@ export function hojaPedido(lista, { completo, fichas, precios, sugerir }) {
       '',
     ];
   });
+  if (!completo) {
+    // Al final, un espacio para que el proveedor agregue lo que el negocio
+    // aún no tiene (sin código: al cargarlo salen como "Productos nuevos").
+    filas.push(['', '', '', '', '', '', '', '']);
+    filas.push(['', '', '', TITULO_NUEVOS, '', '', '', '']);
+  }
   return completo
     ? { nombre: 'Pedido', filas: [COLUMNAS_COMPLETO, ...filas], anchos: [14, 15, 14, 42, 38, 18, 10, 8, 12, 12, 11, 11, 11, 16, 13], soles: [9, 10, 11, 12, 14] }
     : { nombre: 'Pedido', filas: [COLUMNAS_PROVEEDOR, ...filas], anchos: [14, 15, 14, 42, 38, 10, 16, 15], soles: [7] };
@@ -85,6 +94,11 @@ const TITULOS = {
   cantidad: ['cantidadapedir', 'cantidadpedida', 'cantidad', 'cant', 'pedido', 'apedir'],
   costoNuevo: ['costonuevo', 'preciounitario', 'preciodecompra', 'preciocompra', 'costo', 'costounitario'],
   costoActual: ['costoactual'],
+  // Para los productos nuevos que agrega el proveedor.
+  producto: ['producto', 'descripcion', 'nombre', 'articulo'],
+  marca: ['marca'],
+  aplicacion: ['aplicacion'],
+  unidad: ['unidad', 'unidaddemedida', 'um'],
   // Precios de venta (Excel "Completo"): si se cambian, se actualizan al registrar la compra.
   p1: ['p1publico', 'p1', 'precio1', 'preciopublico', 'preciodeventa'],
   p2: ['p2tienda', 'p2', 'precio2', 'preciotienda'],
@@ -104,6 +118,36 @@ function columnas(titulos) {
     }
   }
   return col;
+}
+
+const UNIDADES = GRUPOS_UNIDADES.flatMap((g) => g.unidades);
+
+/** "Unidad", "Galón", "GLN", "litros"… -> valor de unidad; si no se reconoce, Unidad. */
+export function unidadDesdeTexto(texto) {
+  const t = normalizar(texto);
+  if (!t) return 'UNIDAD';
+  const u = UNIDADES.find((x) => [x.valor, x.label, x.abrev].some((v) => v && normalizar(v) === t));
+  return u ? u.valor : 'UNIDAD';
+}
+
+/**
+ * Códigos internos para los productos nuevos: REP-0001, REP-0002… siguiendo
+ * al mayor REP- que ya exista (y sin repetir los ya usados en esta compra).
+ */
+export function codigosNuevos(productos, cantidad, usados = []) {
+  const ocupados = new Set([...productos.map((p) => String(p.codigo || '').toUpperCase()), ...usados.map((c) => String(c).toUpperCase())]);
+  let n = 0;
+  for (const c of ocupados) {
+    const m = /^REP-(\d+)$/.exec(c);
+    if (m) n = Math.max(n, parseInt(m[1], 10));
+  }
+  const lista = [];
+  while (lista.length < cantidad) {
+    n += 1;
+    const codigo = `REP-${String(n).padStart(4, '0')}`;
+    if (!ocupados.has(codigo)) lista.push(codigo);
+  }
+  return lista;
 }
 
 const r2 = (n) => Math.round(Number(n) * 100) / 100;
@@ -161,6 +205,8 @@ export function leerPedido(filas, productos, fichas, preciosActuales) {
 
   const items = new Map();
   const cambiosPrecio = new Map();
+  const nuevos = new Map();
+  const ambiguos = [];
   const sinReconocer = [];
   const malas = [];
   let sinCosto = 0;
@@ -182,7 +228,48 @@ export function leerPedido(filas, productos, fichas, preciosActuales) {
     }
     if (!cantidadTexto) return; // sin cantidad: no se pide
     if (!producto) {
-      sinReconocer.push({ fila: numeroFila, texto: codigo || parte || '(sin código)' });
+      const clave = claveCodigo(parte);
+      if (!codigo && clave.length >= 2 && porParte.has(clave)) {
+        // El N.° de parte está en dos productos: no se adivina cuál es.
+        ambiguos.push({ fila: numeroFila, texto: parte });
+        return;
+      }
+      const nombre = texto(col.producto);
+      if (codigo || !nombre) {
+        // Un código que no existe suele ser un error de tipeo: no se crea nada.
+        sinReconocer.push({ fila: numeroFila, texto: codigo || parte || '(sin código ni nombre)' });
+        return;
+      }
+      // Producto que el negocio aún no tiene: se crea al registrar la compra.
+      const cantidadNueva = leerNumero(cantidadTexto);
+      if (cantidadNueva === 0) return;
+      const unidad = unidadDesdeTexto(texto(col.unidad));
+      if (cantidadNueva == null || !(cantidadNueva > 0) || cantidadNueva > 1_000_000 || (!seVendeFraccionado(unidad) && !Number.isInteger(cantidadNueva))) {
+        malas.push({ fila: numeroFila, texto: `${nombre}: la cantidad "${cantidadTexto}" no es válida` });
+        return;
+      }
+      const costoNuevo = leerNumero(texto(col.costoNuevo));
+      if (costoNuevo != null && costoNuevo < 0) {
+        malas.push({ fila: numeroFila, texto: `${nombre}: el costo no puede ser negativo` });
+        return;
+      }
+      const claveNuevo = clave.length >= 2 ? `P:${clave}` : `N:${normalizar(nombre)}`;
+      const previoNuevo = nuevos.get(claveNuevo);
+      if (previoNuevo) {
+        previoNuevo.cantidad = Math.round((previoNuevo.cantidad + cantidadNueva) * 1000) / 1000;
+        if (costoNuevo > 0) previoNuevo.precio_compra = Math.round(costoNuevo * 10000) / 10000;
+        return;
+      }
+      nuevos.set(claveNuevo, {
+        fila: numeroFila,
+        nombre,
+        marca: texto(col.marca),
+        numero_parte: parte,
+        aplicacion: texto(col.aplicacion),
+        unidad,
+        cantidad: cantidadNueva,
+        precio_compra: costoNuevo > 0 ? Math.round(costoNuevo * 10000) / 10000 : 0,
+      });
       return;
     }
     const cantidad = leerNumero(cantidadTexto);
@@ -215,7 +302,50 @@ export function leerPedido(filas, productos, fichas, preciosActuales) {
       precio_compra: Math.round(costo * 10000) / 10000,
     });
   });
-  return { items: [...items.values()], precios: [...cambiosPrecio.values()], sinReconocer, malas, sinCosto };
+  // Productos cuyo costo sube con esta compra: el negocio revisa sus precios de venta.
+  const porId = new Map(productos.map((p) => [p.id, p]));
+  const subidas = [...items.values()]
+    .filter((it) => {
+      const antes = Number(porId.get(it.producto_id)?.precio_compra || 0);
+      return antes > 0 && it.precio_compra - antes >= 0.005;
+    })
+    .map((it) => {
+      const p = porId.get(it.producto_id);
+      const extra = preciosActuales?.get(p.id);
+      const antes = { p1: r2(p.precio), p2: extra?.precio_2 ? r2(extra.precio_2) : null, p3: extra?.precio_3 ? r2(extra.precio_3) : null };
+      return { producto_id: p.id, codigo: p.codigo, nombre: p.nombre, costoAntes: Number(p.precio_compra), costoNuevo: it.precio_compra, antes, despues: { ...antes } };
+    });
+  return {
+    items: [...items.values()],
+    precios: [...cambiosPrecio.values()],
+    subidas,
+    nuevos: [...nuevos.values()],
+    ambiguos,
+    sinReconocer,
+    malas,
+    sinCosto,
+  };
+}
+
+/** Las subidas de costo en las que el negocio cambió algún precio de venta. */
+export function subidasConCambio(subidas) {
+  return subidas.filter((s) => distinto(s.antes.p1, s.despues.p1) || distinto(s.antes.p2, s.despues.p2) || distinto(s.antes.p3, s.despues.p3));
+}
+
+/**
+ * Qué le falta a cada producto nuevo antes de registrar la compra.
+ * Devuelve [] si está todo, o la lista de textos ("Categoría", "Precio 1"…).
+ */
+export function faltaEnNuevo(n, codigosExistentes) {
+  const falta = [];
+  if (!String(n.nombre || '').trim()) falta.push('Nombre');
+  const codigo = String(n.codigo || '').trim();
+  if (!codigo) falta.push('Código');
+  else if (codigosExistentes.has(codigo.toUpperCase())) falta.push('Código (ya existe)');
+  if (!n.categoria_id) falta.push('Categoría');
+  if (!(Number(n.precio) > 0)) falta.push('Precio 1');
+  if (!(Number(n.precio_compra) > 0)) falta.push('Costo');
+  return falta;
 }
 
 /**

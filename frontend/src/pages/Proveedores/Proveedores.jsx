@@ -7,8 +7,8 @@ import { agruparPorModelo, rangoPrecio } from '../../utils/variantes';
 import FormularioModelo from '../Inventario/FormularioModelo';
 import '../Inventario/Inventario.css';
 import './Proveedores.css';
-import { CargarPedido, ExportarPedido, PreciosNuevos } from './PedidoExcel';
-import { filasDePrecios } from '../../utils/pedidoProveedor';
+import { CargarPedido, ExportarPedido, PreciosNuevos, ProductosNuevos, SubioCosto } from './PedidoExcel';
+import { codigosNuevos, faltaEnNuevo, filasDePrecios, subidasConCambio } from '../../utils/pedidoProveedor';
 
 
 const MOTIVOS = [
@@ -28,6 +28,11 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
   // Precios de venta nuevos leídos del Excel del pedido y si se aplican al registrar la compra.
   const [preciosNuevos, setPreciosNuevos] = useState([]);
   const [aplicarPrecios, setAplicarPrecios] = useState(true);
+  // Del Excel del proveedor: productos que suben de costo (con sus precios de
+  // venta editables) y productos nuevos que se crean al registrar la compra.
+  const [subidasCosto, setSubidasCosto] = useState([]);
+  const [productosNuevos, setProductosNuevos] = useState([]);
+  const [conTresPrecios, setConTresPrecios] = useState(false);
   const [vista, setVista] = useState('COMPRAS');
   const [proveedores, setProveedores] = useState([]);
   const [compras, setCompras] = useState([]);
@@ -219,7 +224,18 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
     olvidarError();
   };
 
-   const subtotalCompra = compraItems.reduce((sum, i) => sum + i.cantidad * i.precio_compra, 0);
+   const subtotalCompra =
+     compraItems.reduce((sum, i) => sum + i.cantidad * i.precio_compra, 0) +
+     productosNuevos.reduce((sum, n) => sum + n.cantidad * (Number(n.precio_compra) || 0), 0);
+  // Qué le falta a cada producto nuevo (código repetido incluido).
+  const faltasNuevos = useMemo(() => {
+    const existentes = new Set(productos.map((p) => String(p.codigo || '').trim().toUpperCase()));
+    return productosNuevos.map((n, i) => {
+      const otros = new Set(productosNuevos.filter((_, j) => j !== i && !_.producto_id).map((x) => String(x.codigo || '').trim().toUpperCase()));
+      return n.producto_id ? [] : faltaEnNuevo(n, new Set([...existentes, ...otros]));
+    });
+  }, [productosNuevos, productos]);
+  const nuevosIncompletos = faltasNuevos.filter((f) => f.length > 0).length;
    const totalCompra = Math.max(0, subtotalCompra - (parseFloat(compraCreditoAplicado) || 0));
 
   // Efectivo que hay en la caja abierta (mismo cálculo que el servidor).
@@ -249,8 +265,15 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
   };
 
   const guardarCompra = async () => {
-    if (!compraProveedorId || compraItems.length === 0) {
+    if (!compraProveedorId || compraItems.length + productosNuevos.length === 0) {
       setMensaje({ tipo: 'error', texto: 'Elige un proveedor y agrega al menos un producto.' });
+      return;
+    }
+    if (nuevosIncompletos > 0) {
+      setMensaje({
+        tipo: 'error',
+        texto: `Completa ${nuevosIncompletos === 1 ? 'el producto nuevo' : `los ${nuevosIncompletos} productos nuevos`} (lo marcado en rojo) o quítalo${nuevosIncompletos === 1 ? '' : 's'} con ✕.`,
+      });
       return;
     }
     if (cajaNoAlcanza) {
@@ -262,10 +285,56 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
     }
     setGuardandoCompra(true);
     try {
+      // 1) Los productos nuevos del Excel se crean primero (la compra necesita
+      // su id). Uno ya creado guarda su id: si algo falla y se reintenta, no se duplica.
+      const creados = [];
+      let avisoNuevos = '';
+      for (let i = 0; i < productosNuevos.length; i += 1) {
+        const n = productosNuevos[i];
+        if (n.producto_id) {
+          creados.push(n);
+          continue;
+        }
+        let creado;
+        try {
+          creado = await api.productoCrear({
+            codigo: n.codigo.trim(),
+            nombre: n.nombre.trim(),
+            descripcion: n.aplicacion || null,
+            precio: Number(n.precio),
+            stock: 0,
+            stock_minimo: 0,
+            unidad_medida: n.unidad || 'UNIDAD',
+            categoria_id: parseInt(n.categoria_id, 10),
+            precio_compra: Number(n.precio_compra),
+          });
+        } catch (e) {
+          setProductosNuevos(productosNuevos.map((x, j) => (j < i ? creados[j] || x : x)));
+          throw new Error(`No se pudo crear "${n.nombre}": ${e.message}`, { cause: e });
+        }
+        const conId = { ...n, producto_id: creado.producto_id };
+        creados.push(conId);
+        // Marca y N.° de parte (ficha del repuesto) y Precio 2 / 3: si fallan, el producto ya existe y se corrige en Productos.
+        if (n.marca || n.numero_parte) {
+          await api.repuestoGuardar(creado.producto_id, { marca: n.marca || null, numero_parte: n.numero_parte || null, codigos: [] }).catch(() => {
+            avisoNuevos = ' Revisa en Productos la marca o el N.° de parte de los productos nuevos.';
+          });
+        }
+        if (n.precio_2 || n.precio_3) {
+          await api.preciosVentaGuardar(creado.producto_id, { precio_2: n.precio_2 || null, precio_3: n.precio_3 || null }).catch(() => {
+            avisoNuevos = ' Revisa en Productos el Precio 2 / 3 de los productos nuevos.';
+          });
+        }
+      }
+      if (creados.length) setProductosNuevos(creados);
+      const itemsNuevos = creados.map((n) => ({ producto_id: n.producto_id, cantidad: n.cantidad, precio_compra: Number(n.precio_compra) }));
       const respuesta = await api.compraCrear({
         proveedor_id: parseInt(compraProveedorId, 10),
         fecha_compra: hoyLima(),
-        items: compraItems.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad, precio_compra: i.precio_compra })),
+        items: [
+          ...compraItems.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad, precio_compra: i.precio_compra })),
+          ...itemsNuevos,
+        ],
         tipo_pago: compraTipoPago,
         credito_aplicado: parseFloat(compraCreditoAplicado) || 0,
         usuario_id: 1,
@@ -276,10 +345,15 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
       let textoPrecios = '';
       // Venta en tabla: con la compra ya guardada, los precios de venta nuevos
       // del Excel (por "Importar productos" -> Actualizar: solo cambia precios).
-      if (pedidosExcel && aplicarPrecios && preciosNuevos.length > 0) {
+      // Precios de venta: los del Excel (si traía P1/P2/P3) y los que el dueño cambió en "Subieron de costo".
+      const cambiosVenta = [
+        ...(aplicarPrecios ? preciosNuevos : []),
+        ...subidasConCambio(subidasCosto).filter((c) => !(aplicarPrecios && preciosNuevos.some((p) => p.producto_id === c.producto_id))),
+      ];
+      if (pedidosExcel && cambiosVenta.length > 0) {
         try {
           const r = await api.productosImportar({
-            filas: filasDePrecios(preciosNuevos, productos),
+            filas: filasDePrecios(cambiosVenta, productos),
             existentes: 'ACTUALIZAR',
             solo_revisar: false,
           });
@@ -290,9 +364,12 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
         }
       }
       setPreciosNuevos([]);
+      setSubidasCosto([]);
+      setProductosNuevos([]);
+      const textoNuevos = creados.length ? ` Productos nuevos creados: ${creados.length}.` : '';
       setMensaje({
         tipo: textoPrecios.includes('NO se actualizaron') ? 'error' : 'exito',
-        texto: `${respuesta?.message || 'Compra registrada.'} Ahora puedes recibirla cuando llegue la mercadería.${textoPrecios}`,
+        texto: `${respuesta?.message || 'Compra registrada.'} Ahora puedes recibirla cuando llegue la mercadería.${textoNuevos}${textoPrecios}${avisoNuevos}`,
       });
       cargarTodo();
     } catch (e) {
@@ -382,6 +459,9 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
 
   const cerrarModalCompra = () => {
     setMostrarNuevaCompra(false);
+    setSubidasCosto([]);
+    setProductosNuevos([]);
+    setPreciosNuevos([]);
     setMostrarNuevoProductoEnCompra(false);
     limpiarFormNuevoProducto();
     setCompraCreditoAplicado('');
@@ -761,16 +841,32 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
             {pedidosExcel && (
               <CargarPedido
                 productos={productos}
-                onCargar={(nuevos, precios) => {
+                onCargar={(nuevos, precios, subidas, sinRegistrar, tres) => {
                   // Un producto que ya estaba en la lista toma lo del Excel.
                   setCompraItems((prev) => [...prev.filter((i) => !nuevos.some((n) => n.producto_id === i.producto_id)), ...nuevos]);
                   setPreciosNuevos(precios || []);
                   setAplicarPrecios(true);
+                  setSubidasCosto(subidas || []);
+                  setConTresPrecios(!!tres);
+                  const codigos = codigosNuevos(productos, (sinRegistrar || []).length);
+                  setProductosNuevos(
+                    (sinRegistrar || []).map((n, i) => ({ ...n, codigo: codigos[i], categoria_id: '', precio: null, precio_2: null, precio_3: null }))
+                  );
                   olvidarError();
                 }}
               />
             )}
             {pedidosExcel && <PreciosNuevos cambios={preciosNuevos} aplicar={aplicarPrecios} onAplicar={setAplicarPrecios} />}
+            {pedidosExcel && <SubioCosto subidas={subidasCosto} tresPrecios={conTresPrecios} onCambio={setSubidasCosto} />}
+            {pedidosExcel && (
+              <ProductosNuevos
+                nuevos={productosNuevos}
+                categorias={categorias}
+                tresPrecios={conTresPrecios}
+                faltas={faltasNuevos}
+                onCambio={setProductosNuevos}
+              />
+            )}
             {variantes && (
               <button className="prov-boton-producto-nuevo prov-boton-tallas" onClick={() => setEligiendoModelo({ buscar: '' })}>
                 👕 Agregar prendas por tallas y colores
@@ -891,7 +987,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                   <button onClick={() => quitarItemCompra(idx)}>🗑</button>
                 </div>
               ))}
-              {compraItems.length === 0 && <p className="prov-items-vacio">Aún no agregas productos.</p>}
+              {compraItems.length === 0 && productosNuevos.length === 0 && <p className="prov-items-vacio">Aún no agregas productos.</p>}
             </div>
                        {parseFloat(compraCreditoAplicado) > 0 && (
               <div className="prov-resumen-linea">
@@ -912,7 +1008,12 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
             {errorEnVentana}
             <div className="prov-modal-acciones">
               <button className="prov-boton-cancelar" onClick={cerrarModalCompra}>Cancelar</button>
-              <button className="prov-boton-guardar" onClick={guardarCompra} disabled={guardandoCompra}>
+              {nuevosIncompletos > 0 && (
+                <span className="pedido-falta-registrar">
+                  Falta completar {nuevosIncompletos} producto{nuevosIncompletos === 1 ? ' nuevo' : 's nuevos'}
+                </span>
+              )}
+              <button className="prov-boton-guardar" onClick={guardarCompra} disabled={guardandoCompra || nuevosIncompletos > 0}>
                 {guardandoCompra ? 'Guardando...' : 'Registrar compra'}
               </button>
             </div>
