@@ -308,7 +308,8 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   const nombreTipo = (comp) => (comp.tipo === 'FACTURA' ? 'factura' : 'boleta');
 
   // Nuestro A4, armado con el documento que se envió a SUNAT.
-  const imprimirA4Propio = async (comp) => {
+  // papel: 'A4' o 'A5' (media hoja, módulo "Venta en tabla").
+  const imprimirA4Propio = async (comp, papel = 'A4') => {
     try {
       const documento = await api.comprobanteDocumento(comp.id);
       const datos = await datosA4DeDocumento(documento, {
@@ -320,7 +321,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         color: cfgEmisor?.color_acento,
         ...(codigoEnA4 ? { columnasRepuesto: true, codigos: await codigosDeVenta(comp.folio_venta) } : {}),
       });
-      imprimirComprobanteA4(datos);
+      imprimirComprobanteA4(datos, { papel });
     } catch (e) {
       setMensaje({ tipo: 'error', texto: `No se pudo preparar la hoja A4: ${e.message}` });
     }
@@ -350,6 +351,8 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
           titulo: 'Hoja A4',
           detalle: comp.enlace_pdf ? 'El PDF de FacturaLibre, como hasta ahora' : 'Con el logo del negocio',
         },
+        // Venta en tabla: también en media hoja A5 (solo nuestra hoja propia).
+        ...(codigoEnA4 && !comp.enlace_pdf ? [{ cual: 'a5', titulo: 'Media hoja A5', detalle: 'El mismo diseño, en hoja A5' }] : []),
       ]);
       return;
     }
@@ -431,6 +434,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     const opciones = a4Propio(comp) && facturaConA4(comp)
       ? [
           { cual: 'a4', titulo: 'PDF A4', detalle: 'Se abre para imprimir: elige "Guardar como PDF"' },
+          ...(codigoEnA4 ? [{ cual: 'a5', titulo: 'PDF A5', detalle: 'Media hoja: se abre para imprimir o "Guardar como PDF"' }] : []),
           { cual: 'pdf80', titulo: 'PDF ticket 80 mm', detalle: `La misma ${nombreTipo(comp)} en formato ticket` },
         ]
       : facturaConA4(comp)
@@ -497,6 +501,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     else if (cual === 'pdf80') exportarPdf(comp, true);
     else if (cual === 'ticket') imprimirTicket(comp);
     else if (cual === 'a4') verA4(comp);
+    else if (cual === 'a5') imprimirA4Propio(comp, 'A5');
     else descargarOficial(comp, cual);
   };
 

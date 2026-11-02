@@ -1724,7 +1724,8 @@ export default function POS({
   })();
   const nombreUltimoComprobante = ultimaVentaParaImprimir?.comprobante?.tipo === 'FACTURA' ? 'factura' : 'boleta';
 
-  const imprimirA4Propio = async (comp) => {
+  // papel: 'A4' o 'A5' (media hoja, módulo "Venta en tabla").
+  const imprimirA4Propio = async (comp, papel = 'A4') => {
     try {
       const documento = await api.comprobanteDocumento(comp.comprobante_id);
       const datos = await datosA4DeDocumento(documento, {
@@ -1737,7 +1738,7 @@ export default function POS({
         // Venta en tabla: código interno y precio sin IGV en la factura A4.
         ...(ventaTabla ? { columnasRepuesto: true, codigos: await codigosDeVenta(ultimaVentaParaImprimir?.venta?.folio) } : {}),
       });
-      imprimirComprobanteA4(datos);
+      imprimirComprobanteA4(datos, { papel });
     } catch (e) {
       setMensaje({ tipo: 'error', texto: `No se pudo preparar la hoja A4: ${e.message}` });
     }
@@ -1750,6 +1751,8 @@ export default function POS({
       setPdfVisible(api.comprobantePdfUrl(comp.comprobante_id));
     } else if (formato === 'A4' && facturaConA4) {
       imprimirA4Propio(comp);
+    } else if (formato === 'A5' && facturaConA4 && !comp.enlace_pdf) {
+      imprimirA4Propio(comp, 'A5');
     } else {
       imprimirTicket();
     }
@@ -2887,6 +2890,11 @@ export default function POS({
                 <button className="pos-imprimir" onClick={() => imprimirComprobante('A4')}>
                   📄 Hoja A4
                 </button>
+                {ventaTabla && !ultimaVentaParaImprimir.comprobante?.enlace_pdf && (
+                  <button className="pos-imprimir" onClick={() => imprimirComprobante('A5')}>
+                    📄 Hoja A5
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -3224,6 +3232,15 @@ export default function POS({
                       📄 Hoja A4
                       <small>PDF</small>
                     </button>
+                    {ventaTabla && !ultimaVentaParaImprimir.comprobante?.enlace_pdf && (
+                      <button
+                        className="pos-venta-modal-imprimir pos-venta-modal-imprimir-claro"
+                        onClick={() => imprimirComprobante('A5')}
+                      >
+                        📄 Hoja A5
+                        <small>Media hoja</small>
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (

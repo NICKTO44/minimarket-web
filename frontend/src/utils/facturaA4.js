@@ -87,6 +87,7 @@ export function iniciales(nombre) {
  *   referencia: { documento: 'BM01-15', tipo: 'Boleta'|'Factura', motivo } | null (solo notas),
  *   cliente: { tipoDocumento: 'RUC'|'DNI'|..., numeroDocumento, nombre, direccion } | null,
  *   items: [{ cantidad, unidad, codigo, descripcion, precioUnitario, valorUnitario, importe }],
+ *   papel: 'A4' (por defecto) o 'A5' (media hoja vertical, módulo "Venta en tabla"),
  *   columnasRepuesto: true para sacar el código interno y el precio sin IGV en
  *     columnas propias (módulo "Venta en tabla"; solo la impresión, no SUNAT),
  *   totales: { gravadas, exoneradas, inafectas, igv, tasa, total },
@@ -298,7 +299,7 @@ export function htmlComprobanteA4(datos) {
   .legal p { margin: 0 0 1.2mm; font-size: 8.4pt; }
   .legal .gracias { font-size: 10.5pt; font-weight: 700; color: var(--acento); margin-bottom: 1.6mm; }
   .hash { word-break: break-all; }
-  .firma { margin-top: 3mm; text-align: center; font-size: 7.6pt; color: #9aa39e; letter-spacing: 0.04em; }
+  .firma { margin-top: 3mm; text-align: center; font-size: 7.6pt; color: #9aa39e; letter-spacing: 0.04em; }${datos.papel === 'A5' ? ESTILO_A5 : ''}
 </style>
 </head>
 <body>
@@ -366,8 +367,48 @@ function nombreDelTipo(tipo) {
 }
 
 /** Imprime el A4 desde un iframe oculto (no toca la página actual). */
-export function imprimirComprobanteA4(datos) {
-  imprimirHtml(htmlComprobanteA4(datos));
+// Media hoja A5 vertical (148 x 210 mm): el mismo diseño del A4, más compacto.
+const ESTILO_A5 = `
+  @page { size: A5; margin: 7mm 8mm 8mm; }
+  body { font-size: 7.6pt; line-height: 1.36; }
+  .hoja { width: 132mm; }
+  .cabecera, .datos { grid-template-columns: 1fr 46mm; gap: 4mm; }
+  .negocio { gap: 3mm; }
+  .logo { width: 17mm; height: 17mm; }
+  .monograma { width: 14mm; height: 14mm; font-size: 11.5pt; }
+  .nombre-comercial { font-size: 13pt; margin-bottom: 0.8mm; }
+  .razon, .negocio .linea { font-size: 6.8pt; }
+  .documento { border-radius: 2mm; }
+  .documento .ruc { padding: 1.8mm 1.5mm 1.5mm; font-size: 8.4pt; }
+  .documento .tipo { padding: 1.3mm 1.5mm; font-size: 6.8pt; }
+  .documento .numero { padding: 1.8mm 1.5mm 2mm; font-size: 11.5pt; }
+  .franja { height: 0.9mm; margin: 3.5mm 0 3mm; }
+  .datos { margin-bottom: 3.5mm; }
+  .tarjeta { padding: 2.4mm 3mm; border-radius: 2mm; }
+  .etiqueta { font-size: 6.2pt; margin-bottom: 0.8mm; }
+  .dato-grande { font-size: 8.8pt; }
+  .fechas { column-gap: 2.5mm; row-gap: 0.6mm; }
+  .items thead th { font-size: 6.2pt; padding: 1.6mm 1.3mm; letter-spacing: 0.03em; }
+  .items td { padding: 1.5mm 1.3mm; }
+  .items .n { width: 5mm; }
+  .codigo { font-size: 6.4pt; }
+  .pie-items { grid-template-columns: 1fr 50mm; gap: 4mm; margin-top: 3mm; }
+  .letras { padding: 2mm 3mm; margin-bottom: 2.5mm; border-radius: 2mm; }
+  .totales th, .totales td { padding: 0.7mm 0; }
+  .total-caja { padding: 2mm 3mm; border-radius: 2mm; margin-top: 1.5mm; }
+  .total-caja span { font-size: 7pt; }
+  .total-caja strong { font-size: 11.5pt; }
+  .aparte { margin-bottom: 2.5mm; }
+  .aparte h3 { font-size: 7.6pt; }
+  .legal { margin-top: 5mm; padding: 2.5mm; gap: 3mm; border-radius: 2mm; }
+  .legal img { width: 18mm; height: 18mm; }
+  .legal p { font-size: 6.6pt; margin-bottom: 0.8mm; }
+  .legal .gracias { font-size: 8.2pt; }
+  .firma { margin-top: 2mm; font-size: 6.4pt; }`;
+
+/** papel: 'A4' (por defecto) o 'A5'. */
+export function imprimirComprobanteA4(datos, { papel = 'A4' } = {}) {
+  imprimirHtml(htmlComprobanteA4({ ...datos, papel }));
 }
 
 /** Imprime el ticket de 80 mm desde un iframe oculto. */
