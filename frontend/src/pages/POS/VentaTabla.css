@@ -1,0 +1,457 @@
+/* Módulo "Venta en tabla" (Lubricentro). Todo con prefijo vt- para no
+   tocar los estilos del punto de venta de los demás negocios. */
+
+.pos-buscador.pos-buscador-compacto {
+  padding: 9px 12px;
+}
+
+.vt-zona {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ===== Resultados del buscador ===== */
+.vt-resultados {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: min(430px, 60vh);
+  overflow-y: auto;
+  background: var(--pos-superficie);
+  border: 1px solid var(--pos-borde);
+  border-radius: var(--pos-radio);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.14);
+}
+
+.vt-resultados-ayuda,
+.vt-resultados-vacio {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--pos-texto-tenue);
+  border-bottom: 1px solid var(--pos-borde);
+}
+
+.vt-resultados-vacio {
+  border-bottom: 0;
+  padding: 14px 12px;
+  font-size: 13px;
+}
+
+.vt-resultado {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 9px 12px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-top: 1px solid #f0f1f4;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.vt-resultado:first-of-type {
+  border-top: 0;
+}
+
+.vt-resultado-activo {
+  background: #f3f6fb;
+  border-left-color: var(--pos-primario);
+}
+
+.vt-resultado-info {
+  flex: 999 1 280px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.vt-resultado-nombre {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.vt-resultado-detalle {
+  font-size: 12px;
+  color: var(--pos-texto-tenue);
+}
+
+.vt-resultado-datos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.vt-stock {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pos-exito);
+  margin-right: 4px;
+}
+
+.vt-stock-sin {
+  color: var(--pos-error);
+}
+
+.vt-precio-chip {
+  font-size: 12px;
+  padding: 2px 6px;
+  border: 1px solid var(--pos-borde);
+  border-radius: 5px;
+  background: var(--pos-superficie);
+  white-space: nowrap;
+}
+
+/* ===== Tabla de la venta ===== */
+.vt {
+  display: flex;
+  flex-direction: column;
+  background: var(--pos-superficie);
+  border: 1px solid var(--pos-borde);
+  border-radius: var(--pos-radio);
+}
+
+.vt-tabla-caja {
+  overflow-x: auto;
+}
+
+.vt-tabla {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.vt-tabla th {
+  padding: 11px 7px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pos-texto);
+  border-bottom: 1px solid var(--pos-borde);
+  white-space: nowrap;
+}
+
+.vt-tabla td {
+  padding: 10px 7px;
+  vertical-align: middle;
+  border-bottom: 1px solid #f0f1f4;
+}
+
+.vt-tabla th:first-child,
+.vt-tabla td:first-child {
+  padding-left: 14px;
+}
+
+.vt-tabla th:last-child,
+.vt-tabla td:last-child {
+  padding-right: 14px;
+}
+
+.vt-col-n {
+  width: 28px;
+  color: var(--pos-texto-tenue);
+}
+
+.vt-num {
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.vt-producto {
+  min-width: 180px;
+  max-width: 300px;
+}
+
+.vt-nombre {
+  display: block;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.vt-sub {
+  display: block;
+  font-size: 11.5px;
+  color: var(--pos-texto-tenue);
+  margin-top: 1px;
+}
+
+.vt-aplicacion {
+  color: #4b5563;
+}
+
+.vt-vacio {
+  padding: 28px 14px !important;
+  text-align: center;
+  color: var(--pos-texto-tenue);
+}
+
+.vt-input {
+  height: 34px;
+  border: 1px solid #d5d8de;
+  border-radius: 6px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 14px;
+  color: inherit;
+  background: var(--pos-superficie);
+  outline: none;
+}
+
+.vt-input:focus {
+  border-color: var(--pos-primario);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
+}
+
+.vt-input-cantidad {
+  width: 44px;
+  text-align: center;
+}
+
+.vt-input-precio {
+  width: 78px;
+  text-align: right;
+  border-color: #e7a75b;
+  background: #fffaf3;
+}
+
+.vt-input-descuento {
+  width: 62px;
+  text-align: right;
+}
+
+.vt-cantidad {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.vt-cantidad button {
+  width: 26px;
+  height: 34px;
+  border: 1px solid #d5d8de;
+  border-radius: 6px;
+  background: var(--pos-superficie);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+}
+
+.vt-cantidad-fija,
+.vt-precio-fijo {
+  font-weight: 600;
+}
+
+.vt-listas {
+  display: flex;
+  gap: 3px;
+  margin-top: 5px;
+}
+
+.vt-lista {
+  min-width: 28px;
+  height: 22px;
+  padding: 0 5px;
+  border: 1px solid #d5d8de;
+  border-radius: 5px;
+  background: var(--pos-superficie);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.vt-lista-activa {
+  border-color: var(--pos-primario);
+  background: var(--pos-primario);
+  color: #ffffff;
+}
+
+.vt-importe {
+  font-weight: 700;
+}
+
+.vt-col-quitar {
+  width: 40px;
+}
+
+.vt-quitar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #f1d0cc;
+  border-radius: 6px;
+  background: var(--pos-superficie);
+  color: var(--pos-error);
+  cursor: pointer;
+}
+
+.vt-oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+/* ===== Totales bajo la tabla ===== */
+.vt-totales {
+  align-self: flex-end;
+  width: min(300px, 100%);
+  margin: 12px 14px 14px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.vt-totales th {
+  text-align: left;
+  font-weight: 400;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--pos-borde);
+}
+
+.vt-totales td {
+  text-align: right;
+  font-weight: 600;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--pos-borde);
+}
+
+.vt-total th,
+.vt-total td {
+  font-size: 18px;
+  font-weight: 800;
+  border-bottom: 0;
+  padding-top: 10px;
+}
+
+/* En tabla, las líneas se ven en la tabla: el panel derecho queda para cobrar. */
+.pos-carrito-items[hidden] {
+  display: none;
+}
+
+/* ===== Barra de cobro (abajo, siempre visible) ===== */
+.vt-barra {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--pos-borde);
+  background: var(--pos-superficie);
+  border-radius: 0 0 var(--pos-radio) var(--pos-radio);
+}
+
+.vt-barra-info {
+  font-size: 13px;
+  color: var(--pos-texto-tenue);
+}
+
+.vt-cobrar {
+  min-height: 48px;
+  padding: 0 28px;
+  border: 0;
+  border-radius: var(--pos-radio);
+  background: var(--pos-primario);
+  color: #ffffff;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.vt-cobrar:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+
+.vt-tecla {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vt-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  background: rgba(17, 24, 39, 0.35);
+}
+
+/* ===== Venta en tabla: sin el panel del carrito al lado =====
+   La tabla usa todo el ancho; el panel de cobro de siempre se abre a la
+   derecha solo al presionar Cobrar (en celular, a pantalla completa). */
+.pos-layout-tabla .pos-fab-carrito {
+  display: none !important;
+}
+
+@media (min-width: 900px) {
+  .pos-layout.pos-layout-tabla {
+    grid-template-columns: 1fr;
+  }
+
+  .pos-layout-tabla .pos-carrito {
+    display: none;
+  }
+
+  .pos-layout-tabla .pos-carrito.pos-carrito-abierto {
+    display: flex;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(440px, 100vw);
+    z-index: 220;
+    border-radius: 0;
+    overflow-y: auto;
+    box-shadow: -12px 0 32px rgba(17, 24, 39, 0.18);
+  }
+
+  .pos-layout-tabla .pos-carrito-header-movil {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .pos-layout-tabla .pos-carrito-header-movil h2 {
+    margin: 0;
+    font-size: 17px;
+  }
+
+  .pos-layout-tabla .pos-carrito-cerrar {
+    border: none;
+    background: #f1f2f4;
+    color: var(--pos-texto-tenue);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+}

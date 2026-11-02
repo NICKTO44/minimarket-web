@@ -14,12 +14,14 @@ import { descargarArchivo, pdfDeVenta } from '../../utils/pdfTicket';
 import { enlaceComprobantePublico } from '../../utils/enlacePublico';
 import { imprimirTicket as imprimirSoloTicket } from '../../utils/imprimirTicket';
 import { a4Propio, datosDelTicket, facturaConA4, pagoDeVenta } from '../../utils/documentoVenta';
+import { codigosDeVenta } from '../../utils/codigosVenta';
 import { etiquetaTicket } from '../../utils/papelTicket';
 import './Comprobantes.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
-export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', direccion, telefono, ruc, identificadorNegocio }) {
+// codigoEnA4: módulo "Venta en tabla" (código interno y precio sin IGV en la factura A4).
+export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', direccion, telefono, ruc, identificadorNegocio, codigoEnA4 = false }) {
   const [comprobantes, setComprobantes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [filtroTipo, setFiltroTipo] = useState('');
@@ -316,6 +318,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         email: cfgEmisor?.email,
         logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,
         color: cfgEmisor?.color_acento,
+        ...(codigoEnA4 ? { columnasRepuesto: true, codigos: await codigosDeVenta(comp.folio_venta) } : {}),
       });
       imprimirComprobanteA4(datos);
     } catch (e) {

@@ -36,6 +36,8 @@ export const MODULO_FICHA_REPUESTO = 'FICHA_REPUESTO';
 export const MODULO_COMPATIBILIDAD = 'COMPATIBILIDAD';
 // Lubricentro / Repuestos: Precio 2 y Precio 3 por producto; el vendedor elige cuál cobrar.
 export const MODULO_TRES_PRECIOS = 'TRES_PRECIOS';
+// Lubricentro: punto de venta en tabla (buscador con lista y una fila por producto).
+export const MODULO_VENTA_TABLA = 'VENTA_TABLA';
 // Lubricentro: vehículos de los clientes, placa y kilometraje en la venta.
 export const MODULO_VEHICULOS = 'VEHICULOS';
 // Lubricentro: órdenes de servicio, mecánicos y comisiones. Necesita Vehículos.
@@ -186,6 +188,13 @@ export const MODULOS = [
     label: '3 precios de venta',
     descripcion:
       'Además del precio de venta (Precio 1), cada producto puede tener un Precio 2 y un Precio 3 (por ejemplo para talleres o por mayor). Al vender, el vendedor ve los tres y elige cuál cobrar con un toque; también se cargan desde Excel.',
+    rubros: ['LUBRICENTRO'],
+  },
+  {
+    valor: MODULO_VENTA_TABLA,
+    label: 'Venta en tabla',
+    descripcion:
+      'El punto de venta como tabla, igual que un sistema de facturación: buscas el producto, entra como una fila con marca, categoría, unidad, cantidad, costo, precio sin IGV, precio y descuento por producto, y abajo el subtotal, el descuento y el total.',
     rubros: ['LUBRICENTRO'],
   },
   {

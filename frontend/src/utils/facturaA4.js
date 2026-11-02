@@ -86,7 +86,9 @@ export function iniciales(nombre) {
  *   comprobante: { tipo: 'FACTURA'|'BOLETA'|'NOTA_CREDITO', serie, numero, fechaEmision, horaEmision, hash },
  *   referencia: { documento: 'BM01-15', tipo: 'Boleta'|'Factura', motivo } | null (solo notas),
  *   cliente: { tipoDocumento: 'RUC'|'DNI'|..., numeroDocumento, nombre, direccion } | null,
- *   items: [{ cantidad, unidad, codigo, descripcion, precioUnitario, importe }],
+ *   items: [{ cantidad, unidad, codigo, descripcion, precioUnitario, valorUnitario, importe }],
+ *   columnasRepuesto: true para sacar el código interno y el precio sin IGV en
+ *     columnas propias (módulo "Venta en tabla"; solo la impresión, no SUNAT),
  *   totales: { gravadas, exoneradas, inafectas, igv, tasa, total },
  *   formaPago: 'Contado' | 'Crédito',
  *   cuotas: [{ fecha, monto }],
@@ -125,9 +127,23 @@ export function htmlComprobanteA4(datos) {
     .map(([etiqueta, monto]) => `<tr><th>${etiqueta}</th><td>S/ ${soles(monto)}</td></tr>`)
     .join('');
 
+  // Módulo "Venta en tabla": código interno antes de la descripción y el
+  // precio sin IGV, en columnas propias. Solo cambia esta hoja impresa.
+  const conColumnas = !!datos.columnasRepuesto;
   const filasItems = items
-    .map(
-      (it, i) => `<tr>
+    .map((it, i) =>
+      conColumnas
+        ? `<tr>
+        <td class="n">${i + 1}</td>
+        <td class="cod">${escapar(it.codigo || '—')}</td>
+        <td class="desc">${escapar(it.descripcion)}</td>
+        <td class="num">${cantidad(it.cantidad)}</td>
+        <td class="unidad">${escapar(it.unidad || 'Unidad')}</td>
+        <td class="num">${soles(it.valorUnitario)}</td>
+        <td class="num">${precioUnit(it.precioUnitario)}</td>
+        <td class="num fuerte">${soles(it.importe)}</td>
+      </tr>`
+        : `<tr>
         <td class="n">${i + 1}</td>
         <td class="desc">${escapar(it.descripcion)}${it.codigo ? `<span class="codigo">Cód. ${escapar(it.codigo)}</span>` : ''}</td>
         <td class="num">${cantidad(it.cantidad)}</td>
@@ -137,6 +153,9 @@ export function htmlComprobanteA4(datos) {
       </tr>`
     )
     .join('');
+  const titulosItems = conColumnas
+    ? '<th>#</th><th>Código</th><th>Descripción</th><th class="num">Cant.</th><th>Unidad</th><th class="num">P. sin IGV</th><th class="num">P. unit.</th><th class="num">Importe</th>'
+    : '<th>#</th><th>Descripción</th><th class="num">Cant.</th><th>Unidad</th><th class="num">P. unit.</th><th class="num">Importe</th>';
 
   const bloqueCliente = `
     <div class="tarjeta">
@@ -248,6 +267,7 @@ export function htmlComprobanteA4(datos) {
   .items .unidad { color: var(--tenue); white-space: nowrap; }
   .items .desc { width: 100%; }
   .items .fuerte { font-weight: 700; }
+  .items .cod { white-space: nowrap; font-weight: 600; }
   .codigo { display: block; font-size: 7.6pt; color: var(--tenue); margin-top: 0.4mm; }
 
   .pie-items { display: grid; grid-template-columns: 1fr 70mm; gap: 8mm; margin-top: 5mm; page-break-inside: avoid; }
@@ -307,7 +327,7 @@ export function htmlComprobanteA4(datos) {
 
   <table class="items">
     <thead>
-      <tr><th>#</th><th>Descripción</th><th class="num">Cant.</th><th>Unidad</th><th class="num">P. unit.</th><th class="num">Importe</th></tr>
+      <tr>${titulosItems}</tr>
     </thead>
     <tbody>${filasItems}</tbody>
   </table>
@@ -457,10 +477,16 @@ export async function datosA4DeDocumento(doc, extra = {}) {
           nombre: cli.rznSocial,
           direccion: cli.address?.direccion,
         },
-    items: detalles.map((d) => ({
+    // "Venta en tabla": solo en la factura, con el código interno de cada
+    // línea (extra.codigos, en el orden de la venta) y su valor sin IGV.
+    columnasRepuesto: !!extra.columnasRepuesto && tipo === 'FACTURA',
+    items: detalles.map((d, i) => ({
       cantidad: d.cantidad,
       unidad: NOMBRE_UNIDAD[d.unidad] || d.unidad,
       descripcion: d.descripcion,
+      ...(extra.columnasRepuesto && tipo === 'FACTURA'
+        ? { codigo: extra.codigos?.length === detalles.length ? extra.codigos[i] : '', valorUnitario: d.mtoValorUnitario }
+        : {}),
       precioUnitario: d.mtoPrecioUnitario,
       importe: r2(Number(d.mtoValorVenta || 0) + Number(d.igv || 0)),
     })),

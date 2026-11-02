@@ -30,6 +30,8 @@ import { alternativasDe, etiquetaCondicion, fichaCoincide, mapaFichas, resumenFi
 import AlternativasMedicamento from '../../components/AlternativasMedicamento';
 import SelectorPrecio, { PreciosTarjeta } from '../../components/SelectorPrecio';
 import { opcionesDePrecio, usePreciosVenta } from '../../utils/tresPrecios';
+import VentaTabla, { ResultadosTabla } from './VentaTabla';
+import { codigosDeVenta } from '../../utils/codigosVenta';
 import { coincidenTodas, palabrasDeBusqueda } from '../../utils/repuestos';
 import EquivalentesRepuesto from '../../components/EquivalentesRepuesto';
 import VehiculoVenta from '../../components/VehiculoVenta';
@@ -314,6 +316,9 @@ export default function POS({
   compatibilidad = false,
   // Módulo "3 precios de venta": en cada línea, P1 / P2 / P3 para elegir.
   tresPrecios = false,
+  // Módulo "Venta en tabla" (Lubricentro): buscador con lista y la venta
+  // como tabla en vez de tarjetas. Apagado, el punto de venta es el de siempre.
+  ventaTabla = false,
   // Lubricentro: placa y kilometraje en la venta, paquetes y el cobro de
   // una orden de servicio (viene de Órdenes de servicio).
   vehiculos = false,
@@ -339,6 +344,10 @@ export default function POS({
   textoVolverAMesas = 'Volver a mesas',
 }) {
   const cobrandoPedido = !!pedidoACobrar;
+  // Venta en tabla: no al cobrar el pedido de una mesa (ese carrito no se edita).
+  const enTabla = ventaTabla && !cobrandoPedido;
+  // Venta en tabla: qué resultado del buscador agrega el Enter.
+  const [resaltado, setResaltado] = useState(0);
   // producto_id -> { precio_2, precio_3 } (solo con el módulo "3 precios de venta").
   const { mapa: preciosExtra } = usePreciosVenta(tresPrecios);
   // El buscador solo se enfoca solo en desktop -- en celular, hacerlo
@@ -1087,6 +1096,46 @@ export default function POS({
     ]);
   };
 
+  // Venta en tabla: el panel de cobro (comprobante, cliente, pago) se abre
+  // al lado solo al cobrar, como en el celular.
+  const abrirCobroTabla = useCallback(() => {
+    setMensaje(null);
+    setCarritoAbierto(true);
+  }, []);
+  const cerrarCobroTabla = useCallback(() => setCarritoAbierto(false), []);
+
+  // Venta en tabla: lo que se ve en la lista bajo el buscador.
+  const resultadosTabla = enTabla && busqueda.trim() ? productosFiltrados.slice(0, 30) : null;
+
+  const elegirEnTabla = (producto) => {
+    if (agregarAlCarrito(producto)) {
+      setBusqueda('');
+      setResaltado(0);
+    }
+    buscadorRef.current?.focus();
+  };
+
+  // Venta en tabla: ↑ ↓ eligen en la lista, Enter agrega (un código exacto,
+  // como el de un lector de barras, gana) y Esc limpia el buscador.
+  const manejarTeclaTabla = (e) => {
+    if (!resultadosTabla) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const paso = e.key === 'ArrowDown' ? 1 : -1;
+      setResaltado((i) => Math.min(Math.max(0, i + paso), Math.max(0, resultadosTabla.length - 1)));
+    } else if (e.key === 'Escape') {
+      setBusqueda('');
+      setResaltado(0);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const texto = busqueda.trim();
+      const exacto =
+        productos.find((p) => p.codigo.toLowerCase() === texto.toLowerCase()) || (fichaRepuesto ? porCodigoDeRepuesto(texto) : null);
+      const elegido = exacto || resultadosTabla[Math.min(resaltado, resultadosTabla.length - 1)];
+      if (elegido) elegirEnTabla(elegido);
+    }
+  };
+
   const manejarEnterBusquedaProducto = (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
@@ -1220,6 +1269,16 @@ export default function POS({
         const original = i.precioOriginal ?? i.precio;
         return { ...i, precio, precioOriginal: precio === original ? undefined : original };
       })
+    );
+  };
+
+  // Venta en tabla: descuento en soles de una línea (0 lo quita). No pasa
+  // del importe de la línea; el servidor lo vuelve a revisar.
+  const fijarDescuento = (clave, monto) => {
+    setCarrito((prev) =>
+      prev.map((i) =>
+        claveDe(i) === clave ? { ...i, descuentoMonto: Math.min(Math.max(0, monto), subtotalLinea(i.precio, i.cantidad)) } : i
+      )
     );
   };
 
@@ -1675,6 +1734,8 @@ export default function POS({
         email: cfgEmisor?.email,
         logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,
         color: cfgEmisor?.color_acento,
+        // Venta en tabla: código interno y precio sin IGV en la factura A4.
+        ...(ventaTabla ? { columnasRepuesto: true, codigos: await codigosDeVenta(ultimaVentaParaImprimir?.venta?.folio) } : {}),
       });
       imprimirComprobanteA4(datos);
     } catch (e) {
@@ -1795,22 +1856,23 @@ export default function POS({
   const mostrarSeccionCliente = clienteEsObligatorio || tipoComprobante === 'BOLETA' || mostrarBusquedaCliente || cliente;
 
   return (
-    <div className="pos-layout">
+    <div className={`pos-layout${enTabla ? ' pos-layout-tabla' : ''}`}>
       <div className="pos-productos">
         <div className={`pos-buscador-fila${(paquetes && !cobrandoPedido) || compatibilidad ? ' pos-buscador-fila-extras' : ''}`}>
           <input
             ref={buscadorRef}
-            className="pos-buscador"
+            className={`pos-buscador${enTabla ? ' pos-buscador-compacto' : ''}`}
             type="text"
-            placeholder="Escanea o busca por nombre / código..."
+            placeholder={enTabla ? 'Buscar por nombre, código, aplicación o N.° de parte...' : 'Escanea o busca por nombre / código...'}
             value={busqueda}
             onChange={(e) => {
               setBusqueda(e.target.value);
+              setResaltado(0);
               // Al escribir se busca en todo el negocio, no solo en la
               // categoría que estaba elegida.
               if (e.target.value.trim()) setCategoriaFiltro(null);
             }}
-            onKeyDown={manejarEnterBusquedaProducto}
+            onKeyDown={enTabla ? manejarTeclaTabla : manejarEnterBusquedaProducto}
             autoFocus={autoFocoBuscador}
           />
           <button
@@ -1894,6 +1956,38 @@ export default function POS({
             )}
           </div>
         )}
+        {enTabla && (
+          <div className="vt-zona">
+            <ResultadosTabla
+              resultados={resultadosTabla}
+              total={productosFiltrados.length}
+              resaltado={resaltado}
+              onResaltar={setResaltado}
+              onElegir={elegirEnTabla}
+              disponibleDe={(id) => disponibleDe(id)}
+              preciosExtra={tresPrecios ? preciosExtra : null}
+              marcaDe={(p) => (fichaRepuesto ? repuestos.get(p.id)?.marca : null)}
+            />
+            <VentaTabla
+              carrito={carrito}
+              claveDe={claveDe}
+              marcaDe={(p) => (fichaRepuesto ? repuestos.get(p.id)?.marca : null)}
+              preciosExtra={preciosExtra}
+              tresPrecios={tresPrecios}
+              precioEditable={precioEditable}
+              esFija={esLineaMedida}
+              onCantidad={fijarCantidad}
+              onSumar={cambiarCantidad}
+              onPrecio={fijarPrecio}
+              onDescuento={fijarDescuento}
+              onQuitar={(item) => (item.paquete ? quitarPaquete(item.paquete.grupo) : quitarDelCarrito(claveDe(item)))}
+              onCobrar={abrirCobroTabla}
+              cobroAbierto={carritoAbierto}
+              onCerrarCobro={cerrarCobroTabla}
+            />
+          </div>
+        )}
+        {!enTabla && (
         <div className={`pos-orden-fila${categoriasPos.length > 1 ? ' pos-orden-fila-categorias' : ''}`}>
           {/* Filtro por categoría: solo si el negocio tiene más de una. */}
           {categoriasPos.length > 1 && (
@@ -1940,11 +2034,13 @@ export default function POS({
             </select>
           </div>
         </div>
+        )}
         {avisoStock && (
           <p className="pos-aviso-stock" role="status">
             {avisoStock.texto}
           </p>
         )}
+        {!enTabla && (
         <div className="pos-grid">
           {tarjetas.map((p) =>
             p.esModelo ? (
@@ -2036,6 +2132,7 @@ export default function POS({
             <p className="pos-sin-resultados">No se encontraron productos</p>
           )}
         </div>
+        )}
       </div>
 
       {/* Solo en celular: barra del carrito encima de la navegación inferior.
@@ -2343,7 +2440,8 @@ export default function POS({
           />
         )}
 
-        <div className="pos-carrito-items">
+        {/* Venta en tabla: las líneas ya están en la tabla; aquí queda el cobro. */}
+        <div className="pos-carrito-items" hidden={enTabla}>
           {carrito.length === 0 && <p className="pos-carrito-vacio">{enCambio ? 'Elige la prenda nueva' : 'Carrito vacío'}</p>}
           {carrito.map((item) => (
             <div key={claveDe(item)} className="pos-carrito-item">
