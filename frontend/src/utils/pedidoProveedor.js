@@ -25,9 +25,13 @@ export function cantidadSugerida(p) {
   return Math.max(n, 1);
 }
 
-/** Los productos que entran al pedido, ordenados por categoría y nombre. */
+/**
+ * Los productos que entran al pedido, ordenados por categoría y nombre. Los
+ * servicios (no controlan stock: mano de obra) no se le compran a nadie.
+ */
 export function productosDelPedido(productos, { filtro, categoriaId }) {
   return productos
+    .filter(controlaStock)
     .filter((p) => (filtro === 'BAJO_MINIMO' ? estaBajoMinimo(p) : filtro === 'CATEGORIA' ? String(p.categoria_id) === String(categoriaId) : true))
     .sort(
       (a, b) =>
@@ -81,6 +85,10 @@ const TITULOS = {
   cantidad: ['cantidadapedir', 'cantidadpedida', 'cantidad', 'cant', 'pedido', 'apedir'],
   costoNuevo: ['costonuevo', 'preciounitario', 'preciodecompra', 'preciocompra', 'costo', 'costounitario'],
   costoActual: ['costoactual'],
+  // Precios de venta (Excel "Completo"): si se cambian, se actualizan al registrar la compra.
+  p1: ['p1publico', 'p1', 'precio1', 'preciopublico', 'preciodeventa'],
+  p2: ['p2tienda', 'p2', 'precio2', 'preciotienda'],
+  p3: ['p3mayor', 'p3', 'precio3', 'preciomayor', 'precioxmayor', 'preciopormayor'],
 };
 
 function columnas(titulos) {
@@ -98,12 +106,43 @@ function columnas(titulos) {
   return col;
 }
 
+const r2 = (n) => Math.round(Number(n) * 100) / 100;
+const distinto = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) >= 0.005;
+
+/**
+ * Precios de venta escritos en la fila que difieren de los actuales. Una
+ * celda vacía no cambia nada (no borra el Precio 2 o 3). null = sin cambios;
+ * { error } si un precio no es válido.
+ */
+function preciosDeFila(texto, col, producto, actuales) {
+  const leer = (c) => {
+    const t = texto(c);
+    if (!t) return undefined;
+    const n = leerNumero(t);
+    return n != null && n > 0 && n < 10_000_000 ? r2(n) : NaN;
+  };
+  const p1 = leer(col.p1);
+  const p2 = leer(col.p2);
+  const p3 = leer(col.p3);
+  if ([p1, p2, p3].some((n) => Number.isNaN(n))) return { error: 'un precio de venta no es válido (debe ser mayor a 0)' };
+  const antes = { p1: r2(producto.precio), p2: actuales?.precio_2 ? r2(actuales.precio_2) : null, p3: actuales?.precio_3 ? r2(actuales.precio_3) : null };
+  const despues = {
+    p1: p1 !== undefined ? p1 : antes.p1,
+    p2: p2 !== undefined ? p2 : antes.p2,
+    p3: p3 !== undefined ? p3 : antes.p3,
+  };
+  if (!distinto(antes.p1, despues.p1) && !distinto(antes.p2, despues.p2) && !distinto(antes.p3, despues.p3)) return null;
+  return { antes, despues };
+}
+
 /**
  * Lee el Excel del pedido (filas de leerHoja) y arma los productos de la
- * compra. Devuelve { items, sinReconocer: [{ fila, texto }], malas: [{ fila, texto }], sinCosto }
- * o { error }.
+ * compra. Devuelve { items, precios, sinReconocer: [{ fila, texto }],
+ * malas: [{ fila, texto }], sinCosto } o { error }. precios: los productos
+ * cuyos P1 / P2 / P3 del Excel difieren de los actuales
+ * ([{ producto_id, codigo, nombre, costo, antes, despues }]).
  */
-export function leerPedido(filas, productos, fichas) {
+export function leerPedido(filas, productos, fichas, preciosActuales) {
   const inicio = filas.slice(0, 15).findIndex((f) => {
     const c = columnas(f || []);
     return c.cantidad !== undefined && (c.codigo !== undefined || c.parte !== undefined);
@@ -121,6 +160,7 @@ export function leerPedido(filas, productos, fichas) {
   }
 
   const items = new Map();
+  const cambiosPrecio = new Map();
   const sinReconocer = [];
   const malas = [];
   let sinCosto = 0;
@@ -128,10 +168,19 @@ export function leerPedido(filas, productos, fichas) {
     const numeroFila = inicio + i + 2;
     const texto = (c) => (c === undefined ? '' : String(fila?.[c] ?? '').trim());
     const cantidadTexto = texto(col.cantidad);
-    if (!cantidadTexto) return; // sin cantidad: no se pide
     const codigo = texto(col.codigo);
     const parte = texto(col.parte);
-    const producto = porCodigo.get(codigo.toLowerCase()) || (parte ? porParte.get(claveCodigo(parte)) : null);
+    const producto = codigo || parte ? porCodigo.get(codigo.toLowerCase()) || (parte ? porParte.get(claveCodigo(parte)) : null) : null;
+    // Precios de venta cambiados en el Excel (aunque esa fila no se compre).
+    if (producto) {
+      const cambio = preciosDeFila(texto, col, producto, preciosActuales?.get(producto.id));
+      if (cambio?.error) {
+        malas.push({ fila: numeroFila, texto: `${producto.codigo}: ${cambio.error}` });
+        return;
+      }
+      if (cambio) cambiosPrecio.set(producto.id, { producto_id: producto.id, codigo: producto.codigo, nombre: producto.nombre, ...cambio });
+    }
+    if (!cantidadTexto) return; // sin cantidad: no se pide
     if (!producto) {
       sinReconocer.push({ fila: numeroFila, texto: codigo || parte || '(sin código)' });
       return;
@@ -166,5 +215,34 @@ export function leerPedido(filas, productos, fichas) {
       precio_compra: Math.round(costo * 10000) / 10000,
     });
   });
-  return { items: [...items.values()], sinReconocer, malas, sinCosto };
+  return { items: [...items.values()], precios: [...cambiosPrecio.values()], sinReconocer, malas, sinCosto };
+}
+
+/**
+ * Las filas para "Importar productos" con "Actualizar" que cambian solo los
+ * precios de venta: sin stock ni precio de compra (no se tocan), con el
+ * nombre, la categoría y la unidad que ya tiene (tampoco cambian). El Precio
+ * 2 y 3 van solo si alguno cambió, y siempre los dos (para no borrar el otro).
+ */
+export function filasDePrecios(cambios, productos) {
+  const porId = new Map(productos.map((p) => [p.id, p]));
+  return cambios
+    .filter((c) => porId.has(c.producto_id))
+    .map((c, i) => {
+      const p = porId.get(c.producto_id);
+      const extra = distinto(c.antes.p2, c.despues.p2) || distinto(c.antes.p3, c.despues.p3);
+      return {
+        fila: i + 1,
+        codigo: String(p.codigo),
+        nombre: p.nombre,
+        precio: c.despues.p1,
+        stock: null,
+        categoria: p.categoria_nombre || null,
+        unidad: p.unidad_medida || null,
+        precio_compra: null,
+        stock_minimo: null,
+        descripcion: null,
+        ...(extra ? { precios: { precio_2: c.despues.p2 || null, precio_3: c.despues.p3 || null } } : {}),
+      };
+    });
 }

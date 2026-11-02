@@ -125,3 +125,77 @@
   font-size: 13px;
   text-align: right;
 }
+
+/* Precios de venta nuevos del Excel */
+.pedido-precios {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  background: #fffbeb;
+}
+
+.pedido-precios-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pedido-precios-caja {
+  max-height: 220px;
+  overflow: auto;
+  margin-top: 8px;
+}
+
+.pedido-precios-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pedido-precios-tabla th {
+  text-align: left;
+  font-weight: 700;
+  padding: 4px 6px;
+  border-bottom: 1px solid #f3d27a;
+  white-space: nowrap;
+}
+
+.pedido-precios-tabla td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #fdecc0;
+  white-space: nowrap;
+}
+
+.pedido-precios-tabla td:nth-child(2) {
+  white-space: normal;
+}
+
+.pedido-igual {
+  color: #6b7280;
+}
+
+/* Encabezado de la lista de la compra: qué es cada número. */
+.prov-item-fila.pedido-items-titulos {
+  background: transparent;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pedido-items-hueco {
+  width: 28px;
+}
+
+@media (max-width: 640px) {
+  .prov-item-fila.pedido-items-titulos {
+    display: none;
+  }
+}

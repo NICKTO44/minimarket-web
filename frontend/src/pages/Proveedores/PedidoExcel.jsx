@@ -36,7 +36,8 @@ export function ExportarPedido({ productos, categorias, onCerrar }) {
     setError(null);
     try {
       const { fichas, precios } = await datosExtra();
-      const hoja = hojaPedido(lista, { completo, fichas, precios, sugerir: true });
+      // La cantidad sugerida solo con "bajo stock mínimo"; con todos o una categoría la columna va vacía.
+      const hoja = hojaPedido(lista, { completo, fichas, precios, sugerir: filtro === 'BAJO_MINIMO' });
       const nombre = `Pedido-${completo ? 'completo-' : ''}${hoyLima()}.xlsx`;
       descargarArchivo(escribirLibro([hoja]), nombre, { tipo: TIPO_XLSX });
       onCerrar();
@@ -117,8 +118,9 @@ export function ExportarPedido({ productos, categorias, onCerrar }) {
 }
 
 /**
- * Botón "Cargar desde Excel" dentro de Nueva compra. onCargar(items) recibe
- * los productos para la compra; debajo del botón queda el resumen de lo leído.
+ * Botón "Cargar desde Excel" dentro de Nueva compra. onCargar(items, precios)
+ * recibe los productos para la compra y los precios de venta que cambian;
+ * debajo del botón queda el resumen de lo leído.
  */
 export function CargarPedido({ productos, onCargar }) {
   const entrada = useRef(null);
@@ -130,18 +132,21 @@ export function CargarPedido({ productos, onCargar }) {
     setOcupado(true);
     onAviso(null);
     try {
-      const [filas, { fichas }] = await Promise.all([leerHoja(archivo), datosExtra()]);
-      const r = leerPedido(filas, productos, fichas);
+      const [filas, { fichas, precios }] = await Promise.all([leerHoja(archivo), datosExtra()]);
+      const r = leerPedido(filas, productos, fichas, precios);
       if (r.error) {
         onAviso({ tipo: 'error', texto: r.error });
         return;
       }
-      if (r.items.length === 0 && r.sinReconocer.length === 0 && r.malas.length === 0) {
+      if (r.items.length === 0 && r.precios.length === 0 && r.sinReconocer.length === 0 && r.malas.length === 0) {
         onAviso({ tipo: 'error', texto: 'El Excel no tiene ninguna fila con "Cantidad a pedir".' });
         return;
       }
-      onCargar(r.items);
+      onCargar(r.items, r.precios);
       const partes = [`Se cargaron ${r.items.length} producto${r.items.length === 1 ? '' : 's'}. Revisa cantidades y costos antes de guardar.`];
+      if (r.precios.length > 0) {
+        partes.push(`${r.precios.length} producto${r.precios.length === 1 ? '' : 's'} con precio de venta nuevo (ver abajo).`);
+      }
       if (r.sinCosto > 0) partes.push(`${r.sinCosto} sin costo: escríbelo en la lista.`);
       const lista = (xs) => xs.slice(0, 6).map((x) => `fila ${x.fila} (${x.texto})`).join(', ') + (xs.length > 6 ? `… y ${xs.length - 6} más` : '');
       if (r.sinReconocer.length) partes.push(`No se reconocieron: ${lista(r.sinReconocer)}.`);
@@ -175,6 +180,70 @@ export function CargarPedido({ productos, onCargar }) {
           {aviso.texto}
         </p>
       )}
+    </div>
+  );
+}
+
+const soles = (n) => (n == null ? '—' : Number(n).toFixed(2));
+
+/** Precio de antes -> el nuevo (en negrita si cambia). */
+function Cambio({ antes, despues }) {
+  if (Math.abs(Number(antes || 0) - Number(despues || 0)) < 0.005) return <span className="pedido-igual">{soles(antes)}</span>;
+  return (
+    <span>
+      {soles(antes)} → <strong>{soles(despues)}</strong>
+    </span>
+  );
+}
+
+/**
+ * Lista de los precios de venta que cambian con el Excel, con la casilla para
+ * aplicarlos al registrar la compra.
+ */
+export function PreciosNuevos({ cambios, aplicar, onAplicar }) {
+  if (!cambios?.length) return null;
+  // P2 y P3 solo si alguno de estos productos los tiene.
+  const tresPrecios = cambios.some((c) => c.antes.p2 || c.despues.p2 || c.antes.p3 || c.despues.p3);
+  return (
+    <div className="pedido-precios">
+      <label className="pedido-precios-titulo">
+        <input type="checkbox" checked={aplicar} onChange={(e) => onAplicar(e.target.checked)} />
+        Actualizar también estos precios de venta al registrar la compra ({cambios.length})
+      </label>
+      <div className="pedido-precios-caja">
+        <table className="pedido-precios-tabla">
+          <thead>
+            <tr>
+              <th scope="col">Código</th>
+              <th scope="col">Producto</th>
+              <th scope="col">P1</th>
+              {tresPrecios && <th scope="col">P2</th>}
+              {tresPrecios && <th scope="col">P3</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {cambios.map((c) => (
+              <tr key={c.producto_id}>
+                <td>{c.codigo}</td>
+                <td>{c.nombre}</td>
+                <td>
+                  <Cambio antes={c.antes.p1} despues={c.despues.p1} />
+                </td>
+                {tresPrecios && (
+                  <td>
+                    <Cambio antes={c.antes.p2} despues={c.despues.p2} />
+                  </td>
+                )}
+                {tresPrecios && (
+                  <td>
+                    <Cambio antes={c.antes.p3} despues={c.despues.p3} />
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

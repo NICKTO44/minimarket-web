@@ -7,7 +7,8 @@ import { agruparPorModelo, rangoPrecio } from '../../utils/variantes';
 import FormularioModelo from '../Inventario/FormularioModelo';
 import '../Inventario/Inventario.css';
 import './Proveedores.css';
-import { CargarPedido, ExportarPedido } from './PedidoExcel';
+import { CargarPedido, ExportarPedido, PreciosNuevos } from './PedidoExcel';
+import { filasDePrecios } from '../../utils/pedidoProveedor';
 
 
 const MOTIVOS = [
@@ -24,6 +25,9 @@ const MOTIVOS = [
 // Excel y cargar la compra desde ese Excel.
 export default function Proveedores({ variantes = false, ganancias = false, pedidosExcel = false }) {
   const [exportandoPedido, setExportandoPedido] = useState(false);
+  // Precios de venta nuevos leídos del Excel del pedido y si se aplican al registrar la compra.
+  const [preciosNuevos, setPreciosNuevos] = useState([]);
+  const [aplicarPrecios, setAplicarPrecios] = useState(true);
   const [vista, setVista] = useState('COMPRAS');
   const [proveedores, setProveedores] = useState([]);
   const [compras, setCompras] = useState([]);
@@ -269,9 +273,26 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
       setMostrarNuevaCompra(false);
       setCompraProveedorId('');
       setCompraItems([]);
+      let textoPrecios = '';
+      // Venta en tabla: con la compra ya guardada, los precios de venta nuevos
+      // del Excel (por "Importar productos" -> Actualizar: solo cambia precios).
+      if (pedidosExcel && aplicarPrecios && preciosNuevos.length > 0) {
+        try {
+          const r = await api.productosImportar({
+            filas: filasDePrecios(preciosNuevos, productos),
+            existentes: 'ACTUALIZAR',
+            solo_revisar: false,
+          });
+          textoPrecios = ` Precios de venta actualizados: ${r.actualizados}.`;
+          if (r.errores > 0) textoPrecios += ` ${r.errores} no se pudieron actualizar: revísalos en Productos.`;
+        } catch (e) {
+          textoPrecios = ` Ojo: los precios de venta NO se actualizaron (${e.message}). Cámbialos en Productos.`;
+        }
+      }
+      setPreciosNuevos([]);
       setMensaje({
-        tipo: 'exito',
-        texto: `${respuesta?.message || 'Compra registrada.'} Ahora puedes recibirla cuando llegue la mercadería.`,
+        tipo: textoPrecios.includes('NO se actualizaron') ? 'error' : 'exito',
+        texto: `${respuesta?.message || 'Compra registrada.'} Ahora puedes recibirla cuando llegue la mercadería.${textoPrecios}`,
       });
       cargarTodo();
     } catch (e) {
@@ -740,13 +761,16 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
             {pedidosExcel && (
               <CargarPedido
                 productos={productos}
-                onCargar={(nuevos) => {
+                onCargar={(nuevos, precios) => {
                   // Un producto que ya estaba en la lista toma lo del Excel.
                   setCompraItems((prev) => [...prev.filter((i) => !nuevos.some((n) => n.producto_id === i.producto_id)), ...nuevos]);
+                  setPreciosNuevos(precios || []);
+                  setAplicarPrecios(true);
                   olvidarError();
                 }}
               />
             )}
+            {pedidosExcel && <PreciosNuevos cambios={preciosNuevos} aplicar={aplicarPrecios} onAplicar={setAplicarPrecios} />}
             {variantes && (
               <button className="prov-boton-producto-nuevo prov-boton-tallas" onClick={() => setEligiendoModelo({ buscar: '' })}>
                 👕 Agregar prendas por tallas y colores
@@ -819,6 +843,15 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
               </div>
             )}
             <div className="prov-items-lista">
+              {pedidosExcel && compraItems.length > 0 && (
+                // Qué es cada número de la fila (el costo es el precio de compra, no el de venta).
+                <div className="prov-item-fila pedido-items-titulos" aria-hidden="true">
+                  <span>Producto</span>
+                  <span>Cantidad × Costo c/u</span>
+                  <span>Subtotal</span>
+                  <span className="pedido-items-hueco" />
+                </div>
+              )}
               {compraItems.map((it, idx) => (
                 <div key={idx} className="prov-item-fila">
                   <span>
