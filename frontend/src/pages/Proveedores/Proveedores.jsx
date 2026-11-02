@@ -7,6 +7,7 @@ import { agruparPorModelo, rangoPrecio } from '../../utils/variantes';
 import FormularioModelo from '../Inventario/FormularioModelo';
 import '../Inventario/Inventario.css';
 import './Proveedores.css';
+import { CargarPedido, ExportarPedido } from './PedidoExcel';
 
 
 const MOTIVOS = [
@@ -19,7 +20,10 @@ const MOTIVOS = [
 
 // variantes: módulo "Tallas y colores" (ropa): las prendas se compran por
 // modelo, eligiendo cuánto llega de cada talla y color.
-export default function Proveedores({ variantes = false, ganancias = false }) {
+// pedidosExcel: módulo "Venta en tabla" (Lubricentro): exportar el pedido a
+// Excel y cargar la compra desde ese Excel.
+export default function Proveedores({ variantes = false, ganancias = false, pedidosExcel = false }) {
+  const [exportandoPedido, setExportandoPedido] = useState(false);
   const [vista, setVista] = useState('COMPRAS');
   const [proveedores, setProveedores] = useState([]);
   const [compras, setCompras] = useState([]);
@@ -148,6 +152,13 @@ export default function Proveedores({ variantes = false, ganancias = false }) {
     setCompraProductoSel('');
     setCompraCantidad('');
     setCompraPrecio('');
+    olvidarError();
+  };
+
+  // Lista de la compra (con "Exportar pedido"): cantidad o costo escritos a mano.
+  const cambiarItemCompra = (idx, campo, texto) => {
+    const n = parseFloat(texto);
+    setCompraItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [campo]: Number.isFinite(n) && n >= 0 ? n : 0 } : it)));
     olvidarError();
   };
 
@@ -483,6 +494,7 @@ export default function Proveedores({ variantes = false, ganancias = false }) {
 
   return (
     <div className="prov-layout">
+      {exportandoPedido && <ExportarPedido productos={productos} categorias={categorias} onCerrar={() => setExportandoPedido(false)} />}
       <div className="prov-header">
         <h1>Proveedores</h1>
         <div className="prov-tabs">
@@ -492,6 +504,11 @@ export default function Proveedores({ variantes = false, ganancias = false }) {
         </div>
         {vista === 'COMPRAS' && (
           <button className="prov-boton-nuevo" onClick={abrirNuevaCompra}>+ Nueva compra</button>
+        )}
+        {vista === 'COMPRAS' && pedidosExcel && (
+          <button type="button" className="pedido-boton-exportar" onClick={() => setExportandoPedido(true)}>
+            ⬇ Exportar pedido
+          </button>
         )}
         {vista === 'PROVEEDORES' && (
           <button className="prov-boton-nuevo" onClick={() => {
@@ -720,6 +737,16 @@ export default function Proveedores({ variantes = false, ganancias = false }) {
               <input type="number" placeholder="Precio" value={compraPrecio} onChange={(e) => setCompraPrecio(e.target.value)} />
               <button onClick={agregarItemCompra}>+ Agregar</button>
             </div>
+            {pedidosExcel && (
+              <CargarPedido
+                productos={productos}
+                onCargar={(nuevos) => {
+                  // Un producto que ya estaba en la lista toma lo del Excel.
+                  setCompraItems((prev) => [...prev.filter((i) => !nuevos.some((n) => n.producto_id === i.producto_id)), ...nuevos]);
+                  olvidarError();
+                }}
+              />
+            )}
             {variantes && (
               <button className="prov-boton-producto-nuevo prov-boton-tallas" onClick={() => setEligiendoModelo({ buscar: '' })}>
                 👕 Agregar prendas por tallas y colores
@@ -798,7 +825,35 @@ export default function Proveedores({ variantes = false, ganancias = false }) {
                     {it.codigo && <span className="prov-codigo">{it.codigo}</span>}
                     {it.nombre}
                   </span>
-                  <span>{it.cantidad} x S/{it.precio_compra.toFixed(2)}</span>
+                  {pedidosExcel ? (
+                    // Lo cargado desde Excel se revisa aquí mismo: cantidad y costo editables.
+                    <span className="pedido-item-editable">
+                      {/* Se aplica al salir del campo, así se pueden escribir decimales (37.50). */}
+                      <input
+                        key={`c-${it.producto_id}-${it.cantidad}`}
+                        type="number"
+                        min="0"
+                        step="any"
+                        inputMode="decimal"
+                        aria-label={`Cantidad de ${it.nombre}`}
+                        defaultValue={it.cantidad}
+                        onBlur={(e) => cambiarItemCompra(idx, 'cantidad', e.target.value)}
+                      />
+                      × S/
+                      <input
+                        key={`p-${it.producto_id}-${it.precio_compra}`}
+                        type="number"
+                        min="0"
+                        step="any"
+                        inputMode="decimal"
+                        aria-label={`Costo de ${it.nombre}`}
+                        defaultValue={it.precio_compra}
+                        onBlur={(e) => cambiarItemCompra(idx, 'precio_compra', e.target.value)}
+                      />
+                    </span>
+                  ) : (
+                    <span>{it.cantidad} x S/{it.precio_compra.toFixed(2)}</span>
+                  )}
                   <span>S/ {(it.cantidad * it.precio_compra).toFixed(2)}</span>
                   <button onClick={() => quitarItemCompra(idx)}>🗑</button>
                 </div>

@@ -1,0 +1,170 @@
+// Módulo "Venta en tabla" (Lubricentro): pedido a proveedor por Excel.
+// 1) Exportar: los productos con su código interno (y, en el completo,
+//    stock, costo y P1/P2/P3) y una columna "Cantidad a pedir".
+// 2) Cargar: ese mismo Excel con las cantidades llena la "Nueva compra".
+// No guarda nada por sí solo: la compra se registra y se recibe como
+// siempre (Proveedores -> Nueva compra -> Recibir).
+import { leerNumero, normalizar } from './importacion';
+import { claveCodigo } from './repuestos';
+import { seVendeFraccionado } from './medidas';
+import { etiquetaUnidad } from './unidades';
+
+export const FILTROS_PEDIDO = [
+  { valor: 'BAJO_MINIMO', label: 'Solo los que están en el stock mínimo o debajo' },
+  { valor: 'TODOS', label: 'Todos los productos' },
+  { valor: 'CATEGORIA', label: 'Una categoría' },
+];
+
+const controlaStock = (p) => p.controla_stock !== false;
+export const estaBajoMinimo = (p) => controlaStock(p) && Number(p.stock_minimo) > 0 && Number(p.stock) <= Number(p.stock_minimo);
+
+/** Cuánto pedir de un producto bajo el mínimo: lo que falta para llegar a él (al menos 1). */
+export function cantidadSugerida(p) {
+  const falta = Number(p.stock_minimo || 0) - Number(p.stock || 0);
+  const n = seVendeFraccionado(p.unidad_medida) ? Math.round(falta * 1000) / 1000 : Math.ceil(falta);
+  return Math.max(n, 1);
+}
+
+/** Los productos que entran al pedido, ordenados por categoría y nombre. */
+export function productosDelPedido(productos, { filtro, categoriaId }) {
+  return productos
+    .filter((p) => (filtro === 'BAJO_MINIMO' ? estaBajoMinimo(p) : filtro === 'CATEGORIA' ? String(p.categoria_id) === String(categoriaId) : true))
+    .sort(
+      (a, b) =>
+        String(a.categoria_nombre || '').localeCompare(String(b.categoria_nombre || ''), 'es') ||
+        String(a.nombre).localeCompare(String(b.nombre), 'es')
+    );
+}
+
+const COLUMNAS_PROVEEDOR = ['Código', 'N.° de parte', 'Marca', 'Producto', 'Aplicación', 'Unidad', 'Cantidad a pedir', 'Precio unitario'];
+const COLUMNAS_COMPLETO = [
+  'Código', 'N.° de parte', 'Marca', 'Producto', 'Aplicación', 'Categoría', 'Unidad',
+  'Stock', 'Stock mínimo', 'Costo actual', 'P1 Público', 'P2 Tienda', 'P3 Mayor', 'Cantidad a pedir', 'Costo nuevo',
+];
+
+/**
+ * Las hojas del Excel (para escribirLibro). completo = con stock, costos y
+ * P1/P2/P3 (para el negocio); si no, solo lo que necesita el proveedor.
+ * fichas: Map producto_id -> ficha del repuesto; precios: Map -> { precio_2, precio_3 }.
+ */
+export function hojaPedido(lista, { completo, fichas, precios, sugerir }) {
+  const numero = (n) => (Number(n) > 0 ? Number(n) : '');
+  const filas = lista.map((p) => {
+    const ficha = fichas?.get(p.id);
+    const cantidad = sugerir && estaBajoMinimo(p) ? cantidadSugerida(p) : '';
+    const comunes = [String(p.codigo || ''), ficha?.numero_parte || '', ficha?.marca || '', p.nombre, p.descripcion || ''];
+    if (!completo) return [...comunes, etiquetaUnidad(p.unidad_medida), cantidad, ''];
+    const extra = precios?.get(p.id);
+    return [
+      ...comunes,
+      p.categoria_nombre || '',
+      etiquetaUnidad(p.unidad_medida),
+      controlaStock(p) ? Number(p.stock) : '',
+      controlaStock(p) ? Number(p.stock_minimo) : '',
+      numero(p.precio_compra),
+      numero(p.precio),
+      numero(extra?.precio_2),
+      numero(extra?.precio_3),
+      cantidad,
+      '',
+    ];
+  });
+  return completo
+    ? { nombre: 'Pedido', filas: [COLUMNAS_COMPLETO, ...filas], anchos: [14, 15, 14, 42, 38, 18, 10, 8, 12, 12, 11, 11, 11, 16, 13], soles: [9, 10, 11, 12, 14] }
+    : { nombre: 'Pedido', filas: [COLUMNAS_PROVEEDOR, ...filas], anchos: [14, 15, 14, 42, 38, 10, 16, 15], soles: [7] };
+}
+
+// Títulos que se reconocen al cargar (ya normalizados).
+const TITULOS = {
+  codigo: ['codigo', 'codigointerno', 'cod', 'sku', 'referencia'],
+  parte: ['ndeparte', 'nodeparte', 'numerodeparte', 'nparte', 'partnumber', 'proveedor'],
+  cantidad: ['cantidadapedir', 'cantidadpedida', 'cantidad', 'cant', 'pedido', 'apedir'],
+  costoNuevo: ['costonuevo', 'preciounitario', 'preciodecompra', 'preciocompra', 'costo', 'costounitario'],
+  costoActual: ['costoactual'],
+};
+
+function columnas(titulos) {
+  const claves = titulos.map(normalizar);
+  const col = {};
+  for (const [campo, nombres] of Object.entries(TITULOS)) {
+    for (const nombre of nombres) {
+      const i = claves.findIndex((c, idx) => c === nombre && !Object.values(col).includes(idx));
+      if (i >= 0) {
+        col[campo] = i;
+        break;
+      }
+    }
+  }
+  return col;
+}
+
+/**
+ * Lee el Excel del pedido (filas de leerHoja) y arma los productos de la
+ * compra. Devuelve { items, sinReconocer: [{ fila, texto }], malas: [{ fila, texto }], sinCosto }
+ * o { error }.
+ */
+export function leerPedido(filas, productos, fichas) {
+  const inicio = filas.slice(0, 15).findIndex((f) => {
+    const c = columnas(f || []);
+    return c.cantidad !== undefined && (c.codigo !== undefined || c.parte !== undefined);
+  });
+  if (inicio < 0) {
+    return { error: 'No se encontraron las columnas "Código" y "Cantidad a pedir". Usa el Excel de "Exportar pedido".' };
+  }
+  const col = columnas(filas[inicio]);
+  const porCodigo = new Map(productos.map((p) => [String(p.codigo || '').trim().toLowerCase(), p]));
+  const porParte = new Map();
+  for (const p of productos) {
+    const clave = claveCodigo(fichas?.get(p.id)?.numero_parte || '');
+    if (clave.length < 2) continue;
+    porParte.set(clave, porParte.has(clave) ? null : p); // repetido = no se usa
+  }
+
+  const items = new Map();
+  const sinReconocer = [];
+  const malas = [];
+  let sinCosto = 0;
+  filas.slice(inicio + 1).forEach((fila, i) => {
+    const numeroFila = inicio + i + 2;
+    const texto = (c) => (c === undefined ? '' : String(fila?.[c] ?? '').trim());
+    const cantidadTexto = texto(col.cantidad);
+    if (!cantidadTexto) return; // sin cantidad: no se pide
+    const codigo = texto(col.codigo);
+    const parte = texto(col.parte);
+    const producto = porCodigo.get(codigo.toLowerCase()) || (parte ? porParte.get(claveCodigo(parte)) : null);
+    if (!producto) {
+      sinReconocer.push({ fila: numeroFila, texto: codigo || parte || '(sin código)' });
+      return;
+    }
+    const cantidad = leerNumero(cantidadTexto);
+    if (cantidad === 0) return;
+    const entera = !seVendeFraccionado(producto.unidad_medida);
+    if (cantidad == null || !(cantidad > 0) || cantidad > 1_000_000 || (entera && !Number.isInteger(cantidad))) {
+      malas.push({ fila: numeroFila, texto: `${producto.codigo}: la cantidad "${cantidadTexto}" no es válida` });
+      return;
+    }
+    const nuevo = leerNumero(texto(col.costoNuevo));
+    const actual = leerNumero(texto(col.costoActual));
+    if (nuevo != null && nuevo < 0) {
+      malas.push({ fila: numeroFila, texto: `${producto.codigo}: el costo no puede ser negativo` });
+      return;
+    }
+    const costo = nuevo > 0 ? nuevo : actual > 0 ? actual : Number(producto.precio_compra) > 0 ? Number(producto.precio_compra) : 0;
+    const previo = items.get(producto.id);
+    if (previo) {
+      // El mismo producto en dos filas: se suman (con el último costo escrito).
+      previo.cantidad = Math.round((previo.cantidad + cantidad) * 1000) / 1000;
+      if (nuevo > 0) previo.precio_compra = Math.round(nuevo * 10000) / 10000;
+      return;
+    }
+    if (!(costo > 0)) sinCosto += 1;
+    items.set(producto.id, {
+      producto_id: producto.id,
+      codigo: producto.codigo,
+      nombre: producto.nombre,
+      cantidad,
+      precio_compra: Math.round(costo * 10000) / 10000,
+    });
+  });
+  return { items: [...items.values()], sinReconocer, malas, sinCosto };
+}

@@ -684,7 +684,11 @@ function App() {
         )}
         {pantallaVisible === 'STOCK' && <StockLotes esAdmin={usuarioActual?.rol_id === 1} />}
         {pantallaVisible === 'PROVEEDORES' && (
-          <Proveedores variantes={negocio.modulos.includes(MODULO_VARIANTES)} ganancias={negocio.modulos.includes(MODULO_GANANCIAS)} />
+          <Proveedores
+            variantes={negocio.modulos.includes(MODULO_VARIANTES)}
+            ganancias={negocio.modulos.includes(MODULO_GANANCIAS)}
+            pedidosExcel={negocio.modulos.includes(MODULO_VENTA_TABLA)}
+          />
         )}
         {pantallaVisible === 'DEVOLUCIONES' && (
           <Devoluciones
