@@ -30,6 +30,8 @@ import FichaRepuesto from './FichaRepuesto';
 import { esRespaldoLavanderia } from '../../utils/textosEncargos';
 import PreciosVentaCampos, { PreciosCelda } from './PreciosVentaCampos';
 import { useFormPreciosVenta } from '../../utils/tresPrecios';
+import FichaLibro from './FichaLibro';
+import { resumenLibro, textoLibro, useFormLibro, valoresDe } from '../../utils/libros';
 import { coincidenTodas, palabrasDeBusqueda } from '../../utils/repuestos';
 import {
   FICHA_REPUESTO_VACIA,
@@ -155,6 +157,8 @@ export default function Inventario({
   fichaMedicamento = false,
   // Módulo "3 precios de venta": Precio 2 y 3 en el formulario.
   tresPrecios = false,
+  // Librería: ficha del libro (autor, editorial, serie, año, edición).
+  fichaLibro = false,
   // Lubricentro / Repuestos: ficha del repuesto (marca, n.° de parte,
   // códigos alternos, ubicación, garantía) y vehículos compatibles.
   fichaRepuesto = false,
@@ -162,6 +166,7 @@ export default function Inventario({
 }) {
   const conOpcionesVenta = presentaciones || precioMayor;
   const preciosVenta = useFormPreciosVenta(tresPrecios);
+  const libro = useFormLibro(fichaLibro);
   // producto_id -> ficha del repuesto / [compatibilidades] (solo con sus módulos).
   const [repuestos, setRepuestos] = useState(() => new Map());
   const [compatibilidades, setCompatibilidades] = useState(() => new Map());
@@ -304,7 +309,9 @@ export default function Inventario({
           // Lubricentro: por palabras ("trapecio aveo", "SAIL.") en nombre, código,
           // descripción (el vehículo), marca o n.° de parte.
           ((fichaRepuesto || compatibilidad) &&
-            coincidenTodas(palabrasDeBusqueda(q), p.nombre, p.codigo, p.descripcion, fichaRepuesto && resumenRepuesto(repuestos.get(p.id))))
+            coincidenTodas(palabrasDeBusqueda(q), p.nombre, p.codigo, p.descripcion, fichaRepuesto && resumenRepuesto(repuestos.get(p.id)))) ||
+          // Librería: por palabras en título, código (ISBN), autor, editorial o serie.
+          (fichaLibro && coincidenTodas(palabrasDeBusqueda(q), p.nombre, p.codigo, textoLibro(libro.mapa.get(p.id))))
       );
     }
     if (filtroCategoria) {
@@ -318,7 +325,7 @@ export default function Inventario({
     }
     return lista;
   }, [productos, desactivados, verDesactivados, busqueda, filtroCategoria, soloStockBajo, soloSinPrecio, fichaMedicamento, fichas,
-      fichaRepuesto, repuestos, compatibilidad, compatibilidades]);
+      fichaRepuesto, repuestos, compatibilidad, compatibilidades, fichaLibro, libro.mapa]);
 
   // Marcas de repuesto y vehículos ya usados, para sugerirlos al escribir.
   const marcasRepuesto = useMemo(
@@ -376,6 +383,7 @@ export default function Inventario({
     setRepuestoForm(FICHA_REPUESTO_VACIA);
     setRepuestoOriginal(JSON.stringify(FICHA_REPUESTO_VACIA));
     preciosVenta.abrir(null);
+    libro.abrir(null);
     setCompatForm([]);
     setCompatOriginal('[]');
     setOpcionesVenta(OPCIONES_VACIAS);
@@ -449,6 +457,7 @@ export default function Inventario({
     setRepuestoForm(camposRepuesto);
     setRepuestoOriginal(JSON.stringify(camposRepuesto));
     preciosVenta.abrir(p.id);
+    libro.abrir(p.id);
     const filasCompat = compatibilidadesAFormulario(compatibilidades.get(p.id));
     setCompatForm(filasCompat);
     setCompatOriginal(JSON.stringify(filasCompat));
@@ -634,6 +643,11 @@ export default function Inventario({
       setMensaje({ tipo: 'error', texto: compatAGuardar.error });
       return;
     }
+    const libroAGuardar = libro.paraGuardar();
+    if (libroAGuardar?.error) {
+      setMensaje({ tipo: 'error', texto: libroAGuardar.error });
+      return;
+    }
     const preciosAGuardar = preciosVenta.paraGuardar();
     if (preciosAGuardar?.error) {
       setMensaje({ tipo: 'error', texto: preciosAGuardar.error });
@@ -774,6 +788,21 @@ export default function Inventario({
           setMensaje({
             tipo: 'error',
             texto: `Producto guardado, pero no se pudieron guardar su Precio 2 y Precio 3 (${e.message}). Toca Guardar para intentarlo de nuevo.`,
+          });
+          cargarTodo();
+          return;
+        }
+      }
+
+      // Ficha del libro (solo si cambió).
+      if (libroAGuardar && idParaImagen) {
+        try {
+          await libro.guardar(idParaImagen, libroAGuardar);
+        } catch (e) {
+          setEditandoId(idParaImagen);
+          setMensaje({
+            tipo: 'error',
+            texto: `Producto guardado, pero no se pudo guardar su ficha de libro (${e.message}). Toca Guardar para intentarlo de nuevo.`,
           });
           cargarTodo();
           return;
@@ -1065,6 +1094,9 @@ export default function Inventario({
                       {fichaRepuesto && repuestos.has(p.id) && (
                         <span className="inv-ficha-resumen">{resumenRepuesto(repuestos.get(p.id))}</span>
                       )}
+                      {fichaLibro && libro.mapa.has(p.id) && (
+                        <span className="inv-ficha-resumen">📖 {resumenLibro(libro.mapa.get(p.id))}</span>
+                      )}
                       {compatibilidad && compatibilidades.get(p.id)?.length > 0 && (
                         <span className="inv-ficha-resumen" title={compatibilidades.get(p.id).map(textoCompatibilidad).join('\n')}>
                           🚗 {textoCompatibilidad(compatibilidades.get(p.id)[0])}
@@ -1126,6 +1158,7 @@ export default function Inventario({
           fichaRepuesto={fichaRepuesto}
           compatibilidad={compatibilidad}
           tresPrecios={tresPrecios}
+          fichaLibro={fichaLibro}
           onCerrar={() => setImportando(false)}
           onTerminado={(resultado) => {
             setImportando(false);
@@ -1136,6 +1169,7 @@ export default function Inventario({
               }.`,
             });
             cargarTodo();
+            if (fichaLibro) libro.recargar();
           }}
         />
       )}
@@ -1377,6 +1411,15 @@ export default function Inventario({
             )}
 
             {tresPrecios && <PreciosVentaCampos campos={preciosVenta.campos} onCambiar={preciosVenta.setCampos} />}
+
+            {fichaLibro && (
+              <FichaLibro
+                campos={libro.campos}
+                onCambiar={libro.setCampos}
+                editoriales={valoresDe(libro.mapa, 'editorial')}
+                autores={valoresDe(libro.mapa, 'autor')}
+              />
+            )}
 
             {form.lleva_vencimiento && !editandoId && (!servicios || form.controla_stock) && (
               <div className="inv-lote-caja">

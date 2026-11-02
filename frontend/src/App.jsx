@@ -72,6 +72,7 @@ import {
   MODULO_COMPATIBILIDAD,
   MODULO_TRES_PRECIOS,
   MODULO_VENTA_TABLA,
+  MODULO_FICHA_LIBRO,
   MODULO_VEHICULOS,
   MODULO_ORDENES_SERVICIO,
   MODULO_PAQUETES,
@@ -635,6 +636,7 @@ function App() {
               compatibilidad={negocio.modulos.includes(MODULO_COMPATIBILIDAD)}
               tresPrecios={negocio.modulos.includes(MODULO_TRES_PRECIOS)}
               ventaTabla={negocio.modulos.includes(MODULO_VENTA_TABLA)}
+              fichaLibro={negocio.modulos.includes(MODULO_FICHA_LIBRO)}
               vehiculos={negocio.modulos.includes(MODULO_VEHICULOS)}
               paquetes={negocio.modulos.includes(MODULO_PAQUETES)}
               ordenACargar={negocio.modulos.includes(MODULO_ORDENES_SERVICIO) ? ordenACargar : null}
@@ -677,6 +679,7 @@ function App() {
             fichaRepuesto={negocio.modulos.includes(MODULO_FICHA_REPUESTO)}
             compatibilidad={negocio.modulos.includes(MODULO_COMPATIBILIDAD)}
             tresPrecios={negocio.modulos.includes(MODULO_TRES_PRECIOS)}
+            fichaLibro={negocio.modulos.includes(MODULO_FICHA_LIBRO)}
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS)}
             verSinPrecio={productosSinPrecio}
             onSinPrecioVisto={() => setProductosSinPrecio(false)}
@@ -801,6 +804,7 @@ function App() {
           <Reportes
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS) && usuarioActual?.rol_id === 1}
             costeo={negocio.rubro === 'RESTAURANTE' && negocio.modulos.includes(MODULO_COSTEO) && usuarioActual?.rol_id === 1}
+            editoriales={negocio.modulos.includes(MODULO_FICHA_LIBRO)}
             metodoInicial={metodoReporte}
             onFiltroUsado={() => setMetodoReporte(null)}
             onVerSinPrecio={() => {

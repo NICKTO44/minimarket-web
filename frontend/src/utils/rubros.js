@@ -4,7 +4,7 @@
 // arrancan encendidos, qué unidades se sugieren y cómo se llaman algunas
 // pantallas ("Carta" en vez de "Productos" en un restaurante).
 // Debe coincidir con backend/src/handlers/rubros.rs.
-import { Axe, CakeSlice, Hammer, Pill, Shirt, ShoppingBasket, Smartphone, Store, UtensilsCrossed, WashingMachine, Wrench } from 'lucide-react';
+import { Axe, BookOpen, CakeSlice, Hammer, Pill, Shirt, ShoppingBasket, Smartphone, Store, UtensilsCrossed, WashingMachine, Wrench } from 'lucide-react';
 import { UNIDADES_CLASICAS } from './unidades';
 import { TEXTOS_ENCARGOS_LAVANDERIA } from './textosEncargos';
 
@@ -38,6 +38,8 @@ export const MODULO_COMPATIBILIDAD = 'COMPATIBILIDAD';
 export const MODULO_TRES_PRECIOS = 'TRES_PRECIOS';
 // Lubricentro: punto de venta en tabla (buscador con lista y una fila por producto).
 export const MODULO_VENTA_TABLA = 'VENTA_TABLA';
+// Librería: autor, editorial, serie, año y edición de los libros; búsqueda y filtro por editorial.
+export const MODULO_FICHA_LIBRO = 'FICHA_LIBRO';
 // Lubricentro: vehículos de los clientes, placa y kilometraje en la venta.
 export const MODULO_VEHICULOS = 'VEHICULOS';
 // Lubricentro: órdenes de servicio, mecánicos y comisiones. Necesita Vehículos.
@@ -196,6 +198,12 @@ export const MODULOS = [
     descripcion:
       'El punto de venta como tabla, igual que un sistema de facturación: buscas el producto, entra como una fila con marca, categoría, unidad, cantidad, costo, precio sin IGV, precio y descuento por producto, y abajo el subtotal, el descuento y el total.',
     rubros: ['LUBRICENTRO'],
+  },
+  {
+    valor: MODULO_FICHA_LIBRO,
+    label: 'Ficha del libro',
+    descripcion:
+      'Autor, editorial, serie o colección, año y edición de cada libro. En el punto de venta lo encuentras por título, autor, editorial o ISBN (escaneado) y filtras por editorial; también ves las ventas por editorial. Se cargan desde Excel.',
   },
   {
     valor: MODULO_VEHICULOS,
@@ -393,6 +401,16 @@ export const RUBROS = [
     etiquetas: {
       sinStock: 'Es un servicio (mano de obra, instalación, revisión): se vende sin controlar stock',
     },
+  },
+  {
+    valor: 'LIBRERIA',
+    label: 'Librería',
+    descripcion:
+      'Libros, útiles escolares y de oficina: búsqueda por título, autor, editorial o ISBN, venta por docena o ciento, listas escolares cotizadas, fotocopias e impresiones, y precio por mayor.',
+    Icono: BookOpen,
+    modulos: [MODULO_SERVICIOS, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR, MODULO_FICHA_LIBRO],
+    unidades: ['UNIDAD', 'PAQUETE', 'CAJA', 'DOCENA', 'CIENTO', 'MILLAR', 'PLIEGO', 'JUEGO', 'ROLLO', 'BOLSA', 'SOBRE', 'PIEZA', 'METRO'],
+    etiquetas: {},
   },
   {
     valor: RUBRO_GENERAL,

@@ -200,6 +200,12 @@ export const api = {
   repuestoQuitar: (id) => request(`/productos/${id}/repuesto`, { method: 'DELETE' }),
   // Módulo "3 precios de venta": Precio 2 y 3 de cada producto.
   preciosVenta: () => request('/precios-venta'),
+  // Librería: ficha del libro (autor, editorial, serie, año, edición) y ventas por editorial.
+  librosFichas: () => request('/libros/fichas'),
+  libroGuardar: (id, ficha) => request(`/productos/${id}/libro`, { method: 'PUT', body: JSON.stringify(ficha) }),
+  libroQuitar: (id) => request(`/productos/${id}/libro`, { method: 'DELETE' }),
+  librosVentasPorEditorial: (fechaInicio, fechaFin) =>
+    request(`/libros/ventas-por-editorial?fecha_inicio=${encodeURIComponent(fechaInicio)}&fecha_fin=${encodeURIComponent(fechaFin)}`),
   preciosVentaGuardar: (id, precios) => request(`/productos/${id}/precios-venta`, { method: 'PUT', body: JSON.stringify(precios) }),
   compatibilidades: () => request('/repuestos/compatibilidades'),
   compatibilidadGuardar: (id, lista) =>

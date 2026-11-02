@@ -19,6 +19,8 @@ const TITULOS_FICHA = ['Principio activo', 'Concentración', 'Forma farmacéutic
 // Lubricentro: ficha del repuesto y vehículos compatibles.
 const TITULOS_REPUESTO = ['Marca', 'N.° de parte', 'Códigos alternos', 'Ubicación', 'Garantía (días)'];
 const TITULOS_COMPATIBILIDAD = ['Compatible con'];
+// Librería: ficha del libro (el ISBN va en la columna Código).
+const TITULOS_LIBRO = ['Autor', 'Editorial', 'Serie', 'Año', 'Edición'];
 
 const soles = (n) => (n == null ? '—' : `S/ ${n.toFixed(2)}`);
 // "2027-12-31" -> "31/12/2027"
@@ -34,8 +36,10 @@ export default function ImportarProductos({
   fichaRepuesto = false,
   compatibilidad = false,
   tresPrecios = false,
+  // Librería: columnas Autor, Editorial, Serie, Año y Edición.
+  fichaLibro = false,
 }) {
-  const CAMPOS = camposImportacion({ ficha: fichaMedicamento, repuesto: fichaRepuesto, compatibilidad, tresPrecios });
+  const CAMPOS = camposImportacion({ ficha: fichaMedicamento, repuesto: fichaRepuesto, compatibilidad, tresPrecios, libro: fichaLibro });
   const OBLIGATORIOS = CAMPOS.filter((c) => c.obligatorio);
   const [paso, setPaso] = useState('ARCHIVO');
   const [ocupado, setOcupado] = useState(false);
@@ -181,12 +185,14 @@ export default function ImportarProductos({
       ...(fichaMedicamento ? TITULOS_FICHA : []),
       ...(fichaRepuesto ? TITULOS_REPUESTO : []),
       ...(compatibilidad ? TITULOS_COMPATIBILIDAD : []),
+      ...(fichaLibro ? TITULOS_LIBRO : []),
     ];
     const anchos = [
       16, 36, 30, 18, 12, 15, 16, 10, 13, 12, 14,
       ...(fichaMedicamento ? [24, 14, 20, 20, 18, 22, 11] : []),
       ...(fichaRepuesto ? [16, 18, 30, 16, 14] : []),
       ...(compatibilidad ? [44] : []),
+      ...(fichaLibro ? [30, 20, 20, 8, 16] : []),
     ];
     descargarArchivo(escribirXlsx([titulos], { anchos }), 'Plantilla-productos.xlsx', { tipo: TIPO_XLSX });
   };

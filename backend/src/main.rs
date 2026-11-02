@@ -232,6 +232,13 @@ async fn main() {
         // Lubricentro / Repuestos (handlers/repuestos.rs).
         .route("/repuestos/fichas", get(handlers::repuestos::todas))
         .route("/repuestos/compatibilidades", get(handlers::compatibilidad::todas))
+        // Librería: ficha del libro y ventas por editorial (handlers/libros.rs).
+        .route("/libros/fichas", get(handlers::libros::todas))
+        .route("/libros/ventas-por-editorial", get(handlers::libros::ventas_por_editorial))
+        .route(
+            "/productos/:id/libro",
+            axum::routing::put(handlers::libros::guardar).delete(handlers::libros::quitar),
+        )
         // Módulo "3 precios de venta" (handlers/precios_venta.rs).
         .route("/precios-venta", get(handlers::precios_venta::todos))
         .route("/productos/:id/precios-venta", axum::routing::put(handlers::precios_venta::guardar))

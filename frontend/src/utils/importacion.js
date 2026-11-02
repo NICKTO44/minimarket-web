@@ -49,14 +49,24 @@ export const CAMPOS_TRES_PRECIOS = [
   { valor: 'precio_3', label: 'Precio 3', tresPrecios: true },
 ];
 
+/** Librería: ficha del libro (módulo "Ficha del libro"). El ISBN va como Código. */
+export const CAMPOS_LIBRO = [
+  { valor: 'libro_autor', label: 'Autor', libro: true },
+  { valor: 'libro_editorial', label: 'Editorial', libro: true },
+  { valor: 'libro_serie', label: 'Serie o colección', libro: true },
+  { valor: 'libro_anio', label: 'Año', libro: true },
+  { valor: 'libro_edicion', label: 'Edición', libro: true },
+];
+
 /** Los campos que se pueden elegir en este negocio. */
-export function camposImportacion({ ficha = false, repuesto = false, compatibilidad = false, tresPrecios = false } = {}) {
+export function camposImportacion({ ficha = false, repuesto = false, compatibilidad = false, tresPrecios = false, libro = false } = {}) {
   return [
     ...CAMPOS,
     ...(ficha ? CAMPOS_FICHA : []),
     ...(repuesto ? CAMPOS_REPUESTO : []),
     ...(compatibilidad ? CAMPOS_COMPATIBILIDAD : []),
     ...(tresPrecios ? CAMPOS_TRES_PRECIOS : []),
+    ...(libro ? CAMPOS_LIBRO : []),
   ];
 }
 
@@ -98,6 +108,12 @@ const NOMBRES = {
   // Módulo "3 precios de venta" (solo si el negocio lo tiene).
   precio_2: ['precio2', 'precio02', 'preciodos', 'p2', 'precioventa2', 'pventa2'],
   precio_3: ['precio3', 'precio03', 'preciotres', 'p3', 'precioventa3', 'pventa3'],
+  // Librería (solo si el negocio tiene la ficha del libro).
+  libro_autor: ['autor', 'autores', 'autora', 'escritor', 'autordellibro'],
+  libro_editorial: ['editorial', 'sello', 'selloeditorial', 'casaeditorial'],
+  libro_serie: ['serie', 'saga', 'coleccion'],
+  libro_anio: ['ano', 'anio', 'anodepublicacion', 'anopublicacion', 'anodeedicion', 'publicacion'],
+  libro_edicion: ['edicion'],
   // Farmacia (solo se usan si el negocio tiene la ficha del medicamento).
   principio_activo: ['principioactivo', 'principio', 'dci', 'nombregenerico', 'denominacioncomuninternacional', 'sustancia', 'compuesto'],
   concentracion: ['concentracion', 'conc', 'dosis', 'potencia', 'mg'],
@@ -118,6 +134,13 @@ function campoParecido(clave, permitidos = new Set()) {
   // una columna "Código alterno" sigue leyéndose como antes).
   const lubricentro = (campo) => (permitidos.has(campo) ? campo : null);
   if (clave.includes('venc') || clave.includes('vcto') || clave.includes('caduc') || clave.includes('expir')) return 'vencimiento';
+  // Librería: el ISBN es el código y el título es el nombre.
+  if (permitidos.has('libro_autor')) {
+    if (clave.includes('isbn')) return 'codigo';
+    if (clave === 'titulo' || clave === 'titulodellibro' || clave === 'obra') return 'nombre';
+    if (clave.includes('autor')) return 'libro_autor';
+    if (clave.includes('editorial')) return 'libro_editorial';
+  }
   if (clave.includes('lote') && !clave.includes('cant') && !clave.includes('stock')) return 'lote';
   const alterno = clave.includes('alterno') || clave.includes('equivalen') || clave.includes('reemplaz');
   if (alterno && lubricentro('codigos_alternos')) return 'codigos_alternos';
@@ -342,6 +365,20 @@ function repuestoDeFila(fila, texto, columna) {
   return salida;
 }
 
+// Librería: ficha del libro de una fila, solo si el archivo trae alguna de sus columnas.
+function libroDeFila(fila, texto, columna) {
+  if (!CAMPOS_LIBRO.some((c) => columna[c.valor] !== undefined)) return {};
+  return {
+    libro: {
+      autor: texto(fila, 'libro_autor') || null,
+      editorial: texto(fila, 'libro_editorial') || null,
+      serie: texto(fila, 'libro_serie') || null,
+      anio: texto(fila, 'libro_anio') || null,
+      edicion: texto(fila, 'libro_edicion') || null,
+    },
+  };
+}
+
 // "3 precios de venta": Precio 2 y 3 de una fila, solo si el archivo trae esas columnas.
 function preciosDeFila(fila, numero, columna) {
   if (columna.precio_2 === undefined && columna.precio_3 === undefined) return {};
@@ -383,6 +420,7 @@ export function armarFilas(filas, filaTitulos, mapa) {
       ...fichaDeFila(fila, texto, columna),
       ...repuestoDeFila(fila, texto, columna),
       ...preciosDeFila(fila, numero, columna),
+      ...libroDeFila(fila, texto, columna),
     });
   });
   return { filas: salida, unidadesRaras };

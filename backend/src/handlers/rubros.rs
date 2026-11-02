@@ -79,6 +79,9 @@ pub const MODULO_TRES_PRECIOS: &str = "TRES_PRECIOS";
 /// Lubricentro: punto de venta en tabla (buscador con lista, una fila por
 /// producto). Solo cambia la pantalla: el cobro y la venta son los de siempre.
 pub const MODULO_VENTA_TABLA: &str = "VENTA_TABLA";
+/// Librería: autor, editorial, serie, año y edición de los libros, para
+/// buscarlos y filtrarlos en el punto de venta (handlers/libros.rs).
+pub const MODULO_FICHA_LIBRO: &str = "FICHA_LIBRO";
 /// Lubricentro: vehículos de los clientes (placa), kilometraje y próximo
 /// cambio en la venta, historial por placa y recordatorios
 /// (handlers/vehiculos.rs).
@@ -156,6 +159,7 @@ const MODULOS: &[&str] = &[
     MODULO_COMPATIBILIDAD,
     MODULO_TRES_PRECIOS,
     MODULO_VENTA_TABLA,
+    MODULO_FICHA_LIBRO,
     MODULO_VEHICULOS,
     MODULO_ORDENES_SERVICIO,
     MODULO_PAQUETES,
@@ -237,6 +241,14 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
         RUBRO_TECNOLOGIA,
         &[MODULO_SERVICIOS, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_PRECIO_MAYOR, MODULO_REPARACIONES],
         &["UNIDAD", "PAQUETE", "CAJA", "PAR", "JUEGO", "METRO", "ROLLO", "PIEZA"],
+    ),
+    (
+        "LIBRERIA",
+        &[MODULO_SERVICIOS, MODULO_COTIZACIONES, MODULO_CREDITO, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR, MODULO_FICHA_LIBRO],
+        &[
+            "UNIDAD", "PAQUETE", "CAJA", "DOCENA", "CIENTO", "MILLAR", "PLIEGO", "JUEGO", "ROLLO", "BOLSA", "SOBRE", "PIEZA",
+            "METRO",
+        ],
     ),
     (RUBRO_GENERAL, &[], &[]),
 ];

@@ -1,0 +1,25 @@
+/* Librería: ventas por editorial. Prefijo ved-. */
+.ved { display: flex; flex-direction: column; gap: 14px; }
+.ved-filtros { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.ved-rangos { display: flex; gap: 6px; flex-wrap: wrap; }
+.ved-rangos button, .ved-excel {
+  min-height: 38px; padding: 0 14px; border: 1px solid #d5d8de; border-radius: 8px;
+  background: #fff; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+}
+.ved-excel { margin-left: auto; border-color: var(--color-primario); color: var(--color-primario); }
+.ved-excel:disabled { opacity: 0.5; cursor: not-allowed; }
+.ved-fecha { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #6b7280; }
+.ved-fecha input { min-height: 38px; padding: 0 10px; border: 1px solid #d5d8de; border-radius: 8px; font: inherit; color: #16181d; }
+.ved-error { margin: 0; color: #b91c1c; font-size: 13.5px; }
+.ved-vacio { margin: 0; padding: 28px 12px; text-align: center; color: #6b7280; background: #fff; border: 1px solid #e4e6eb; border-radius: 10px; }
+.ved-caja { overflow-x: auto; background: #fff; border: 1px solid #e4e6eb; border-radius: 10px; }
+.ved-tabla { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 14px; }
+.ved-tabla th, .ved-tabla td { padding: 10px 12px; border-bottom: 1px solid #f0f1f4; text-align: left; }
+.ved-tabla thead th { font-size: 12.5px; color: #4b5563; background: #f9fafb; }
+.ved-tabla tfoot th, .ved-tabla tfoot td { border-bottom: 0; border-top: 2px solid #e4e6eb; font-weight: 700; }
+.ved-num { text-align: right !important; white-space: nowrap; }
+.ved-fuerte { font-weight: 700; }
+.ved-barra-col { width: 30%; }
+.ved-barra-col small { margin-left: 8px; color: #6b7280; }
+.ved-barra { display: inline-block; vertical-align: middle; width: calc(100% - 56px); height: 8px; background: #eef0f3; border-radius: 4px; overflow: hidden; }
+.ved-barra span { display: block; height: 100%; background: var(--color-primario); border-radius: 4px; }

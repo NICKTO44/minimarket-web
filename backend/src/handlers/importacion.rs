@@ -67,6 +67,9 @@ pub struct FilaImportada {
     /// Columnas "Precio 2" y "Precio 3" (solo con el módulo TRES_PRECIOS).
     #[serde(default)]
     pub precios: Option<crate::handlers::precios_venta::PreciosVenta>,
+    /// Ficha del libro: autor, editorial, serie... (solo con el módulo FICHA_LIBRO).
+    #[serde(default)]
+    pub libro: Option<crate::handlers::libros::LibroImportado>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -735,6 +738,16 @@ pub async fn importar_productos(
     let con_tres_precios = modulos.iter().any(|m| m == crate::handlers::rubros::MODULO_TRES_PRECIOS)
         && payload.filas.iter().any(|f| f.precios.is_some());
     let precios_extra = crate::handlers::precios_venta::revisar_importados(&payload.filas, &mut revisadas, con_tres_precios);
+    // Librería: ficha del libro de cada fila (si el archivo trae autor, editorial...).
+    let con_libro = modulos.iter().any(|m| m == crate::handlers::rubros::MODULO_FICHA_LIBRO)
+        && payload.filas.iter().any(|f| f.libro.is_some());
+    if con_libro && conn.query("SELECT 1 FROM producto_libro LIMIT 1", ()).await.is_err() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "La ficha del libro aún no está lista en este negocio. Intenta en unos minutos.".to_string(),
+        ));
+    }
+    let fichas_libro = crate::handlers::libros::revisar_importados(&payload.filas, &mut revisadas, con_libro);
 
     let nuevos: Vec<&Revisada> = revisadas.iter().filter(|r| r.estado == "LISTO").collect();
     let a_actualizar: Vec<&Revisada> = if actualizar { revisadas.iter().filter(|r| r.estado == "EXISTE").collect() } else { Vec::new() };
@@ -944,6 +957,21 @@ pub async fn importar_productos(
             }
         }
 
+        // 4d. Ficha del libro (módulo "Ficha del libro"), igual que 4b.
+        if con_libro {
+            let guardar_fila = |r: &Revisada| r.padre.is_none() && (r.estado == "LISTO" || (actualizar && r.estado == "EXISTE"));
+            let ids = ids_por_codigo(&tx, revisadas.iter().filter(|r| guardar_fila(r) && r.existente.is_none()).map(|r| r.codigo.clone()).collect()).await?;
+            let fichas: Vec<(i64, crate::handlers::libros::FichaLibro)> = revisadas
+                .iter()
+                .zip(fichas_libro.iter())
+                .filter(|(r, _)| guardar_fila(r))
+                .filter_map(|(r, f)| Some((r.existente.map(|e| e.id).or_else(|| ids.get(&r.codigo.to_lowercase()).copied())?, f.clone()?)))
+                .collect();
+            if !fichas.is_empty() {
+                crate::handlers::libros::guardar_en(&tx, &fichas).await?;
+            }
+        }
+
         // 5. Lotes con su vencimiento (el stock lo recalculan los triggers).
         //    Un lote que el producto ya tiene (mismo n.° y vencimiento) toma
         //    la cantidad del archivo en vez de duplicarse: importar dos veces
@@ -1053,6 +1081,7 @@ mod pruebas {
             repuesto: None,
             compatible: None,
             precios: None,
+            libro: None,
         }
     }
 

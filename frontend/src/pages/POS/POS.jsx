@@ -32,6 +32,7 @@ import SelectorPrecio, { PreciosTarjeta } from '../../components/SelectorPrecio'
 import { opcionesDePrecio, usePreciosVenta } from '../../utils/tresPrecios';
 import VentaTabla, { ResultadosTabla } from './VentaTabla';
 import { codigosDeVenta } from '../../utils/codigosVenta';
+import { deEditorial, resumenLibro, textoLibro, useFichasLibro, valoresDe } from '../../utils/libros';
 import { coincidenTodas, palabrasDeBusqueda } from '../../utils/repuestos';
 import EquivalentesRepuesto from '../../components/EquivalentesRepuesto';
 import VehiculoVenta from '../../components/VehiculoVenta';
@@ -319,6 +320,8 @@ export default function POS({
   // Módulo "Venta en tabla" (Lubricentro): buscador con lista y la venta
   // como tabla en vez de tarjetas. Apagado, el punto de venta es el de siempre.
   ventaTabla = false,
+  // Librería: buscar por autor, editorial o serie y filtrar por editorial.
+  fichaLibro = false,
   // Lubricentro: placa y kilometraje en la venta, paquetes y el cobro de
   // una orden de servicio (viene de Órdenes de servicio).
   vehiculos = false,
@@ -437,6 +440,10 @@ export default function POS({
   const porCodigoAlterno = useMemo(() => (fichaRepuesto ? indiceCodigos(repuestos) : new Map()), [fichaRepuesto, repuestos]);
   // Búsqueda por vehículo: { marca, modelo, anio } (null = sin filtro) y si la barra está abierta.
   const [vehiculoFiltro, setVehiculoFiltro] = useState(null);
+  // Librería: producto_id -> ficha del libro, y la editorial elegida en el filtro ('' = todas).
+  const [libros] = useFichasLibro(fichaLibro);
+  const [editorialFiltro, setEditorialFiltro] = useState('');
+  const editorialesLibro = useMemo(() => valoresDe(libros, 'editorial'), [libros]);
   const [barraVehiculo, setBarraVehiculo] = useState(false);
   const vehiculosConocidos = useMemo(() => (compatibilidad ? marcasYModelos(compatibilidades) : []), [compatibilidad, compatibilidades]);
   // Ventana de alternativas: { producto, motivo: 'SIN_STOCK' | 'CAMBIAR', linea?, tipo? }.
@@ -819,8 +826,11 @@ export default function POS({
     const paraVehiculo = filtroVehiculo
       ? deCategoria.filter((p) => (compatibilidades.get(p.id) || []).some((c) => compatibleCon(c, filtroVehiculo)))
       : deCategoria;
+    // Librería: con una editorial elegida, solo sus libros.
+    const paraEditorial =
+      fichaLibro && editorialFiltro ? paraVehiculo.filter((p) => deEditorial(libros.get(p.id), editorialFiltro)) : paraVehiculo;
     const base = q
-      ? paraVehiculo.filter(
+      ? paraEditorial.filter(
           (p) =>
             p.nombre.toLowerCase().includes(q) ||
             p.codigo.toLowerCase().includes(q) ||
@@ -832,9 +842,11 @@ export default function POS({
             // Lubricentro: por palabras ("trapecio aveo", "SAIL.") en nombre, código,
             // descripción (el vehículo), marca o n.° de parte.
             ((fichaRepuesto || compatibilidad) &&
-              coincidenTodas(palabrasDeBusqueda(q), p.nombre, p.codigo, p.descripcion, fichaRepuesto && resumenRepuesto(repuestos.get(p.id))))
+              coincidenTodas(palabrasDeBusqueda(q), p.nombre, p.codigo, p.descripcion, fichaRepuesto && resumenRepuesto(repuestos.get(p.id)))) ||
+            // Librería: por palabras ("vargas llosa", "harry potter 3") en título, código (ISBN), autor, editorial o serie.
+            (fichaLibro && coincidenTodas(palabrasDeBusqueda(q), p.nombre, p.codigo, textoLibro(libros.get(p.id))))
         )
-      : paraVehiculo;
+      : paraEditorial;
 
     // El orden por nombre ya viene del backend (ORDER BY p.nombre), así
     // que para esa opción no hace falta reordenar en el frontend -- solo
@@ -851,7 +863,7 @@ export default function POS({
     }
     return base;
   }, [productosVenta, busqueda, ordenPrecio, categoriaActiva, fichaMedicamento, fichas, fichaRepuesto, repuestos, compatibilidad,
-      compatibilidades, vehiculoFiltro]);
+      compatibilidades, vehiculoFiltro, fichaLibro, libros, editorialFiltro]);
 
   // Tallas y colores: una tarjeta por modelo (con las tallas que pasaron el
   // buscador). Sin el módulo, una tarjeta por producto, como siempre.
@@ -1866,7 +1878,13 @@ export default function POS({
             ref={buscadorRef}
             className={`pos-buscador${enTabla ? ' pos-buscador-compacto' : ''}`}
             type="text"
-            placeholder={enTabla ? 'Buscar por nombre, código, aplicación o N.° de parte...' : 'Escanea o busca por nombre / código...'}
+            placeholder={
+              enTabla
+                ? 'Buscar por nombre, código, aplicación o N.° de parte...'
+                : fichaLibro
+                  ? 'Escanea el ISBN o busca por título, autor o editorial...'
+                  : 'Escanea o busca por nombre / código...'
+            }
             value={busqueda}
             onChange={(e) => {
               setBusqueda(e.target.value);
@@ -1954,6 +1972,24 @@ export default function POS({
                   setBarraVehiculo(false);
                 }}
               >
+                Quitar filtro
+              </button>
+            )}
+          </div>
+        )}
+        {fichaLibro && editorialesLibro.length > 0 && (
+          // Librería: filtrar por editorial (la búsqueda por autor va en el buscador).
+          <div className="pos-vehiculo-barra" role="group" aria-label="Filtrar por editorial">
+            <select value={editorialFiltro} onChange={(e) => setEditorialFiltro(e.target.value)} aria-label="Editorial">
+              <option value="">Todas las editoriales</option>
+              {editorialesLibro.map((ed) => (
+                <option key={ed} value={ed}>
+                  {ed}
+                </option>
+              ))}
+            </select>
+            {editorialFiltro && (
+              <button type="button" className="pos-vehiculo-quitar" onClick={() => setEditorialFiltro('')}>
                 Quitar filtro
               </button>
             )}
@@ -2103,6 +2139,11 @@ export default function POS({
                 {fichaRepuesto && repuestos.has(p.id) && resumenRepuesto(repuestos.get(p.id)) && (
                   <span className="pos-producto-ficha" title={resumenRepuesto(repuestos.get(p.id))}>
                     {resumenRepuesto(repuestos.get(p.id))}
+                  </span>
+                )}
+                {fichaLibro && libros.has(p.id) && (
+                  <span className="pos-producto-ficha" title={resumenLibro(libros.get(p.id))}>
+                    {resumenLibro(libros.get(p.id))}
                   </span>
                 )}
                 {tresPrecios && preciosExtra.has(p.id) && (
