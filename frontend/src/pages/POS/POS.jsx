@@ -28,8 +28,9 @@ import { imprimirTicket } from '../../utils/imprimirTicket';
 import { etiquetaTicket, papelTicket } from '../../utils/papelTicket';
 import { alternativasDe, etiquetaCondicion, fichaCoincide, mapaFichas, resumenFicha, textoPlano } from '../../utils/medicamentos';
 import AlternativasMedicamento from '../../components/AlternativasMedicamento';
-import SelectorPrecio from '../../components/SelectorPrecio';
+import SelectorPrecio, { PreciosTarjeta } from '../../components/SelectorPrecio';
 import { opcionesDePrecio, usePreciosVenta } from '../../utils/tresPrecios';
+import { coincidenTodas, palabrasDeBusqueda } from '../../utils/repuestos';
 import EquivalentesRepuesto from '../../components/EquivalentesRepuesto';
 import VehiculoVenta from '../../components/VehiculoVenta';
 import ElegirPaquete from '../../components/ElegirPaquete';
@@ -818,7 +819,11 @@ export default function POS({
             (fichaMedicamento && fichaCoincide(fichas.get(p.id), plano)) ||
             // Lubricentro: por marca, n.° de parte, código alterno o vehículo.
             (fichaRepuesto && fichaRepuestoCoincide(repuestos.get(p.id), plano)) ||
-            (compatibilidad && compatibilidadCoincide(compatibilidades.get(p.id), plano))
+            (compatibilidad && compatibilidadCoincide(compatibilidades.get(p.id), plano)) ||
+            // Lubricentro: por palabras ("trapecio aveo", "SAIL.") en nombre, código,
+            // descripción (el vehículo), marca o n.° de parte.
+            ((fichaRepuesto || compatibilidad) &&
+              coincidenTodas(palabrasDeBusqueda(q), p.nombre, p.codigo, p.descripcion, fichaRepuesto && resumenRepuesto(repuestos.get(p.id))))
         )
       : paraVehiculo;
 
@@ -1216,6 +1221,12 @@ export default function POS({
         return { ...i, precio, precioOriginal: precio === original ? undefined : original };
       })
     );
+  };
+
+  // Módulo "3 precios de venta": desde la tarjeta, agrega el producto y deja
+  // su línea con el precio tocado (P1, P2 o P3).
+  const agregarConPrecio = (producto, precio) => {
+    if (agregarAlCarrito(producto)) fijarPrecio(producto.id, precio);
   };
 
   const quitarDelCarrito = (clave) => setCarrito((prev) => prev.filter((i) => claveDe(i) !== clave));
@@ -1963,7 +1974,9 @@ export default function POS({
             ) : (
               <button
                 key={p.id}
-                className={`pos-producto-card${p.agotado || sinStock(p) ? ' pos-producto-agotado' : ''}`}
+                className={`pos-producto-card${p.agotado || sinStock(p) ? ' pos-producto-agotado' : ''}${
+                  tresPrecios && preciosExtra.has(p.id) ? ' pos-producto-con-precios' : ''
+                }`}
                 aria-disabled={p.agotado || sinStock(p) || undefined}
                 onClick={() => agregarAlCarrito(p)}
               >
@@ -1993,8 +2006,17 @@ export default function POS({
                     {resumenRepuesto(repuestos.get(p.id))}
                   </span>
                 )}
+                {tresPrecios && preciosExtra.has(p.id) && (
+                  <PreciosTarjeta
+                    nombre={p.nombre}
+                    opciones={opcionesDePrecio(p.precio, preciosExtra.get(p.id))}
+                    onElegir={(precio) => agregarConPrecio(p, precio)}
+                  />
+                )}
                 <span className="pos-producto-fila">
-                  <span className="pos-producto-precio">S/ {p.precio.toFixed(2)}</span>
+                  {!(tresPrecios && preciosExtra.has(p.id)) && (
+                    <span className="pos-producto-precio">S/ {p.precio.toFixed(2)}</span>
+                  )}
                   {p.agotado && <span className="pos-producto-stock pos-producto-stock-bajo">Agotado</span>}
                   {/* Rojo con el mismo criterio que el reporte de stock bajo
                       (stock <= stock_minimo, ver productos.rs). */}

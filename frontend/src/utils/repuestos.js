@@ -263,3 +263,21 @@ export function formularioACompatibilidades(filas) {
   if (lista.length > 80) return { error: 'Máximo 80 vehículos por producto.' };
   return { lista };
 }
+
+/**
+ * Búsqueda por palabras (Lubricentro): "Trapecio aveo LH", "SAIL." o
+ * "cremallera hilux" encuentran el producto si TODAS las palabras aparecen en
+ * cualquiera de sus textos (nombre, código, descripción, marca, n.° de parte),
+ * sin importar el orden, las tildes, los puntos ni los guiones.
+ */
+export function palabrasDeBusqueda(consulta) {
+  return textoPlano(consulta)
+    .split(/[^a-z0-9ñ]+/)
+    .filter(Boolean);
+}
+
+export function coincidenTodas(palabras, ...textos) {
+  if (!palabras.length) return false;
+  const todo = textoPlano(textos.filter(Boolean).join(' '));
+  return palabras.every((p) => todo.includes(p));
+}

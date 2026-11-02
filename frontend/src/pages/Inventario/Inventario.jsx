@@ -28,8 +28,9 @@ import {
 } from '../../utils/medicamentos';
 import FichaRepuesto from './FichaRepuesto';
 import { esRespaldoLavanderia } from '../../utils/textosEncargos';
-import PreciosVentaCampos from './PreciosVentaCampos';
+import PreciosVentaCampos, { PreciosCelda } from './PreciosVentaCampos';
 import { useFormPreciosVenta } from '../../utils/tresPrecios';
+import { coincidenTodas, palabrasDeBusqueda } from '../../utils/repuestos';
 import {
   FICHA_REPUESTO_VACIA,
   compatibilidadCoincide,
@@ -299,7 +300,11 @@ export default function Inventario({
           (fichaMedicamento && fichaCoincide(fichas.get(p.id), plano)) ||
           // Lubricentro: por marca, n.° de parte, código alterno o vehículo.
           (fichaRepuesto && fichaRepuestoCoincide(repuestos.get(p.id), plano)) ||
-          (compatibilidad && compatibilidadCoincide(compatibilidades.get(p.id), plano))
+          (compatibilidad && compatibilidadCoincide(compatibilidades.get(p.id), plano)) ||
+          // Lubricentro: por palabras ("trapecio aveo", "SAIL.") en nombre, código,
+          // descripción (el vehículo), marca o n.° de parte.
+          ((fichaRepuesto || compatibilidad) &&
+            coincidenTodas(palabrasDeBusqueda(q), p.nombre, p.codigo, p.descripcion, fichaRepuesto && resumenRepuesto(repuestos.get(p.id))))
       );
     }
     if (filtroCategoria) {
@@ -1009,7 +1014,7 @@ export default function Inventario({
                 <th>Código</th>
                 <th>Nombre</th>
                 <th>Categoría</th>
-                <th>Precio</th>
+                <th>{tresPrecios ? 'Precios' : 'Precio'}</th>
                 <th>Stock</th>
                 <th>Unidad</th>
                 <th></th>
@@ -1054,6 +1059,9 @@ export default function Inventario({
                       {fichaMedicamento && fichas.has(p.id) && (
                         <span className="inv-ficha-resumen">{resumenFicha(fichas.get(p.id))}</span>
                       )}
+                      {(fichaRepuesto || compatibilidad) && p.descripcion && (
+                        <span className="inv-descripcion-producto">{p.descripcion}</span>
+                      )}
                       {fichaRepuesto && repuestos.has(p.id) && (
                         <span className="inv-ficha-resumen">{resumenRepuesto(repuestos.get(p.id))}</span>
                       )}
@@ -1068,7 +1076,7 @@ export default function Inventario({
                       )}
                     </td>
                     <td>{p.categoria_nombre || '—'}</td>
-                    <td>S/ {p.precio.toFixed(2)}</td>
+                    <td>{tresPrecios ? <PreciosCelda precio={p.precio} extra={preciosVenta.mapa.get(p.id)} /> : `S/ ${p.precio.toFixed(2)}`}</td>
                     <td className={!verDesactivados && tieneStockBajo(p) ? 'inv-stock-bajo' : ''}>
                       {p.controla_stock === false ? (
                         <span className="inv-badge-preparado">preparado</span>
