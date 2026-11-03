@@ -2013,3 +2013,33 @@
     font-size: 18px;
   }
 }
+
+/* Pantallas bajas (tablet horizontal, laptop pequeña): el panel entero se
+   desplaza como una sola hoja (orden, comprobante, cliente, productos,
+   total y medios de pago) y Cobrar queda pegado abajo, siempre a la vista.
+   En pantallas altas no aplica: todo queda como siempre. */
+@media (max-height: 760px) {
+  .pos-carrito {
+    overflow-y: auto;
+  }
+
+  .pos-carrito > * {
+    flex-shrink: 0;
+  }
+
+  .pos-carrito-items {
+    flex: none;
+    overflow: visible;
+    min-height: 0;
+  }
+
+  .pos-resumen,
+  .pos-resumen-mixto {
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  .pos-resumen .pos-cobrar {
+    box-shadow: 0 -10px 12px -4px var(--pos-superficie);
+  }
+}
