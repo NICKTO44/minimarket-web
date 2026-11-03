@@ -27,6 +27,7 @@
   gap: 12px;
   padding: 12px;
   height: 100vh;
+  height: 100dvh;
   background: var(--pos-bg);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--pos-texto);
@@ -818,7 +819,24 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* En pantallas bajas (laptop 1366x768, zoom 125 %) o con una orden o un
+     encargo cargado, el resumen no entra en el panel: se desplaza (scroll)
+     en vez de quedar cortado, y Cobrar sigue pegado al fondo y visible.
+     Si todo entra, se ve igual que antes. */
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Cada parte del resumen conserva su alto: si no entra, se desplaza. */
+.pos-resumen > * {
   flex-shrink: 0;
+}
+
+.pos-resumen .pos-cobrar {
+  position: sticky;
+  bottom: 0;
 }
 
 /* Con el pago mixto abierto el resumen crece bastante. Si no entra en

@@ -61,12 +61,14 @@
   display: flex;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
 .app-contenido {
   flex: 1;
   height: 100vh;
+  height: 100dvh;
   overflow: auto;
   min-width: 0;
 }
