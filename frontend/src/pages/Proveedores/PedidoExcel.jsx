@@ -255,6 +255,19 @@ function CampoPrecio({ valor, onCambio, etiqueta, requerido }) {
   );
 }
 
+/** Debajo de cada precio: el de antes y cuánto se gana con el costo nuevo. */
+function Ganancia({ antes, precio, costo }) {
+  if (!(Number(precio) > 0)) return null;
+  const gana = Number(precio) - Number(costo);
+  const pct = Math.round((gana / Number(precio)) * 100);
+  return (
+    <span className={`pedido-ganancia${gana <= 0 ? ' pedido-ganancia-mala' : ''}`}>
+      {antes != null && Math.abs(Number(antes) - Number(precio)) >= 0.005 ? `antes ${soles(antes)} · ` : ''}
+      gana S/ {soles(gana)} ({pct} %)
+    </span>
+  );
+}
+
 /**
  * 🟡 Productos que suben de costo con esta compra: se muestran sus 3 precios
  * de venta para que el dueño los suba ahí mismo (se aplican al registrar).
@@ -266,7 +279,9 @@ export function SubioCosto({ subidas, tresPrecios, onCambio }) {
   return (
     <div className="pedido-revisar pedido-revisar-subio">
       <p className="pedido-revisar-titulo">🟡 Subieron de costo ({subidas.length}): ¿subes tus precios de venta?</p>
-      <p className="pedido-revisar-ayuda">Cambia los precios que quieras. Si no tocas nada, se quedan igual.</p>
+      <p className="pedido-revisar-ayuda">
+        Están puestos tus precios de hoy. Debajo ves cuánto ganas con el costo nuevo; cambia los que quieras. Si no tocas nada, se quedan igual.
+      </p>
       <div className="pedido-revisar-caja">
         <table className="pedido-revisar-tabla">
           <thead>
@@ -290,15 +305,18 @@ export function SubioCosto({ subidas, tresPrecios, onCambio }) {
                 </td>
                 <td>
                   <CampoPrecio valor={s.despues.p1} etiqueta={`Precio 1 de ${s.nombre}`} onCambio={(n) => poner(s.producto_id, 'p1', n)} />
+                  <Ganancia antes={s.antes.p1} precio={s.despues.p1} costo={s.costoNuevo} />
                 </td>
                 {tresPrecios && (
                   <td>
                     <CampoPrecio valor={s.despues.p2} etiqueta={`Precio 2 de ${s.nombre}`} onCambio={(n) => poner(s.producto_id, 'p2', n)} />
+                  <Ganancia antes={s.antes.p2} precio={s.despues.p2} costo={s.costoNuevo} />
                   </td>
                 )}
                 {tresPrecios && (
                   <td>
                     <CampoPrecio valor={s.despues.p3} etiqueta={`Precio 3 de ${s.nombre}`} onCambio={(n) => poner(s.producto_id, 'p3', n)} />
+                  <Ganancia antes={s.antes.p3} precio={s.despues.p3} costo={s.costoNuevo} />
                   </td>
                 )}
               </tr>

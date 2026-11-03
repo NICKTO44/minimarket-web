@@ -171,6 +171,33 @@ pub async fn de_productos(conn: &libsql::Connection, ids: &[i64]) -> HashMap<i64
     mapa
 }
 
+/// El Precio 2 y el Precio 3 de esos productos, cada uno en su lugar (para
+/// elegir la lista en una orden de servicio). Sin la migración: vacío.
+pub async fn listas_de(conn: &libsql::Connection, ids: &[i64]) -> HashMap<i64, (Option<f64>, Option<f64>)> {
+    let mut mapa = HashMap::new();
+    if ids.is_empty() {
+        return mapa;
+    }
+    let lista = ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
+    let Ok(mut filas) = conn
+        .query(
+            &format!(
+                "SELECT producto_id, CAST(precio_2 AS REAL), CAST(precio_3 AS REAL) FROM producto_precios_venta WHERE producto_id IN ({})",
+                lista
+            ),
+            (),
+        )
+        .await
+    else {
+        return mapa;
+    };
+    while let Ok(Some(f)) = filas.next().await {
+        let id: i64 = f.get(0).unwrap_or_default();
+        mapa.insert(id, (f.get::<f64>(1).ok().filter(|p| *p > 0.0), f.get::<f64>(2).ok().filter(|p| *p > 0.0)));
+    }
+    mapa
+}
+
 /// Todos los precios guardados de productos activos. Sin la migración: vacío.
 pub async fn leer_todos(conn: &libsql::Connection) -> Result<Vec<PreciosVenta>, Fallo> {
     let mut lista = Vec::new();

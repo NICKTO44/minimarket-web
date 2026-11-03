@@ -135,6 +135,9 @@ export default function VentaTabla({
   onDescuento,
   onQuitar,
   esFija = () => false,
+  // El producto del catálogo: completa lo que no trae una línea cargada de una
+  // orden de servicio (código, aplicación, categoría, costo, IGV).
+  productoDe = () => null,
   onCobrar,
   cobroAbierto = false,
   onCerrarCobro,
@@ -197,18 +200,22 @@ export default function VentaTabla({
                   : [];
               const fraccion = seVendeFraccionado(item.unidad_medida);
               const fija = esFija(item);
+              const catalogo = productoDe(item.id);
+              const dato = (campo) => item[campo] ?? catalogo?.[campo];
+              // P. sin IGV de lo que realmente se cobra: con descuento, baja igual que en la factura.
+              const precioReal = item.descuentoMonto > 0 && item.cantidad > 0 ? importe / item.cantidad : item.precio;
               return (
                 <tr key={clave}>
                   <td className="vt-col-n">{idx + 1}</td>
                   <td className="vt-producto">
                     <span className="vt-nombre">{item.nombre}</span>
                     {item.detalle && <span className="vt-sub">{item.detalle}</span>}
-                    <span className="vt-sub">{item.codigo}</span>
-                    {item.descripcion && <span className="vt-sub vt-aplicacion">{item.descripcion}</span>}
+                    <span className="vt-sub">{dato('codigo')}</span>
+                    {dato('descripcion') && <span className="vt-sub vt-aplicacion">{dato('descripcion')}</span>}
                     {item.paquete && <span className="vt-sub">Paquete {item.paquete.nombre}</span>}
                   </td>
                   <td>{marcaDe(item) || '—'}</td>
-                  <td>{item.categoria_nombre || '—'}</td>
+                  <td>{dato('categoria_nombre') || '—'}</td>
                   <td>{item.presentacion ? item.presentacion.nombre || etiquetaUnidad(item.unidad_medida) : etiquetaUnidad(item.unidad_medida)}</td>
                   <td>
                     {fija ? (
@@ -240,8 +247,8 @@ export default function VentaTabla({
                       </div>
                     )}
                   </td>
-                  <td className="vt-num">{item.precio_compra > 0 ? soles(item.precio_compra) : '—'}</td>
-                  <td className="vt-num">{soles(sinIgv(item.precio, item.afectacion_igv))}</td>
+                  <td className="vt-num">{dato('precio_compra') > 0 ? soles(dato('precio_compra')) : '—'}</td>
+                  <td className="vt-num">{soles(sinIgv(precioReal, dato('afectacion_igv')))}</td>
                   <td>
                     {precioEditable && !item.presentacion && !fija ? (
                       <CampoNumero

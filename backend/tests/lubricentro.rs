@@ -588,3 +588,88 @@ async fn otro_rubro_tampoco_ve_vehiculos_ordenes_ni_paquetes() {
     assert_eq!(e.0, StatusCode::FORBIDDEN);
     assert_eq!(entero(&t, "SELECT COUNT(*) FROM ventas").await, 0);
 }
+
+#[tokio::test]
+async fn orden_con_precio_2_y_3() {
+    use minimarket_backend::handlers::precios_venta;
+    let t = base("orden_tres_precios", "LUBRICENTRO", &format!("{},TRES_PRECIOS", MODULOS_LUBRICENTRO)).await;
+    abrir_caja(&t).await;
+    // Aceite: P1 95 (del producto), P2 90 y P3 85.
+    let _ = precios_venta::guardar(
+        Extension(t.clone()),
+        Path(1003),
+        Json(precios_venta::PreciosVenta { producto_id: None, precio_2: Some(90.0), precio_3: Some(85.0) }),
+    )
+    .await
+    .unwrap();
+    let Json(o) = ordenes::crear(Extension(t.clone()), Extension(claims()), Json(serde_json::from_value(json!({"placa": "ABC-123"})).unwrap()))
+        .await
+        .unwrap();
+    let items = |v: serde_json::Value| Json(serde_json::from_value::<ordenes::ItemsOrden>(json!({ "items": v })).unwrap());
+
+    // P2 en el aceite; el filtro sin elegir va a su Precio 1.
+    let Json(o) = ordenes::guardar_items(Extension(t.clone()), Path(o.id), items(json!([{"producto_id": 1003, "cantidad": 2, "lista": 2}, {"producto_id": 1001, "cantidad": 1}])))
+        .await
+        .unwrap();
+    let precio = |o: &ordenes::Orden, id: i64| o.items.as_ref().unwrap().iter().find(|i| i.producto_id == id).unwrap().precio_unitario;
+    assert_eq!((precio(&o, 1003), precio(&o, 1001), o.total), (90.0, 25.0, 205.0));
+
+    // Al guardar otra vez sin elegir (agregar otra línea), el aceite sigue a P2.
+    let Json(o) = ordenes::guardar_items(
+        Extension(t.clone()),
+        Path(o.id),
+        items(json!([{"producto_id": 1003, "cantidad": 2}, {"producto_id": 1001, "cantidad": 1}, {"producto_id": 1004, "cantidad": 1}])),
+    )
+    .await
+    .unwrap();
+    assert_eq!(precio(&o, 1003), 90.0);
+
+    // P3 y de vuelta a P1.
+    let Json(o) = ordenes::guardar_items(Extension(t.clone()), Path(o.id), items(json!([{"producto_id": 1003, "cantidad": 2, "lista": 3}])))
+        .await
+        .unwrap();
+    assert_eq!(precio(&o, 1003), 85.0);
+    let Json(o) = ordenes::guardar_items(Extension(t.clone()), Path(o.id), items(json!([{"producto_id": 1003, "cantidad": 2, "lista": 1}])))
+        .await
+        .unwrap();
+    assert_eq!(precio(&o, 1003), 95.0);
+
+    // Errores: lista 4, Precio 2 que el filtro no tiene.
+    let e = ordenes::guardar_items(Extension(t.clone()), Path(o.id), items(json!([{"producto_id": 1003, "cantidad": 1, "lista": 4}])))
+        .await
+        .unwrap_err();
+    assert_eq!(e.0, StatusCode::BAD_REQUEST);
+    let e = ordenes::guardar_items(Extension(t.clone()), Path(o.id), items(json!([{"producto_id": 1001, "cantidad": 1, "lista": 2}])))
+        .await
+        .unwrap_err();
+    assert_eq!(e.0, StatusCode::BAD_REQUEST);
+
+    // Se cobra a P2: la venta acepta el precio de la orden.
+    let Json(o) = ordenes::guardar_items(Extension(t.clone()), Path(o.id), items(json!([{"producto_id": 1003, "cantidad": 1, "lista": 2}])))
+        .await
+        .unwrap();
+    let venta = vender(
+        &t,
+        json!({"productos": [linea(1003, 90.0, 1.0)], "total": 90.0, "monto_recibido": 90.0, "cambio": 0.0, "orden_servicio_id": o.id,
+               "vehiculo": {"placa": "ABC-123"}}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(real(&t, &format!("SELECT CAST(total AS REAL) FROM ventas WHERE id = {}", venta)).await, 90.0);
+}
+
+#[tokio::test]
+async fn orden_sin_tres_precios_no_acepta_precio_2() {
+    let t = lubricentro("orden_sin_tres_precios").await;
+    let Json(o) = ordenes::crear(Extension(t.clone()), Extension(claims()), Json(serde_json::from_value(json!({"placa": "XYZ-789"})).unwrap()))
+        .await
+        .unwrap();
+    let e = ordenes::guardar_items(
+        Extension(t.clone()),
+        Path(o.id),
+        Json(serde_json::from_value(json!({"items": [{"producto_id": 1003, "cantidad": 1, "lista": 2}]})).unwrap()),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(e.0, StatusCode::FORBIDDEN);
+}

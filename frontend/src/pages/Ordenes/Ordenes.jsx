@@ -7,6 +7,7 @@ import { abreviaturaUnidad } from '../../utils/unidades';
 import { formatoPlaca, hoyMasMeses, lineasDePaquete, nombreVehiculo, textoKm } from '../../utils/vehiculos';
 import { coincidenTodas, fichaRepuestoCoincide, mapaPorProducto, palabrasDeBusqueda, resumenRepuesto } from '../../utils/repuestos';
 import { textoPlano } from '../../utils/medicamentos';
+import { mapaPrecios, opcionesDePrecio } from '../../utils/tresPrecios';
 import '../../components/PantallaModulo.css';
 import '../../components/Recibo.css';
 
@@ -30,7 +31,14 @@ function Estado({ estado }) {
 
 /** Lo que se manda al servidor de cada línea. */
 const paraGuardar = (items) =>
-  items.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad, descuento: i.descuento || 0, paquete_id: i.paquete_id || null }));
+  items.map((i) => ({
+    producto_id: i.producto_id,
+    cantidad: i.cantidad,
+    descuento: i.descuento || 0,
+    paquete_id: i.paquete_id || null,
+    // "3 precios de venta": la lista elegida en esta línea (1, 2 o 3); sin elegir conserva su precio.
+    ...(i.lista ? { lista: i.lista } : {}),
+  }));
 
 /** La orden para la ticketera (como la cotización: solo se ve al imprimir). */
 function OrdenImprimible({ orden, nombreTienda, direccion, telefono }) {
@@ -367,6 +375,8 @@ function DetalleOrden({ orden, mecanicos, conPaquetes, onCambio, onCerrar, onCob
   const [paquetes, setPaquetes] = useState([]);
   // Ficha del repuesto (marca, n.° de parte): para buscar como en el punto de venta.
   const [repuestos, setRepuestos] = useState(() => new Map());
+  // Precio 2 / 3 de cada producto (módulo "3 precios de venta"): para elegir P1/P2/P3 por línea.
+  const [preciosExtra, setPreciosExtra] = useState(() => new Map());
   const [buscar, setBuscar] = useState('');
   const [error, setError] = useState(null);
   const [ocupado, setOcupado] = useState(false);
@@ -383,6 +393,7 @@ function DetalleOrden({ orden, mecanicos, conPaquetes, onCambio, onCerrar, onCob
     if (conPaquetes) api.paquetes().then(setPaquetes).catch(() => {});
     // Sin el módulo la ruta responde 403: se busca solo por nombre y código, como antes.
     api.repuestosFichas().then((lista) => setRepuestos(mapaPorProducto(lista))).catch(() => {});
+    api.preciosVenta().then((lista) => setPreciosExtra(mapaPrecios(lista))).catch(() => {});
   }, [editable, conPaquetes]);
 
   const encontrados = useMemo(() => {
@@ -438,6 +449,13 @@ function DetalleOrden({ orden, mecanicos, conPaquetes, onCambio, onCerrar, onCob
     const cantidad = Number(String(texto).replace(',', '.'));
     if (!(cantidad > 0) || cantidad === item.cantidad) return;
     guardarItems(items.map((i) => (i.id === item.id ? { ...i, cantidad } : i)));
+  };
+  // P1 / P2 / P3 de una línea: el servidor pone el precio de esa lista.
+  const elegirLista = (item, lista) => guardarItems(items.map((i) => (i.id === item.id ? { ...i, lista } : i)));
+  const opcionesDe = (item) => {
+    if (item.paquete_id || item.es_servicio) return [];
+    const p1 = productos.find((p) => p.id === item.producto_id)?.precio;
+    return p1 ? opcionesDePrecio(p1, preciosExtra.get(item.producto_id)) : [];
   };
   const quitar = (item) =>
     guardarItems(item.paquete_id ? items.filter((i) => i.paquete_id !== item.paquete_id) : items.filter((i) => i.id !== item.id));
@@ -516,7 +534,7 @@ function DetalleOrden({ orden, mecanicos, conPaquetes, onCambio, onCerrar, onCob
                 disabled={!editable}
                 inputMode="numeric"
                 value={datos.proximo_km}
-                placeholder={kmHoy ? String(kmHoy + 5000) : ''}
+                placeholder="Sin anotar: usa +5,000 km"
                 onChange={(e) => setDatos((d) => ({ ...d, proximo_km: e.target.value.replace(/[^\d]/g, '') }))}
               />
             </label>
@@ -588,6 +606,26 @@ function DetalleOrden({ orden, mecanicos, conPaquetes, onCambio, onCerrar, onCob
                         {i.descuento > 0 ? ` · ${i.paquete_id ? 'paquete' : 'descuento'} −S/ ${i.descuento.toFixed(2)}` : ''}
                         {i.controla_stock && i.stock + 1e-6 < i.cantidad && editable ? ` · ⚠ stock: ${formatoCantidad(i.stock)}` : ''}
                       </small>
+                      {editable && opcionesDe(i).length > 1 && (
+                        <span className="pm-opciones" style={{ marginTop: 4 }} role="group" aria-label={`Precio de ${i.nombre}`}>
+                          {opcionesDe(i).map((o) => {
+                            const elegido = Math.abs(o.precio - i.precio_unitario) < 0.005;
+                            return (
+                              <button
+                                key={o.numero}
+                                type="button"
+                                className={elegido ? 'activo' : ''}
+                                aria-pressed={elegido}
+                                disabled={ocupado || elegido}
+                                style={{ padding: '3px 8px', fontSize: 12, cursor: elegido ? 'default' : 'pointer' }}
+                                onClick={() => elegirLista(i, o.numero)}
+                              >
+                                P{o.numero} {Number(o.precio).toFixed(2)}
+                              </button>
+                            );
+                          })}
+                        </span>
+                      )}
                     </td>
                     <td className="pm-num">
                       {editable && !i.paquete_id ? (

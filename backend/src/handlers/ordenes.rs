@@ -26,7 +26,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::handlers::rubros::{exigir_modulo, MODULO_ORDENES_SERVICIO};
+use crate::handlers::precios_venta;
+use crate::handlers::rubros::{exigir_modulo, MODULO_ORDENES_SERVICIO, MODULO_TRES_PRECIOS};
 use crate::handlers::vehiculos::{self, VehiculoVenta};
 use crate::logica::tiempo;
 use crate::middleware_auth::exigir_admin;
@@ -514,6 +515,10 @@ pub struct ItemNuevo {
     pub descuento: Option<f64>,
     #[serde(default)]
     pub paquete_id: Option<i64>,
+    /// Con "3 precios de venta": 1, 2 o 3 = cobrar esa línea al Precio 1, 2
+    /// o 3 de hoy. Sin elegir: el precio con que ya estaba (o el Precio 1).
+    #[serde(default)]
+    pub lista: Option<u8>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -539,10 +544,21 @@ pub async fn guardar_items(
         if i.descuento.is_some_and(|d| !d.is_finite() || d < 0.0) {
             return Err(malo("El descuento no es válido."));
         }
+        if i.lista.is_some_and(|l| !(1..=3).contains(&l)) || (i.lista.is_some() && i.paquete_id.is_some()) {
+            return Err(malo("La lista de precio no es válida."));
+        }
     }
     let conn = tenant.0.connect().map_err(e500)?;
     exigir(&conn).await?;
     editable(&estado_de(&conn, id).await?)?;
+    // Precio 2 / 3 elegidos: solo con el módulo "3 precios de venta".
+    let con_lista: Vec<i64> = p.items.iter().filter(|i| matches!(i.lista, Some(2) | Some(3))).map(|i| i.producto_id).collect();
+    let listas = if con_lista.is_empty() {
+        HashMap::new()
+    } else {
+        exigir_modulo(&conn, MODULO_TRES_PRECIOS, "3 precios de venta").await?;
+        precios_venta::listas_de(&conn, &con_lista).await
+    };
 
     // Los productos (activos) y los precios con que ya estaban en la orden.
     let ids: Vec<String> = p.items.iter().map(|i| i.producto_id.to_string()).collect();
@@ -580,7 +596,17 @@ pub async fn guardar_items(
         let Some((nombre, precio_hoy, es_servicio)) = productos.get(&i.producto_id) else {
             return Err(malo("Uno de los productos ya no existe o está desactivado. Vuelve a cargar la orden."));
         };
-        let precio = previos.get(&i.producto_id).copied().unwrap_or(*precio_hoy);
+        let precio = match i.lista {
+            Some(1) => *precio_hoy,
+            Some(n @ (2 | 3)) => {
+                let (p2, p3) = listas.get(&i.producto_id).copied().unwrap_or((None, None));
+                match if n == 2 { p2 } else { p3 } {
+                    Some(pr) => pr,
+                    None => return Err(malo(format!("\"{}\" no tiene Precio {}.", nombre, n))),
+                }
+            }
+            _ => previos.get(&i.producto_id).copied().unwrap_or(*precio_hoy),
+        };
         let sub = redondear_2(precio * i.cantidad);
         let descuento = redondear_2(i.descuento.unwrap_or(0.0)).min(sub);
         filas_nuevas.push((i.producto_id, nombre.clone(), i.cantidad, precio, descuento, *es_servicio, i.paquete_id));

@@ -362,6 +362,7 @@ export default function POS({
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 900px)').matches
   );
   const [productos, setProductos] = useState([]);
+  const productoPorId = useMemo(() => new Map(productos.map((p) => [p.id, p])), [productos]);
   const [imagenesFallidas, setImagenesFallidas] = useState(() => new Set());
   const [busqueda, setBusqueda] = useState('');
   const [ordenPrecio, setOrdenPrecio] = useState('nombre');
@@ -2015,6 +2016,7 @@ export default function POS({
               tresPrecios={tresPrecios}
               precioEditable={precioEditable}
               esFija={esLineaMedida}
+              productoDe={(id) => productoPorId.get(id)}
               onCantidad={fijarCantidad}
               onSumar={cambiarCantidad}
               onPrecio={fijarPrecio}
