@@ -5,6 +5,8 @@ import { fechaCorta, hoyLima } from '../../utils/formato';
 import { formatoCantidad } from '../../utils/medidas';
 import { abreviaturaUnidad } from '../../utils/unidades';
 import { formatoPlaca, hoyMasMeses, lineasDePaquete, nombreVehiculo, textoKm } from '../../utils/vehiculos';
+import { coincidenTodas, fichaRepuestoCoincide, mapaPorProducto, palabrasDeBusqueda, resumenRepuesto } from '../../utils/repuestos';
+import { textoPlano } from '../../utils/medicamentos';
 import '../../components/PantallaModulo.css';
 import '../../components/Recibo.css';
 
@@ -363,6 +365,8 @@ function DetalleOrden({ orden, mecanicos, conPaquetes, onCambio, onCerrar, onCob
   }));
   const [productos, setProductos] = useState([]);
   const [paquetes, setPaquetes] = useState([]);
+  // Ficha del repuesto (marca, n.° de parte): para buscar como en el punto de venta.
+  const [repuestos, setRepuestos] = useState(() => new Map());
   const [buscar, setBuscar] = useState('');
   const [error, setError] = useState(null);
   const [ocupado, setOcupado] = useState(false);
@@ -377,13 +381,29 @@ function DetalleOrden({ orden, mecanicos, conPaquetes, onCambio, onCerrar, onCob
     if (!editable) return;
     api.productos().then(setProductos).catch(() => {});
     if (conPaquetes) api.paquetes().then(setPaquetes).catch(() => {});
+    // Sin el módulo la ruta responde 403: se busca solo por nombre y código, como antes.
+    api.repuestosFichas().then((lista) => setRepuestos(mapaPorProducto(lista))).catch(() => {});
   }, [editable, conPaquetes]);
 
   const encontrados = useMemo(() => {
     const q = buscar.trim().toLowerCase();
     if (q.length < 2) return [];
-    return productos.filter((p) => p.nombre.toLowerCase().includes(q) || String(p.codigo).toLowerCase().includes(q)).slice(0, 8);
-  }, [productos, buscar]);
+    const plano = textoPlano(q);
+    const palabras = palabrasDeBusqueda(q);
+    // Igual que el punto de venta en Lubricentro: también por n.° de parte, marca,
+    // código alterno y por palabras en la descripción (el vehículo: "trapecio aveo").
+    return productos
+      .filter((p) => {
+        const ficha = repuestos.get(p.id);
+        return (
+          p.nombre.toLowerCase().includes(q) ||
+          String(p.codigo).toLowerCase().includes(q) ||
+          fichaRepuestoCoincide(ficha, plano) ||
+          coincidenTodas(palabras, p.nombre, p.codigo, p.descripcion, resumenRepuesto(ficha))
+        );
+      })
+      .slice(0, 8);
+  }, [productos, buscar, repuestos]);
 
   const ejecutar = async (accion) => {
     setOcupado(true);
@@ -611,7 +631,7 @@ function DetalleOrden({ orden, mecanicos, conPaquetes, onCambio, onCerrar, onCob
           {editable && (
             <>
               <div className="pm-campo" style={{ marginTop: 10 }}>
-                <input value={buscar} placeholder="Agregar: busca el repuesto o la mano de obra por nombre o código" onChange={(e) => setBuscar(e.target.value)} />
+                <input value={buscar} placeholder="Agregar: busca por nombre, código, N.° de parte o vehículo (trapecio aveo)" onChange={(e) => setBuscar(e.target.value)} />
               </div>
               {encontrados.map((p) => (
                 <button key={p.id} className="pm-fila" onClick={() => agregarProducto(p)} disabled={ocupado}>
