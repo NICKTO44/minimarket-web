@@ -11,6 +11,12 @@ pub struct EmitirComprobanteRequest {
     /// del negocio (total mayor al mínimo).
     #[serde(default)]
     pub detraccion: Option<bool>,
+    /// Solo lo pone handlers/sin_conexion.rs (nunca llega desde el
+    /// navegador): fecha y hora "AAAA-MM-DD HH:MM:SS" de una venta hecha sin
+    /// internet, para que la boleta o factura salga con la fecha real de la
+    /// venta. None = ahora, como siempre.
+    #[serde(skip)]
+    pub fecha_hora: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

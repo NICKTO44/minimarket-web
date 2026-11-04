@@ -35,6 +35,9 @@ pub struct Pedido<'a> {
     pub codigo_producto_sunat: String,
     pub desglose: &'a Desglose,
     pub detraccion: Option<DetraccionFactura>,
+    /// Venta hecha sin internet (módulo VENTA_SIN_CONEXION): fecha y hora
+    /// "AAAA-MM-DD HH:MM:SS" de la venta. None = ahora, como siempre.
+    pub fecha_hora: Option<String>,
 }
 
 /// Dirección y token de Lycet, del .env.
@@ -204,7 +207,9 @@ pub async fn emitir(
             (id, serie, numero, documento, false)
         }
         None => {
-            let ahora = crate::logica::tiempo::ahora_lima(); // "AAAA-MM-DD HH:MM:SS"
+            // "AAAA-MM-DD HH:MM:SS". Una venta hecha sin internet sale con la
+            // fecha y hora en que se vendió.
+            let ahora = pedido.fecha_hora.clone().unwrap_or_else(crate::logica::tiempo::ahora_lima);
             let (fecha, hora) = ahora.split_once(' ').unwrap_or((ahora.as_str(), "00:00:00"));
             let (id, numero) = reservar_numero(conn, pedido.venta_id, &datos, &pedido.serie, &ahora).await?.ok_or((
                 StatusCode::CONFLICT,
@@ -221,7 +226,7 @@ pub async fn emitir(
             );
             conn.execute(
                 "INSERT INTO comprobante_archivos (comprobante_id, documento, actualizado) VALUES (?1, ?2, ?3)",
-                libsql::params![id, documento.to_string(), ahora.clone()],
+                libsql::params![id, documento.to_string(), crate::logica::tiempo::ahora_lima()],
             )
             .await
             .map_err(interno)?;

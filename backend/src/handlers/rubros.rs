@@ -93,6 +93,16 @@ pub const MODULO_MENU_ARRIBA: &str = "MENU_ARRIBA";
 /// Solo sale en el comprobante (boleta, factura o nota de venta); no entra a
 /// caja, reportes, ganancias, stock ni créditos (handlers/fuera_inventario.rs).
 pub const MODULO_VENTA_FUERA_INVENTARIO: &str = "VENTA_FUERA_INVENTARIO";
+/// Vender sin internet: el punto de venta guarda en el equipo lo que se
+/// vende (y la apertura de caja y los gastos de caja) y lo sube al volver
+/// la conexión; la boleta o factura se emite entonces con la fecha real de
+/// la venta (handlers/sin_conexion.rs). Sirve para cualquier rubro.
+pub const MODULO_VENTA_SIN_CONEXION: &str = "VENTA_SIN_CONEXION";
+/// Comprobante impreso en formato clásico (A4, A5 y ticket): los datos del
+/// cliente en recuadro (R.U.C./DNI, señores, vendedor, dirección, teléfono),
+/// sin la hora y con el pago solo por su medio ("Yape / Plin"). Solo cambia
+/// lo impreso, no lo que se envía a SUNAT. Sirve para cualquier rubro.
+pub const MODULO_COMPROBANTE_CLASICO: &str = "COMPROBANTE_CLASICO";
 /// Lubricentro: vehículos de los clientes (placa), kilometraje y próximo
 /// cambio en la venta, historial por placa y recordatorios
 /// (handlers/vehiculos.rs).
@@ -174,6 +184,8 @@ const MODULOS: &[&str] = &[
     MODULO_EQUIVALENTES,
     MODULO_MENU_ARRIBA,
     MODULO_VENTA_FUERA_INVENTARIO,
+    MODULO_VENTA_SIN_CONEXION,
+    MODULO_COMPROBANTE_CLASICO,
     MODULO_VEHICULOS,
     MODULO_ORDENES_SERVICIO,
     MODULO_PAQUETES,

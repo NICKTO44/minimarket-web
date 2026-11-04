@@ -128,6 +128,7 @@ async fn documento_emitido(t: &Arc<TenantDb>, venta_id: i64, tipo: &str) -> Valu
         cliente_documento: Some(if factura { "20000000001" } else { "12345678" }.to_string()),
         cliente_nombre: Some(if factura { "EMPRESA CLIENTE S.A.C." } else { "CLIENTE DE PRUEBA" }.to_string()),
         detraccion: None,
+        fecha_hora: None,
     });
     let Json(r) = facturacion::emitir_comprobante(Extension(t.clone()), pedido).await.expect("emisión");
     assert_eq!(r.estado, "PENDIENTE", "{}", r.mensaje);

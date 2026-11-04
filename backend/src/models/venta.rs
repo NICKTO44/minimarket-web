@@ -83,6 +83,24 @@ pub struct NuevaVenta {
     /// inventario. None en una venta de siempre.
     #[serde(default)]
     pub fuera_inventario: Option<Vec<crate::handlers::fuera_inventario::LineaFuera>>,
+    /// Módulo VENTA_SIN_CONEXION: código único que puso el equipo a esta
+    /// venta. Queda en `operaciones_sin_conexion` dentro de la misma
+    /// transacción, así la misma venta nunca entra dos veces. None en una
+    /// venta de siempre (no se guarda nada más).
+    #[serde(default)]
+    pub uuid_local: Option<String>,
+    /// Solo lo pone handlers/sin_conexion.rs al subir una venta hecha sin
+    /// internet (nunca llega desde el navegador): la hora real de la venta
+    /// y que se respete el precio que pagó el cliente.
+    #[serde(skip)]
+    pub sin_conexion: Option<VentaSinConexion>,
+}
+
+/// Lo que cambia al subir una venta hecha sin internet.
+#[derive(Debug, Clone, Default)]
+pub struct VentaSinConexion {
+    /// "AAAA-MM-DD HH:MM:SS" (hora de Perú) en que se hizo la venta.
+    pub fecha_hora: String,
 }
 
 #[derive(Debug, Serialize)]

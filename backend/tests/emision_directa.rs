@@ -72,6 +72,7 @@ fn pedido(venta_id: i64, tipo: &str) -> Json<EmitirComprobanteRequest> {
         cliente_documento: Some(if factura { "20000000001" } else { "12345678" }.to_string()),
         cliente_nombre: Some(if factura { "EMPRESA CLIENTE S.A.C." } else { "CLIENTE DE PRUEBA" }.to_string()),
         detraccion: None,
+        fecha_hora: None,
     })
 }
 

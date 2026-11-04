@@ -44,6 +44,10 @@ export const MODULO_EQUIVALENTES = 'EQUIVALENTES';
 export const MODULO_MENU_ARRIBA = 'MENU_ARRIBA';
 // Vender algo que no está en inventario: solo sale en el comprobante.
 export const MODULO_VENTA_FUERA_INVENTARIO = 'VENTA_FUERA_INVENTARIO';
+// Vender sin internet: lo vendido se guarda en el equipo y se sube al volver la conexión.
+export const MODULO_VENTA_SIN_CONEXION = 'VENTA_SIN_CONEXION';
+// Comprobante impreso en formato clásico: datos del cliente en recuadro, sin hora y pago solo por su medio.
+export const MODULO_COMPROBANTE_CLASICO = 'COMPROBANTE_CLASICO';
 // Lubricentro: vehículos de los clientes, placa y kilometraje en la venta.
 export const MODULO_VEHICULOS = 'VEHICULOS';
 // Lubricentro: órdenes de servicio, mecánicos y comisiones. Necesita Vehículos.
@@ -86,7 +90,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -220,6 +224,18 @@ export const MODULOS = [
     label: 'Vender algo que no está en inventario',
     descripcion:
       'En el punto de venta, un botón para vender algo que consigues afuera (nombre, cantidad, precio con IGV, unidad y código). Sale en la boleta, factura o nota de venta con el total completo, pero no entra a caja, reportes, ganancias, stock ni créditos: para el sistema solo cuenta lo de tu inventario.',
+  },
+  {
+    valor: MODULO_VENTA_SIN_CONEXION,
+    label: 'Venta sin conexión',
+    descripcion:
+      'Para cuando se va el internet: sigues vendiendo (nota, boleta o factura), abres la caja y registras gastos de caja. El cliente se lleva un comprobante provisional y, al volver la conexión, todo se sube solo y la boleta o factura se emite con la fecha real de la venta. Guarda una copia de tus productos y clientes en este equipo. Instala Monspeet como app en la computadora de la caja y vende desde ese mismo equipo mientras no haya internet.',
+  },
+  {
+    valor: MODULO_COMPROBANTE_CLASICO,
+    label: 'Comprobante formato clásico',
+    descripcion:
+      'Cambia cómo se imprimen tus boletas, facturas y notas (hoja A4, A5 y ticket): los datos del cliente van en un recuadro (R.U.C. o DNI, señores, vendedor, dirección y teléfono), sin la hora, y el pago solo con su medio ("Efectivo", "Yape / Plin"), sin montos. Lo que se envía a SUNAT no cambia.',
   },
   {
     valor: MODULO_FICHA_LIBRO,

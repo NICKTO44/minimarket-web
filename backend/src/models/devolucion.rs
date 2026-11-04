@@ -36,6 +36,13 @@ pub struct VentaParaDevolucion {
     /// solo para reimprimir el comprobante. None en una venta de siempre.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fuera_inventario: Option<crate::handlers::fuera_inventario::FueraDeVenta>,
+    /// Módulo COMPROBANTE_CLASICO: quién hizo la venta y el teléfono del
+    /// cliente, para el comprobante impreso. Solo se leen; sin ellos el
+    /// comprobante sale como siempre.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vendedor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cliente_telefono: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

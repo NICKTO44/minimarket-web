@@ -1,4 +1,12 @@
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import {
+  modoSinConexionActivo,
+  marcarSinConexion,
+  marcarConConexion,
+  copiaSinConexion,
+  guardarCopia,
+  registrarSubida,
+} from '../utils/sinConexion';
 const STORAGE_KEY = 'minimarket_sesion';
 
 function obtenerToken() {
@@ -27,6 +35,10 @@ async function leerRespuesta(res) {
 }
 
 async function request(path, options = {}) {
+  // Módulo "Venta sin conexión" encendido: otra ruta (utils/sinConexion.js).
+  // Sin el módulo, todo sigue exactamente igual.
+  if (modoSinConexionActivo()) return requestConCopia(path, options);
+
   const token = obtenerToken();
   const headers = {
     'Content-Type': 'application/json',
@@ -51,6 +63,96 @@ async function request(path, options = {}) {
   }
   return data;
 }
+
+// Cuánto se espera al servidor con el módulo "Venta sin conexión": con un
+// internet que va y viene, una petición puede quedarse colgada minutos. Solo
+// las lecturas y la venta tienen límite (la venta lleva su código: si se
+// cortó pero sí entró, al subirla después no se duplica). Las demás
+// escrituras esperan lo que haga falta, como siempre.
+const ESPERA_LECTURA_MS = 12000;
+const ESPERA_VENTA_MS = 25000;
+
+function errorSinConexion() {
+  const e = new Error('Sin conexión a internet.');
+  e.sinConexion = true;
+  return e;
+}
+
+/**
+ * Lo mismo que request(), para un negocio con el módulo "Venta sin conexión":
+ * - Guarda en el equipo lo que el punto de venta lee (utils/sinConexion.js).
+ * - Sin internet, una lectura responde con esa copia; una escritura lanza un
+ *   error con `sinConexion = true` (el punto de venta la guarda en la cola).
+ * - Si el servidor no contesta a tiempo, cuenta como sin internet.
+ */
+async function requestConCopia(path, options = {}) {
+  const token = obtenerToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const metodo = (options.method || 'GET').toUpperCase();
+  const lectura = metodo === 'GET';
+
+  const control = new AbortController();
+  // La venta solo tiene límite si lleva su código (una venta que se puede
+  // guardar sin internet); al crédito, una mesa, etc. esperan como siempre.
+  const ventaConCodigo = path === '/ventas' && typeof options.body === 'string' && options.body.includes('"uuid_local"');
+  const limite = lectura ? ESPERA_LECTURA_MS : ventaConCodigo ? ESPERA_VENTA_MS : 0;
+  const espera = limite ? setTimeout(() => control.abort(), limite) : null;
+  let res;
+  try {
+    res = await fetch(`${API_URL}${path}`, { ...options, headers, signal: control.signal });
+  } catch {
+    marcarSinConexion();
+    if (lectura) {
+      const copia = await copiaSinConexion(path);
+      if (copia !== undefined) return copia;
+    }
+    throw errorSinConexion();
+  } finally {
+    if (espera) clearTimeout(espera);
+  }
+  // El servidor detrás de Nginx no responde (caído o reiniciando): igual que sin internet.
+  if (res.status === 502 || res.status === 504) {
+    marcarSinConexion();
+    if (lectura) {
+      const copia = await copiaSinConexion(path);
+      if (copia !== undefined) return copia;
+    }
+    throw errorSinConexion();
+  }
+  marcarConConexion();
+
+  if (res.status === 401) {
+    localStorage.removeItem(STORAGE_KEY);
+    window.location.reload();
+    const e = new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
+    e.status = 401;
+    throw e;
+  }
+
+  const data = await leerRespuesta(res);
+
+  if (!res.ok) {
+    const mensaje = (typeof data === 'string' ? data : data?.message) || `Error en la solicitud (${res.status})`;
+    const e = new Error(mensaje);
+    e.status = res.status;
+    throw e;
+  }
+  if (lectura) guardarCopia(path, data);
+  return data;
+}
+
+/** Para precargar la copia de una lectura (utils/sinConexion.js). */
+export const leerYGuardar = (path) => request(path);
+
+/** ¿Este error es por falta de internet (módulo "Venta sin conexión")? */
+export const esSinConexion = (e) => !!e?.sinConexion;
+
+// Cómo se sube una operación hecha sin internet.
+registrarSubida((op) => request('/sin-conexion/operaciones', { method: 'POST', body: JSON.stringify(op) }));
 
 export const api = {
   login: async (usuario, password, tienda) => {

@@ -335,6 +335,8 @@ async fn main() {
         .route("/clientes/desactivados", get(handlers::clientes::listar_clientes_desactivados))
         .route("/clientes/:id/reactivar", post(handlers::clientes::reactivar_cliente))
         .route("/ventas", post(handlers::ventas::procesar_venta))
+        // Módulo VENTA_SIN_CONEXION: lo que se hizo sin internet, al volver la conexión.
+        .route("/sin-conexion/operaciones", post(handlers::sin_conexion::subir_operacion))
         .route("/ventas/:identificador", get(handlers::devoluciones::buscar_venta_para_devolucion))
         .route("/devoluciones", post(handlers::devoluciones::procesar_devolucion))
         .route("/lotes", post(handlers::lotes::agregar_lote))

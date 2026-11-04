@@ -1,7 +1,18 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
-import { api, API_URL } from '../../api/api';
+import { api, API_URL, esSinConexion } from '../../api/api';
+import {
+  ahoraLima,
+  copiaSinConexion,
+  descontarStockGuardado,
+  encolar,
+  folioProvisional,
+  guardarTelefono,
+  nuevoCodigo,
+  programarSincronizacion,
+  sumarVentaGuardada,
+} from '../../utils/sinConexion';
 import './POS.css';
 import Recibo from '../../components/Recibo';
 import '../../components/Recibo.css';
@@ -20,6 +31,8 @@ import { numeroCotizacion } from '../../utils/formato';
 import '../../components/PantallaModulo.css';
 import SelectorTalla from '../../components/SelectorTalla';
 import { datosA4DeDocumento, datosA4DeNotaVenta, imprimirComprobanteA4 } from '../../utils/facturaA4';
+import { datosClasicos } from '../../utils/documentoVenta';
+import { comprobanteClasico } from '../../utils/comprobanteClasico';
 import { agruparPorModelo } from '../../utils/variantes';
 import { esRespaldoLavanderia } from '../../utils/textosEncargos';
 import AvisoNotaCredito from '../../components/AvisoNotaCredito';
@@ -333,6 +346,10 @@ export default function POS({
   // Módulo "Vender algo que no está en inventario": entra al carrito como una
   // línea más y solo sale en el comprobante. Apagado, no se ve nada.
   fueraInventario = false,
+  // Módulo "Venta sin conexión": sin internet la venta se guarda en el equipo
+  // y se sube al volver la conexión (utils/sinConexion.js). Apagado, la venta
+  // es la de siempre.
+  sinConexion = false,
   // Lubricentro: placa y kilometraje en la venta, paquetes y el cobro de
   // una orden de servicio (viene de Órdenes de servicio).
   vehiculos = false,
@@ -562,6 +579,8 @@ export default function POS({
   const [ultimaVentaParaImprimir, setUltimaVentaParaImprimir] = useState(null);
   const [mostrarModalVenta, setMostrarModalVenta] = useState(false);
   const [telefonoWhatsapp, setTelefonoWhatsapp] = useState('');
+  // Venta sin conexión: el número del cliente quedó guardado con la venta.
+  const [telefonoGuardado, setTelefonoGuardado] = useState(false);
   const [pdfVisible, setPdfVisible] = useState(null);
   const [pdfPaginas, setPdfPaginas] = useState([]);
   const [pdfCargando, setPdfCargando] = useState(false);
@@ -803,7 +822,19 @@ export default function POS({
       });
       seleccionarCliente(nuevo);
     } catch (e) {
-      setErrorCliente(e.message);
+      if (sinConexion && esSinConexion(e)) {
+        // Sin internet: el cliente se crea al subir la venta.
+        seleccionarCliente({
+          id: null,
+          pendiente: true,
+          tipo_documento: tipoDocumentoParaNuevo,
+          numero_documento: nuevoDocumento.trim(),
+          nombre_razon_social: nuevoNombre.trim(),
+          direccion: nuevaDireccion.trim() || null,
+        });
+      } else {
+        setErrorCliente(e.message);
+      }
     } finally {
       setCreandoCliente(false);
     }
@@ -1537,6 +1568,60 @@ export default function POS({
     procesarVenta(null);
   };
 
+  // Módulo "Venta sin conexión": guarda la venta en este equipo para subirla
+  // al volver el internet. Devuelve lo mismo que POST /ventas (con un folio
+  // provisional) para que el resto del cobro siga igual.
+  const guardarVentaSinConexion = async (cuerpo, clienteVenta) => {
+    const caja = await copiaSinConexion('/cajas/abierta');
+    if (!caja) {
+      throw new Error('Sin internet: no hay una caja abierta en este equipo. Ábrela en Caja (también se puede sin internet) y vuelve a cobrar.');
+    }
+    const folio = folioProvisional();
+    const emite = tipoComprobante !== 'NINGUNO';
+    const datos = {
+      venta: cuerpo,
+      comprobante: emite
+        ? {
+            tipo: tipoComprobante,
+            cliente_documento: clienteVenta?.numero_documento || null,
+            cliente_nombre: clienteVenta?.nombre_razon_social || null,
+            ...(detraccionAplicable ? { detraccion: conDetraccion } : {}),
+          }
+        : null,
+      cliente_nuevo: clienteVenta?.pendiente
+        ? {
+            tipo_documento: clienteVenta.tipo_documento,
+            numero_documento: clienteVenta.numero_documento,
+            nombre_razon_social: clienteVenta.nombre_razon_social,
+            direccion: clienteVenta.direccion || null,
+          }
+        : null,
+    };
+    await encolar(
+      'VENTA',
+      datos,
+      {
+        folio_provisional: folio,
+        total,
+        comprobante: emite ? (tipoComprobante === 'FACTURA' ? 'Factura' : 'Boleta') : null,
+        cliente: clienteVenta?.nombre_razon_social || null,
+        fecha: ahoraLima(),
+      },
+      cuerpo.uuid_local
+    );
+    // Lo vendido baja del stock y la caja que se ven en este equipo.
+    await descontarStockGuardado(cuerpo.productos);
+    const efectivo =
+      cuerpo.metodo_pago === 'EFECTIVO'
+        ? cuerpo.total
+        : cuerpo.metodo_pago === 'MIXTO' && (cuerpo.pago_efectivo_metodo || 'EFECTIVO') === 'EFECTIVO'
+          ? cuerpo.pago_efectivo || 0
+          : 0;
+    await sumarVentaGuardada(total, efectivo);
+    programarSincronizacion(3000);
+    return { venta_id: null, folio, provisional: true, uuid: cuerpo.uuid_local };
+  };
+
   const procesarVenta = async (receta) => {
     // Lubricentro: la placa y el kilometraje se revisan antes de cobrar.
     const placaVenta = vehiculos ? vehiculoParaEnviar(vehiculoDatos) : null;
@@ -1554,7 +1639,27 @@ export default function POS({
     setProcesando(true);
     setMensaje(null);
     try {
-      const resultado = await api.ventaCrear({
+      // Módulo "Venta sin conexión": solo una venta normal se puede guardar
+      // sin internet (no al crédito, ni una cotización, un cambio, una mesa,
+      // un encargo o una orden: esas necesitan datos al día del servidor).
+      const sePuedeSinConexion =
+        sinConexion && !esCredito && !cotizacionEnVenta && !enCambio && !cobrandoPedido && !encargoEnVenta && !ordenEnVenta;
+      // Cliente registrado sin internet: si ya hay conexión, se crea ahora.
+      let clienteVenta = cliente;
+      if (sinConexion && clienteVenta?.pendiente) {
+        try {
+          clienteVenta = await api.clienteCrear({
+            tipo_documento: clienteVenta.tipo_documento,
+            numero_documento: clienteVenta.numero_documento,
+            nombre_razon_social: clienteVenta.nombre_razon_social,
+            direccion: clienteVenta.direccion || null,
+          });
+          setCliente(clienteVenta);
+        } catch (e) {
+          if (!esSinConexion(e)) throw e;
+        }
+      }
+      const cuerpoVenta = {
         productos: carrito.filter((i) => !esFueraInventario(i)).map((i) => ({
           id: i.id,
           nombre: i.nombre,
@@ -1585,7 +1690,7 @@ export default function POS({
           metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || aCobrar : mixtoConEfectivo ? recibidoNum : null,
         cambio: metodoPago === 'EFECTIVO' || mixtoConEfectivo ? cambio : null,
         usuario_id: usuario.id,
-        cliente_id: cliente?.id || null,
+        cliente_id: clienteVenta?.id || null,
         pago_efectivo: esMixto ? mixtoEfectivo : null,
         pago_otro: esMixto ? mixtoOtro : null,
         pago_otro_metodo: esMixto ? mixtoOtroMetodo : null,
@@ -1599,7 +1704,23 @@ export default function POS({
         ...(encargoEnVenta ? { encargo_id: encargoEnVenta.id } : {}),
         // Lo que no está en inventario: solo si hay (si no, la venta va como siempre).
         ...(carrito.some(esFueraInventario) ? { fuera_inventario: fueraParaEnviar(carrito) } : {}),
-      });
+        // Código de la venta: si se corta la respuesta y se guarda para subirla
+        // después, el servidor reconoce que ya había entrado.
+        ...(sePuedeSinConexion ? { uuid_local: nuevoCodigo() } : {}),
+      };
+      let resultado;
+      try {
+        resultado = await api.ventaCrear(cuerpoVenta);
+      } catch (e) {
+        if (!(sinConexion && esSinConexion(e))) throw e;
+        if (!sePuedeSinConexion) {
+          throw new Error(
+            'Sin internet solo se cobra una venta normal (no al crédito, ni cotizaciones, cambios, mesas, encargos u órdenes). Espera que vuelva la conexión.',
+            { cause: e }
+          );
+        }
+        resultado = await guardarVentaSinConexion(cuerpoVenta, clienteVenta);
+      }
       // La receta era de esta venta: la siguiente empieza en blanco.
       setRecetaDatos(RECETA_VACIA);
 
@@ -1607,7 +1728,8 @@ export default function POS({
       // con el siguiente cliente. La boleta o factura se emite en segundo
       // plano (SUNAT puede tardar unos segundos) y, cuando llega, se agrega
       // a esta venta para poder imprimirla.
-      const emiteComprobante = tipoComprobante !== 'NINGUNO';
+      // Guardada sin internet: la boleta o factura se emite al subirla.
+      const emiteComprobante = tipoComprobante !== 'NINGUNO' && !resultado.provisional;
       if (emiteComprobante) {
         const folio = resultado.folio;
         const paraEstaVenta = (cambios) => (actual) => (actual?.venta.folio === folio ? { ...actual, ...cambios } : actual);
@@ -1707,6 +1829,8 @@ export default function POS({
         comprobantePendiente: emiteComprobante,
         tipoComprobante,
         errorComprobante: null,
+        // Venta guardada sin internet: el ticket dice que es provisional.
+        provisional: resultado.provisional ? { uuid: resultado.uuid, tipo: tipoComprobante } : null,
         cliente,
         deMesa: cobrandoPedido,
         // Cuenta separada: la mesa sigue abierta con el resto.
@@ -1756,6 +1880,7 @@ export default function POS({
       setTipoComprobante('BOLETA');
       setConDetraccion(true);
       setTelefonoWhatsapp('');
+      setTelefonoGuardado(false);
       api.productos().then(setProductos);
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
@@ -1809,7 +1934,13 @@ export default function POS({
   const imprimirNotaA4 = (papel = 'A4') => {
     const v = ultimaVentaParaImprimir;
     const datos = datosA4DeNotaVenta(
-      { ...v, venta: { ...v.venta, pagoTexto: textoPago(pagoParaImprimir(v.venta)) || null }, fecha: new Date().toLocaleString('es-PE') },
+      {
+        ...v,
+        venta: { ...v.venta, pagoTexto: textoPago(pagoParaImprimir(v.venta)) || null },
+        fecha: new Date().toLocaleString('es-PE'),
+        // Formato clásico: quién hizo la venta.
+        ...(comprobanteClasico() ? { vendedor: usuario.nombre } : {}),
+      },
       {
         nombreComercial: nombreTienda,
         razonSocial: cfgEmisor?.razon_social,
@@ -1837,6 +1968,7 @@ export default function POS({
         color: cfgEmisor?.color_acento,
         // Venta en tabla: código interno y precio sin IGV en la factura A4.
         ...(ventaTabla ? { columnasRepuesto: true, codigos: await codigosDeVenta(ultimaVentaParaImprimir?.venta?.folio) } : {}),
+        ...(await datosClasicos(ultimaVentaParaImprimir?.venta?.folio)),
       });
       imprimirComprobanteA4(datos, { papel });
     } catch (e) {
@@ -1955,6 +2087,20 @@ export default function POS({
     }
 
     window.open(`https://wa.me/${numeroConPais}?text=${encodeURIComponent(texto)}`, '_blank');
+  };
+
+  // Venta guardada sin internet: el número queda con la venta para enviarle
+  // su boleta o factura cuando se emita (desde el aviso "Venta sin conexión").
+  const guardarWhatsappProvisional = async () => {
+    const uuid = ultimaVentaParaImprimir?.provisional?.uuid;
+    const numero = telefonoWhatsapp.replace(/\D/g, '');
+    if (!uuid) return;
+    if (numero.length < 9) {
+      setMensaje({ tipo: 'error', texto: 'Ingresa un número de WhatsApp válido (9 dígitos).' });
+      return;
+    }
+    await guardarTelefono(uuid, telefonoWhatsapp);
+    setTelefonoGuardado(true);
   };
 
   const mostrarFormularioNuevo = sinResultadosCliente && !buscandoCliente;
@@ -3291,11 +3437,21 @@ export default function POS({
         <div className="pos-venta-modal-overlay">
           <div className="pos-venta-modal">
             <div className="pos-venta-modal-check">✓</div>
-            <h2>{ultimaVentaParaImprimir.venta.cambioPrenda ? 'Cambio registrado' : 'Venta registrada'}</h2>
+            <h2>
+              {ultimaVentaParaImprimir.provisional
+                ? 'Venta guardada sin internet'
+                : ultimaVentaParaImprimir.venta.cambioPrenda
+                  ? 'Cambio registrado'
+                  : 'Venta registrada'}
+            </h2>
             <p className="pos-venta-modal-folio">{ultimaVentaParaImprimir.venta.folio}</p>
 
             <p className="pos-venta-modal-tipo">
-              {ultimaVentaParaImprimir.comprobante
+              {ultimaVentaParaImprimir.provisional
+                ? ultimaVentaParaImprimir.provisional.tipo === 'NINGUNO'
+                  ? 'Nota de venta'
+                  : `${ultimaVentaParaImprimir.provisional.tipo === 'FACTURA' ? 'Factura' : 'Boleta'}: se emitirá al volver el internet`
+                : ultimaVentaParaImprimir.comprobante
                 ? `${ultimaVentaParaImprimir.comprobante.tipo === 'FACTURA' ? 'Factura' : 'Boleta'} ${ultimaVentaParaImprimir.comprobante.serie}-${String(ultimaVentaParaImprimir.comprobante.numero).padStart(6, '0')}`
                 : ultimaVentaParaImprimir.comprobantePendiente
                   ? `Emitiendo ${ultimaVentaParaImprimir.tipoComprobante === 'FACTURA' ? 'factura' : 'boleta'}…`
@@ -3303,6 +3459,12 @@ export default function POS({
                     ? 'Sin comprobante'
                     : 'Nota de venta'}
             </p>
+            {ultimaVentaParaImprimir.provisional && (
+              <p className="pos-venta-modal-provisional">
+                Imprime el comprobante provisional para el cliente. Cuando vuelva la conexión, la venta se sube sola
+                {ultimaVentaParaImprimir.provisional.tipo !== 'NINGUNO' ? ' y se emite su comprobante con la fecha de hoy' : ''}.
+              </p>
+            )}
             {ultimaVentaParaImprimir.errorComprobante && (
               <p className="pos-venta-modal-error">
                 La venta quedó registrada, pero no se pudo emitir el comprobante: {ultimaVentaParaImprimir.errorComprobante}
@@ -3354,13 +3516,21 @@ export default function POS({
                 value={telefonoWhatsapp}
                 onChange={(e) => setTelefonoWhatsapp(e.target.value)}
               />
-              <button
-                className="pos-venta-modal-whatsapp-boton"
-                onClick={enviarPorWhatsapp}
-                disabled={ultimaVentaParaImprimir.comprobantePendiente}
-              >
-                📲 Enviar por WhatsApp
-              </button>
+              {ultimaVentaParaImprimir.provisional ? (
+                // Sin internet: se guarda el número y la boleta se le envía
+                // desde "Venta sin conexión" cuando ya esté emitida.
+                <button className="pos-venta-modal-whatsapp-boton" onClick={guardarWhatsappProvisional}>
+                  {telefonoGuardado ? '✓ Número guardado' : '📲 Guardar número'}
+                </button>
+              ) : (
+                <button
+                  className="pos-venta-modal-whatsapp-boton"
+                  onClick={enviarPorWhatsapp}
+                  disabled={ultimaVentaParaImprimir.comprobantePendiente}
+                >
+                  📲 Enviar por WhatsApp
+                </button>
+              )}
             </div>
 
             <div className="pos-venta-modal-acciones">
@@ -3505,6 +3675,7 @@ export default function POS({
           logo={logoNegocio}
           garantias={ultimaVentaParaImprimir.garantias || []}
           vehiculo={ultimaVentaParaImprimir.vehiculo || null}
+          provisional={ultimaVentaParaImprimir.provisional || null}
         />
       )}
     </div>

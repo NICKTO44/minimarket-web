@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowDownToLine, ArrowUpFromLine, ReceiptText } from 'lucide-react';
-import { api } from '../../api/api';
+import { api, esSinConexion } from '../../api/api';
+import { cajaProvisional, encolar, programarSincronizacion } from '../../utils/sinConexion';
 import { ventasDeCajaPorMetodo } from '../../utils/metodoPago';
 import { fechaHoraLima, textoDiferencia } from '../../utils/formato';
 import FormularioGasto from '../../components/FormularioGasto';
@@ -9,7 +10,9 @@ import './Caja.css';
 
 const NOMBRE_MOVIMIENTO = { GASTO: 'Gasto', RETIRO: 'Retiro', INGRESO: 'Ingreso' };
 
-export default function Caja({ usuario }) {
+// sinConexion: módulo "Venta sin conexión" (sin internet se puede abrir la
+// caja y registrar gastos de caja; se suben al volver la conexión).
+export default function Caja({ usuario, sinConexion = false }) {
   const [caja, setCaja] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [montoInicial, setMontoInicial] = useState('');
@@ -74,10 +77,45 @@ export default function Caja({ usuario }) {
       setMensaje({ tipo: 'exito', texto: 'Caja abierta correctamente.' });
       cargarCaja();
     } catch (e) {
-      setMensaje({ tipo: 'error', texto: e.message });
+      if (sinConexion && esSinConexion(e)) {
+        await abrirSinConexion(monto);
+      } else {
+        setMensaje({ tipo: 'error', texto: e.message });
+      }
     } finally {
       setProcesando(false);
     }
+  };
+
+  // Sin internet: la apertura queda guardada en el equipo y se sube al
+  // volver la conexión. Mientras tanto se ve una caja provisional.
+  const abrirSinConexion = async (monto) => {
+    await encolar('ABRIR_CAJA', { monto_inicial: monto, observaciones: observaciones || null }, { total: monto, descripcion: 'Monto inicial' });
+    await cajaProvisional({
+      id: null,
+      provisional: true,
+      usuario_nombre: usuario?.nombre || '',
+      monto_inicial: monto,
+      ventas_efectivo: 0,
+      ventas_tarjeta: 0,
+      ventas_transferencia: 0,
+      ventas_yape: 0,
+      ventas_plin: 0,
+      ventas_yape_plin: 0,
+      detalle_billeteras: true,
+      total_ventas: 0,
+      numero_transacciones: 0,
+      devoluciones_monto: 0,
+      retiros_total: 0,
+      ingresos_total: 0,
+      gastos_total: 0,
+      fecha_apertura: new Date().toISOString().slice(0, 19).replace('T', ' '),
+    });
+    programarSincronizacion(2000);
+    setMontoInicial('');
+    setObservaciones('');
+    setMensaje({ tipo: 'exito', texto: 'Caja abierta sin internet. Se registrará en el sistema al volver la conexión.' });
+    cargarCaja();
   };
 
   const cerrarCaja = async () => {
@@ -85,6 +123,10 @@ export default function Caja({ usuario }) {
     const monto = parseFloat(montoContado);
     if (isNaN(monto) || monto < 0) {
       setMensaje({ tipo: 'error', texto: 'Ingresa el monto contado en efectivo.' });
+      return;
+    }
+    if (sinConexion && caja?.provisional) {
+      setMensaje({ tipo: 'error', texto: 'Esta caja se abrió sin internet: ciérrala cuando vuelva la conexión y se hayan subido sus ventas.' });
       return;
     }
     setProcesando(true);
@@ -223,6 +265,9 @@ export default function Caja({ usuario }) {
           <span className="caja-badge">{caja.usuario_nombre}</span>
         </div>
         <p className="caja-subtitulo">Desde {fechaHoraLima(caja.fecha_apertura)}</p>
+        {sinConexion && caja.provisional && (
+          <p className="caja-mensaje caja-mensaje-error">Abierta sin internet: se registrará al volver la conexión.</p>
+        )}
 
         <div className="caja-seccion-titulo">Ventas por método de pago</div>
         {ventasDeCajaPorMetodo(caja).map((m) => (
@@ -349,7 +394,13 @@ export default function Caja({ usuario }) {
       </div>
 
       {ventana === 'GASTO' && (
-        <FormularioGasto soloCaja efectivoCaja={efectivoEsperado} onCerrar={() => setVentana(null)} onGuardado={(r) => movimientoGuardado(r.mensaje)} />
+        <FormularioGasto
+          soloCaja
+          sinConexion={sinConexion}
+          efectivoCaja={efectivoEsperado}
+          onCerrar={() => setVentana(null)}
+          onGuardado={(r) => movimientoGuardado(r.mensaje)}
+        />
       )}
       {(ventana === 'RETIRO' || ventana === 'INGRESO') && (
         <MovimientoCaja

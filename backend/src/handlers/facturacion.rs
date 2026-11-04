@@ -236,6 +236,7 @@ pub async fn emitir_comprobante(
             codigo_producto_sunat: codigo_sunat,
             desglose: &desglose,
             detraccion,
+            fecha_hora: payload.fecha_hora.clone(),
         };
         return crate::handlers::facturacion_directa::emitir(&conn, pedido, datos).await;
     }

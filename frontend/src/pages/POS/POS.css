@@ -1270,6 +1270,17 @@
 }
 
 /* El comprobante no se pudo emitir (la venta sí quedó registrada). */
+.pos-venta-modal-provisional {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+}
+
 .pos-venta-modal-error {
   margin: 0 0 10px;
   padding: 8px 10px;

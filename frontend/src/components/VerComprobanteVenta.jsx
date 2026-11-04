@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, API_URL } from '../api/api';
-import { datosDelTicket, facturaConA4, pagoDeVenta } from '../utils/documentoVenta';
+import { datosClasicos, datosDelTicket, facturaConA4, pagoDeVenta } from '../utils/documentoVenta';
 import { datosA4DeDocumento, imprimirComprobanteA4 } from '../utils/facturaA4';
 import { descargarArchivo, pdfDeVenta } from '../utils/pdfTicket';
 import './VerComprobanteVenta.css';
@@ -115,6 +115,7 @@ export default function VerComprobanteVenta({ venta, onCerrar }) {
         email: cfg?.email,
         logo: cfg?.logo_path ? `${API_URL}${cfg.logo_path}` : null,
         color: cfg?.color_acento,
+        ...(await datosClasicos(comp.folio_venta || venta.folio)),
       });
       imprimirComprobanteA4(datos);
     });

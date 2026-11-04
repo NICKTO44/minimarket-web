@@ -18,6 +18,7 @@ import QRCode from 'qrcode';
 import { montoEnLetras } from './numeroALetras';
 import { construirCadenaQrSunat } from './qrSunat';
 import { formatoPrecio } from './medidas';
+import { comprobanteClasico } from './comprobanteClasico';
 import { esPapel58 } from './papelTicket';
 
 const COLOR_POR_DEFECTO = '#0f7b37'; // verde Monspeet, versión oscura (imprime bien)
@@ -174,11 +175,29 @@ export function htmlComprobanteA4(datos) {
       }
     </div>`;
 
+  // Módulo "Comprobante formato clásico": el cliente en un recuadro con
+  // etiqueta y dato (R.U.C., señores, vendedor, dirección, teléfono) y la
+  // fecha sin hora. Sin el módulo la hoja sale como siempre.
+  const clasico = comprobanteClasico();
+  const filaClasica = (etiqueta, valor) =>
+    valor ? `<tr><th>${etiqueta}</th><td class="dos-puntos">:</td><td>${escapar(valor)}</td></tr>` : '';
+  const bloqueClienteClasico = `
+    <div class="recuadro-cliente">
+      <table>
+        ${cliente?.numeroDocumento ? filaClasica(cliente.tipoDocumento === 'RUC' ? 'R.U.C.' : escapar(cliente.tipoDocumento || 'DOC.').toUpperCase(), cliente.numeroDocumento) : ''}
+        ${filaClasica('SEÑORES', cliente?.nombre || 'CLIENTES VARIOS')}
+        ${filaClasica('VENDEDOR', datos.vendedor)}
+        ${filaClasica('DIRECCIÓN', cliente?.direccion)}
+        ${filaClasica('TELÉFONO', cliente?.telefono)}
+        ${referencia ? filaClasica('MODIFICA A', `${referencia.tipo} ${referencia.documento}`) + filaClasica('MOTIVO', referencia.motivo) : ''}
+      </table>
+    </div>`;
+
   const bloqueFechas = `
     <div class="tarjeta">
       <dl class="fechas">
         <dt>Fecha de emisión</dt><dd>${escapar(comprobante.fechaEmision)}</dd>
-        ${comprobante.horaEmision ? `<dt>Hora</dt><dd>${escapar(comprobante.horaEmision)}</dd>` : ''}
+        ${comprobante.horaEmision && !clasico ? `<dt>Hora</dt><dd>${escapar(comprobante.horaEmision)}</dd>` : ''}
         ${credito ? `<dt>Vencimiento</dt><dd>${escapar(cuotas[cuotas.length - 1].fecha)}</dd>` : ''}
         <dt>Moneda</dt><dd>Soles (PEN)</dd>
         ${esFactura ? `<dt>Forma de pago</dt><dd>${escapar(datos.formaPago || 'Contado')}</dd>` : ''}
@@ -253,6 +272,11 @@ export function htmlComprobanteA4(datos) {
   .fechas { margin: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 4mm; row-gap: 1.1mm; }
   .fechas dt { color: var(--tenue); }
   .fechas dd { margin: 0; text-align: right; font-weight: 700; }
+  /* Formato clásico: recuadro del cliente con etiqueta y dato. */
+  .recuadro-cliente { border: 0.3mm solid var(--tinta); border-radius: 2.5mm; padding: 2.5mm 4mm; }
+  .recuadro-cliente th { text-align: left; font-weight: 700; white-space: nowrap; padding: 0.5mm 0; vertical-align: top; }
+  .recuadro-cliente td { padding: 0.5mm 0; vertical-align: top; text-transform: uppercase; }
+  .recuadro-cliente td.dos-puntos { padding: 0.5mm 2.5mm 0.5mm 3mm; font-weight: 700; }
 
   table { border-collapse: collapse; width: 100%; }
   .items thead th {
@@ -331,7 +355,7 @@ export function htmlComprobanteA4(datos) {
 
   <div class="franja"></div>
 
-  <section class="datos">${bloqueCliente}${bloqueFechas}</section>
+  <section class="datos">${clasico ? bloqueClienteClasico : bloqueCliente}${bloqueFechas}</section>
 
   <table class="items${conColumnas ? ' compacta' : ''}">
     <thead>
@@ -400,6 +424,9 @@ const ESTILO_A5 = `
   .etiqueta { font-size: 6.2pt; margin-bottom: 0.8mm; }
   .dato-grande { font-size: 8.8pt; }
   .fechas { column-gap: 2.5mm; row-gap: 0.6mm; }
+  .recuadro-cliente { padding: 1.6mm 2.5mm; border-radius: 2mm; }
+  .recuadro-cliente th, .recuadro-cliente td { padding: 0.25mm 0; }
+  .recuadro-cliente td.dos-puntos { padding: 0.25mm 1.5mm 0.25mm 2mm; }
   .items thead th { font-size: 6.2pt; padding: 1.6mm 1.3mm; letter-spacing: 0.03em; }
   .items td { padding: 1.5mm 1.3mm; }
   .items .n { width: 5mm; }
@@ -532,7 +559,11 @@ export async function datosA4DeDocumento(doc, extra = {}) {
           numeroDocumento: sinDocumento ? null : cli.numDoc,
           nombre: cli.rznSocial,
           direccion: cli.address?.direccion,
+          telefono: extra.clienteTelefono || null,
         },
+    // Formato clásico: quién vendió (extra.vendedor, ver datosClasicos en
+    // documentoVenta.js). Sin el módulo no se imprime.
+    vendedor: extra.vendedor || null,
     // "Venta en tabla": factura y boleta, con el código interno de cada
     // línea (extra.codigos, en el orden de la venta) y su valor sin IGV.
     columnasRepuesto: !!extra.columnasRepuesto && tipo !== 'NOTA_CREDITO',
@@ -653,10 +684,12 @@ export function htmlComprobanteTicket(datos) {
     </div>
   </div>
   <div class="datos">
-    <p><b>Fecha</b><span>${escapar(comprobante.fechaEmision)}${comprobante.horaEmision ? ` ${escapar(comprobante.horaEmision)}` : ''}</span></p>
+    <p><b>Fecha</b><span>${escapar(comprobante.fechaEmision)}${comprobante.horaEmision && !comprobanteClasico() ? ` ${escapar(comprobante.horaEmision)}` : ''}</span></p>
     <p><b>Cliente</b><span>${escapar(cliente?.nombre || 'Clientes varios')}</span></p>
     ${cliente?.numeroDocumento ? `<p><b>${escapar(cliente.tipoDocumento || 'Doc.')}</b><span>${escapar(cliente.numeroDocumento)}</span></p>` : ''}
     ${cliente?.direccion ? `<p><b>Dirección</b><span>${escapar(cliente.direccion)}</span></p>` : ''}
+    ${comprobanteClasico() && cliente?.telefono ? `<p><b>Teléfono</b><span>${escapar(cliente.telefono)}</span></p>` : ''}
+    ${comprobanteClasico() && datos.vendedor ? `<p><b>Vendedor</b><span>${escapar(datos.vendedor)}</span></p>` : ''}
   </div>
   ${
     referencia
@@ -713,8 +746,10 @@ export function datosA4DeNotaVenta(ticket, emisor = {}) {
           numeroDocumento: cliente.numero_documento || null,
           nombre: cliente.nombre_razon_social,
           direccion: cliente.direccion,
+          telefono: cliente.telefono || null,
         }
       : null,
+    vendedor: ticket.vendedor || null,
     pago: venta.pagoTexto || null,
     columnasRepuesto: true,
     items: items.map((it) => {

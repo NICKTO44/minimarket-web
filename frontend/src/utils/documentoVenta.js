@@ -8,6 +8,7 @@ import { fechaHoraLima } from './formato';
 import { pagoParaImprimir, textoPago } from './metodoPago';
 import { lineasDeVenta, precioSinIgv } from './codigosVenta';
 import { lineasFuera, ventaDelCliente } from './fueraInventario';
+import { comprobanteClasico } from './comprobanteClasico';
 
 // Comprobante con hoja A4 (además del ticket de 80 mm):
 // - la factura de FacturaLibre (su PDF oficial);
@@ -53,6 +54,8 @@ export const datosDelTicket = async (comp, { conCodigos = false } = {}) => {
   let cliente = detalle.cliente || null;
   if (!cliente && comp.cliente_nombre) {
     cliente = { nombre_razon_social: comp.cliente_nombre, numero_documento: comp.cliente_documento || null };
+    // Formato clásico: el teléfono del cliente (si lo tiene registrado).
+    if (comprobanteClasico() && leida.cliente_telefono) cliente.telefono = leida.cliente_telefono;
     if (comp.tipo === 'FACTURA' && comp.cliente_documento) {
       const guardados = await api.clientesBuscar(comp.cliente_documento).catch(() => []);
       const guardado = Array.isArray(guardados)
@@ -65,6 +68,8 @@ export const datosDelTicket = async (comp, { conCodigos = false } = {}) => {
   return {
     // Fecha y hora de emisión (no la del momento en que se reimprime).
     fecha: fechaHoraLima(comp.fecha_emision),
+    // Formato clásico: quién hizo la venta (no quien reimprime).
+    ...(comprobanteClasico() && leida.vendedor ? { vendedor: leida.vendedor } : {}),
     // metodoPago: para la "Forma de pago" de la factura (contado o crédito).
     venta: {
       folio: detalle.folio,
@@ -121,6 +126,17 @@ export const datosDelTicket = async (comp, { conCodigos = false } = {}) => {
 // Con qué pagó el cliente, en texto para la hoja A4 ("Yape", "Pago mixto:
 // Yape S/ 50.00 + Plin S/ 85.00"). Si no se puede leer la venta, la hoja
 // sale igual, sin esa línea.
+/**
+ * Módulo "Comprobante formato clásico": quién hizo la venta y el teléfono
+ * del cliente, para la hoja A4 / A5 ({ vendedor, clienteTelefono }). Sin
+ * el módulo devuelve {} sin consultar nada.
+ */
+export const datosClasicos = async (folio) => {
+  if (!comprobanteClasico() || !folio) return {};
+  const leida = await api.ventaParaDevolucion(folio).catch(() => null);
+  return { vendedor: leida?.vendedor || null, clienteTelefono: leida?.cliente_telefono || null };
+};
+
 export const pagoDeVenta = async (folio) => {
   if (!folio) return null;
   const detalle = await api.ventaParaDevolucion(folio).catch(() => null);

@@ -13,7 +13,7 @@ import { fechaHoraLima, hoyLima } from '../../utils/formato';
 import { descargarArchivo, pdfDeVenta } from '../../utils/pdfTicket';
 import { enlaceComprobantePublico } from '../../utils/enlacePublico';
 import { imprimirTicket as imprimirSoloTicket } from '../../utils/imprimirTicket';
-import { a4Propio, datosDelTicket, facturaConA4, pagoDeVenta } from '../../utils/documentoVenta';
+import { a4Propio, datosClasicos, datosDelTicket, facturaConA4, pagoDeVenta } from '../../utils/documentoVenta';
 import { etiquetaRol } from '../../utils/menu';
 import { codigosDeVenta } from '../../utils/codigosVenta';
 import { etiquetaTicket } from '../../utils/papelTicket';
@@ -321,6 +321,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,
         color: cfgEmisor?.color_acento,
         ...(codigoEnA4 ? { columnasRepuesto: true, codigos: await codigosDeVenta(comp.folio_venta) } : {}),
+        ...(await datosClasicos(comp.folio_venta)),
       });
       imprimirComprobanteA4(datos, { papel });
     } catch (e) {
@@ -902,6 +903,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
           cajero={usuario?.nombre || ''}
           etiquetaCajero={etiquetaRol(usuario)}
           fecha={ventaParaImprimir.fecha}
+          vendedor={ventaParaImprimir.vendedor || null}
           logo={logoNegocio}
         />
       )}

@@ -249,6 +249,7 @@ fn pedido(venta_id: i64) -> Json<EmitirComprobanteRequest> {
         cliente_documento: Some("12345678".into()),
         cliente_nombre: Some("CLIENTE DE PRUEBA".into()),
         detraccion: None,
+        fecha_hora: None,
     })
 }
 

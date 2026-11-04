@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { montoEnLetras } from '../utils/numeroALetras';
 import { construirCadenaQrSunat } from '../utils/qrSunat';
 import { nombreMetodo, pagoParaImprimir } from '../utils/metodoPago';
+import { comprobanteClasico, soloFecha } from '../utils/comprobanteClasico';
 import { desgloseDeComprobante, etiquetaTasa } from '../utils/igv';
 import { formatoCantidad, formatoPrecio, subtotalLinea } from '../utils/medidas';
 
@@ -33,16 +34,28 @@ export default function Recibo({
   fecha = null,
   vehiculo = null,
   garantias = [],
+  // Módulo "Venta sin conexión": venta guardada sin internet ({ tipo }). El
+  // ticket es provisional: la boleta o factura se emite al volver la conexión.
+  provisional = null,
+  // Formato clásico: quién hizo la venta (al reimprimir). Sin él, `cajero`.
+  vendedor = null,
 }) {
+  // Módulo "Comprobante formato clásico": sin hora, "Vendedor" y el
+  // teléfono del cliente. El pago ya llega solo con su medio (metodoPago.js).
+  const clasico = comprobanteClasico();
+  const fechaImpresa = fecha || new Date().toLocaleString('es-PE');
   const esComprobanteReal = !!comprobante;
   // La factura también sale en ticket de 80 mm: lleva el RUC del cliente,
   // la forma de pago y la leyenda de representación impresa.
   const esFactura = comprobante?.tipo === 'FACTURA';
   const formaPago = venta.credito || venta.metodoPago === 'CREDITO' ? 'CRÉDITO' : 'CONTADO';
   const pago = pagoParaImprimir(venta);
+  const provisionalConComprobante = !comprobante && provisional && provisional.tipo !== 'NINGUNO';
   const encabezado = comprobante
     ? `${comprobante.tipo === 'FACTURA' ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'}`
-    : 'NOTA DE VENTA (sin comprobante tributario)';
+    : provisionalConComprobante
+      ? 'COMPROBANTE PROVISIONAL'
+      : 'NOTA DE VENTA (sin comprobante tributario)';
   const numeroDocumento = comprobante ? `${comprobante.serie}-${String(comprobante.numero).padStart(8, '0')}` : null;
 
   // Se usan los valores REALES devueltos por el backend (los mismos que
@@ -139,6 +152,12 @@ export default function Recibo({
           )}
           <div className="recibo-cliente-nombre">{cliente.nombre_razon_social}</div>
           {cliente.direccion && <div className="recibo-cliente-direccion">{cliente.direccion}</div>}
+          {clasico && cliente.telefono && (
+            <div className="recibo-fila-meta">
+              <span>Teléfono</span>
+              <span>{cliente.telefono}</span>
+            </div>
+          )}
           <div className="recibo-linea"></div>
         </>
       )}
@@ -149,7 +168,7 @@ export default function Recibo({
       </div>
       <div className="recibo-fila-meta">
         <span>{esFactura ? 'Emisión' : 'Fecha'}</span>
-        <span>{fecha || new Date().toLocaleString('es-PE')}</span>
+        <span>{clasico ? soloFecha(fechaImpresa) : fechaImpresa}</span>
       </div>
       <div className="recibo-fila-meta">
         <span>Moneda</span>
@@ -162,8 +181,8 @@ export default function Recibo({
         </div>
       )}
       <div className="recibo-fila-meta">
-        <span>{etiquetaCajero}</span>
-        <span>{cajero}</span>
+        <span>{clasico ? 'Vendedor' : etiquetaCajero}</span>
+        <span>{(clasico && vendedor) || cajero}</span>
       </div>
       {vehiculo?.placa && (
         <>
@@ -410,6 +429,15 @@ export default function Recibo({
       {limiteCambio && (
         <div className="recibo-centro recibo-disclaimer">
           Cambios hasta el {limiteCambio} ({diasCambio} días), con la prenda sin uso y este comprobante.
+        </div>
+      )}
+
+      {provisionalConComprobante && (
+        <div className="recibo-centro recibo-disclaimer">
+          <strong>ESTE TICKET NO ES UN COMPROBANTE DE PAGO.</strong>
+          <br />
+          Venta registrada sin conexión a internet. Su {provisional.tipo === 'FACTURA' ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'} se
+          emitirá con la fecha de esta compra apenas vuelva la conexión, y se le puede enviar por WhatsApp.
         </div>
       )}
 

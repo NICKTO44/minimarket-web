@@ -6,6 +6,7 @@
 // Yape y Plin van por separado (migración 0019): cada uno tiene su botón
 // y su línea en caja y reportes. 'YAPE_PLIN' queda solo para mostrar las
 // ventas de antes, cuando eran un solo medio.
+import { comprobanteClasico } from './comprobanteClasico';
 
 /** Botones del punto de venta, en el orden en que se muestran. */
 export const METODOS_DE_COBRO = ['EFECTIVO', 'YAPE', 'PLIN', 'TARJETA', 'TRANSFERENCIA'];
@@ -77,6 +78,16 @@ export function describirPago(venta) {
  *  - Al crédito recién vendido (venta.credito): null, ya tiene su bloque.
  */
 export function pagoParaImprimir(venta) {
+  const pago = pagoDetallado(venta);
+  // Módulo "Comprobante formato clásico": solo el medio, sin montos
+  // ("Efectivo", "Yape / Plin", "Al crédito").
+  if (!pago || !comprobanteClasico() || !pago.partes.length) return pago;
+  if (pago.titulo === 'Al crédito') return { titulo: pago.titulo, partes: [] };
+  const medios = [...new Set(pago.partes.map((p) => p.nombre))];
+  return { titulo: medios.join(' / '), partes: [] };
+}
+
+function pagoDetallado(venta) {
   if (!venta) return null;
   const metodo = venta.metodoPago ?? venta.metodo_pago;
   if (!metodo) return null;

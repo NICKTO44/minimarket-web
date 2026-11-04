@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { api } from './api/api';
+import { api, leerYGuardar } from './api/api';
+import { activarSinConexion, desactivarSinConexion } from './utils/sinConexion';
+import EstadoSinConexion from './components/EstadoSinConexion';
 import { aplicarTema, limpiarTema } from './utils/tema';
 import POS from './pages/POS/POS';
 import PosBloqueado from './components/PosBloqueado';
@@ -45,6 +47,7 @@ import AvisosListos from './components/AvisosListos';
 import DireccionNegocio from './components/DireccionNegocio';
 import { irADireccion, leerDireccion } from './utils/direccion';
 import { usarAppDelNegocio } from './utils/appInstalable';
+import { usarComprobanteClasico } from './utils/comprobanteClasico';
 import {
   conPermisosDeAdmin,
   esAlmacen,
@@ -78,6 +81,8 @@ import {
   MODULO_EQUIVALENTES,
   MODULO_MENU_ARRIBA,
   MODULO_VENTA_FUERA_INVENTARIO,
+  MODULO_VENTA_SIN_CONEXION,
+  MODULO_COMPROBANTE_CLASICO,
   MODULO_VEHICULOS,
   MODULO_ORDENES_SERVICIO,
   MODULO_PAQUETES,
@@ -412,6 +417,19 @@ function App() {
     if (slugRecordado) usarAppDelNegocio(slugRecordado, { conLogo: !!logoDelNegocio });
   }, [slugRecordado, logoDelNegocio]);
 
+  // Módulo "Venta sin conexión": se enciende en este equipo solo si el
+  // negocio lo tiene (utils/sinConexion.js). Se apaga cuando la
+  // configuración del servidor ya no lo trae.
+  const identificadorSinConexion = logueado ? tiendaRecordada?.identificador || null : null;
+  const modulosParaSinConexion = (configuracionTienda ?? tiendaRecordada)?.modulos;
+  const conSinConexion = Array.isArray(modulosParaSinConexion) && modulosParaSinConexion.includes(MODULO_VENTA_SIN_CONEXION);
+  const configuracionCargada = !!configuracionTienda;
+  useEffect(() => {
+    if (!identificadorSinConexion) return;
+    if (conSinConexion) activarSinConexion(identificadorSinConexion, leerYGuardar);
+    else if (configuracionCargada) desactivarSinConexion();
+  }, [identificadorSinConexion, conSinConexion, configuracionCargada]);
+
   if (/^\/panel\/?$/.test(window.location.pathname)) {
     return (
       <Suspense fallback={null}>
@@ -495,6 +513,9 @@ function App() {
   // servidor se usa lo que dijo el login.
   // Rubro y módulos del negocio (núcleo universal + módulos encendidos).
   const negocio = datosNegocio(configuracionTienda ?? tiendaRecordada);
+  // Módulo "Comprobante formato clásico": lo leen todas las impresiones
+  // (utils/comprobanteClasico.js). Sin el módulo, todo se imprime como siempre.
+  usarComprobanteClasico(negocio.modulos.includes(MODULO_COMPROBANTE_CLASICO));
   const restaurante = negocio.modulos.includes(MODULO_MESAS);
   // Nombres de pantalla propios del rubro ("Carta" en vez de "Productos").
   // Dark kitchen (módulo DELIVERY): la pantalla de mesas pasa a ser el
@@ -606,6 +627,7 @@ function App() {
         versionLogo={versionLogo}
       />
       <div className="app-contenido">
+        {negocio.modulos.includes(MODULO_VENTA_SIN_CONEXION) && <EstadoSinConexion nombreTienda={nombreTienda} identificadorNegocio={tiendaRecordada?.identificador} />}
         {pantallaVisible === 'MESAS' && soloRepartidor && (
           <MisEntregas nombreTienda={nombreTienda} onCobrar={handleCobrarPedido} />
         )}
@@ -661,6 +683,7 @@ function App() {
               fichaLibro={negocio.modulos.includes(MODULO_FICHA_LIBRO)}
               equivalentes={negocio.modulos.includes(MODULO_EQUIVALENTES)}
               fueraInventario={negocio.modulos.includes(MODULO_VENTA_FUERA_INVENTARIO)}
+              sinConexion={negocio.modulos.includes(MODULO_VENTA_SIN_CONEXION)}
               vehiculos={negocio.modulos.includes(MODULO_VEHICULOS)}
               paquetes={negocio.modulos.includes(MODULO_PAQUETES)}
               ordenACargar={negocio.modulos.includes(MODULO_ORDENES_SERVICIO) ? ordenACargar : null}
@@ -689,7 +712,7 @@ function App() {
             }}
           />
         )}
-        {pantallaVisible === 'CAJA' && <Caja usuario={usuarioActual} />}
+        {pantallaVisible === 'CAJA' && <Caja usuario={usuarioActual} sinConexion={negocio.modulos.includes(MODULO_VENTA_SIN_CONEXION)} />}
         {pantallaVisible === 'HISTORIAL_CAJA' && <HistorialCaja />}
         {pantallaVisible === 'PRODUCTOS' && (
           <Inventario

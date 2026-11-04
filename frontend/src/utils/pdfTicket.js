@@ -15,6 +15,7 @@ import { NOMBRE_DOCUMENTO, lugarDeGuia, motivoDeGuia, numeroConCeros } from './g
 import { fechaCorta } from './formato';
 import { abreviaturaUnidad } from './unidades';
 import { pagoParaImprimir } from './metodoPago';
+import { comprobanteClasico, soloFecha } from './comprobanteClasico';
 
 const ANCHO = 226.77; // 80 mm en puntos
 const MARGEN = 11;
@@ -226,7 +227,9 @@ const soles = (monto) => `S/.${Number(monto).toFixed(2)}`;
  * (texto ya listo para mostrar).
  * Devuelve { bytes, nombre } con el archivo y un nombre sugerido.
  */
-export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, direccion, telefono, ruc, cajero, etiquetaCajero = 'Cajero', fecha }) {
+export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, direccion, telefono, ruc, cajero, etiquetaCajero = 'Cajero', fecha, vendedor = null }) {
+  // Formato clásico (igual que Recibo.jsx): sin hora, "Vendedor" y teléfono del cliente.
+  const clasico = comprobanteClasico();
   const esComprobante = !!comprobante;
   const numeroDocumento = comprobante ? `${comprobante.serie}-${String(comprobante.numero).padStart(6, '0')}` : null;
   const encabezado = comprobante
@@ -264,14 +267,16 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
     if (cliente.numero_documento) l.fila(esFactura ? 'RUC' : 'Doc.', cliente.numero_documento);
     l.parrafo(cliente.nombre_razon_social);
     if (cliente.direccion) l.parrafo(cliente.direccion);
+    if (clasico && cliente.telefono) l.fila('Teléfono', cliente.telefono);
     l.linea();
   }
 
   l.fila('Venta', venta.folio);
-  if (fecha) l.fila(esFactura ? 'Emisión' : 'Fecha', fecha);
+  if (fecha) l.fila(esFactura ? 'Emisión' : 'Fecha', clasico ? soloFecha(fecha) : fecha);
   l.fila('Moneda', 'SOLES');
   if (esFactura) l.fila('Forma de pago', venta.credito || venta.metodoPago === 'CREDITO' ? 'CRÉDITO' : 'CONTADO');
-  if (cajero) l.fila(etiquetaCajero, cajero);
+  if (clasico && (vendedor || cajero)) l.fila('Vendedor', vendedor || cajero);
+  else if (cajero) l.fila(etiquetaCajero, cajero);
   l.linea();
 
   for (const item of items) {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ReceiptText, X } from 'lucide-react';
-import { api } from '../api/api';
+import { api, esSinConexion } from '../api/api';
+import { encolar, programarSincronizacion, sumarGastoGuardado } from '../utils/sinConexion';
 import { hoyLima } from '../utils/formato';
 import { COMPROBANTES_GASTO, METODOS_GASTO } from '../utils/gastos';
 import './FormularioGasto.css';
@@ -10,7 +11,9 @@ import './FormularioGasto.css';
  * formas de pago) y la Caja (soloCaja: sale del efectivo de la caja abierta,
  * con la fecha de hoy; así lo puede registrar también el cajero).
  */
-export default function FormularioGasto({ soloCaja = false, efectivoCaja, onGuardado, onCerrar }) {
+// sinConexion: módulo "Venta sin conexión". Sin internet, un gasto de caja
+// queda guardado en el equipo y se registra al volver la conexión.
+export default function FormularioGasto({ soloCaja = false, sinConexion = false, efectivoCaja, onGuardado, onCerrar }) {
   const [categorias, setCategorias] = useState(null);
   // Efectivo que hay en la caja abierta (null = no hay caja abierta). La
   // Caja lo pasa ya calculado; desde Gastos se consulta.
@@ -66,19 +69,27 @@ export default function FormularioGasto({ soloCaja = false, efectivoCaja, onGuar
     if (!valido) return;
     setGuardando(true);
     setError('');
+    const datos = {
+      categoria_id: Number(form.categoria_id),
+      descripcion: form.descripcion.trim(),
+      monto,
+      metodo_pago: form.metodo_pago,
+      fecha: deCaja ? null : form.fecha,
+      pagado_a: form.pagado_a.trim() || null,
+      comprobante_tipo: form.comprobante_tipo || null,
+      comprobante_numero: form.comprobante_tipo ? form.comprobante_numero.trim() || null : null,
+    };
     try {
-      const r = await api.gastoRegistrar({
-        categoria_id: Number(form.categoria_id),
-        descripcion: form.descripcion.trim(),
-        monto,
-        metodo_pago: form.metodo_pago,
-        fecha: deCaja ? null : form.fecha,
-        pagado_a: form.pagado_a.trim() || null,
-        comprobante_tipo: form.comprobante_tipo || null,
-        comprobante_numero: form.comprobante_tipo ? form.comprobante_numero.trim() || null : null,
-      });
+      const r = await api.gastoRegistrar(datos);
       onGuardado(r);
     } catch (err) {
+      if (sinConexion && soloCaja && deCaja && esSinConexion(err)) {
+        await encolar('GASTO', datos, { total: monto, descripcion: datos.descripcion });
+        await sumarGastoGuardado(monto);
+        programarSincronizacion(2000);
+        onGuardado({ mensaje: 'Gasto guardado sin internet. Se registrará al volver la conexión.' });
+        return;
+      }
       setError(err.message);
       setGuardando(false);
     }

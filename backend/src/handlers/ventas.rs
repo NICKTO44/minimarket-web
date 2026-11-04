@@ -647,7 +647,9 @@ pub async fn procesar_venta(
     // el servidor, con las opciones, y el total se compara con el pedido).
     // Una venta que sale de una cotización pendiente puede llevar el precio
     // cotizado. Antes el navegador podía mandar cualquier precio.
-    let revisar_precios = !precio_libre && payload.pedido_id.is_none();
+    // Una venta hecha sin internet (módulo VENTA_SIN_CONEXION) ya se cobró
+    // con el precio que el equipo tenía en ese momento: se respeta.
+    let revisar_precios = !precio_libre && payload.pedido_id.is_none() && payload.sin_conexion.is_none();
 
     // Presentaciones y precio por mayor (migración 0030, handlers/presentaciones.rs).
     // Solo se consultan si la venta los usa: una venta común hace las mismas
@@ -1151,6 +1153,22 @@ pub async fn procesar_venta(
                 if metodo_pago == crate::handlers::billeteras::YAPE_PLIN {
                     crate::handlers::billeteras::descontar(&conn, usuario_id, billetera, hecho.valor_devuelto).await;
                 }
+            }
+
+            // 6c. Módulo VENTA_SIN_CONEXION: el código de la venta queda
+            //     guardado con ella (si ya estaba, la venta no entra: es la
+            //     misma que ya se subió). Al subir una venta hecha sin
+            //     internet, además queda con su hora real. Una venta de
+            //     siempre no trae código y aquí no pasa nada.
+            if let Some(uuid) = payload.uuid_local.as_deref() {
+                crate::handlers::sin_conexion::registrar_venta(
+                    conn,
+                    uuid,
+                    venta_id,
+                    usuario_id,
+                    payload.sin_conexion.as_ref().map(|s| s.fecha_hora.as_str()),
+                )
+                .await?;
             }
 
             Ok((venta_id, folio, cambio_hecho))

@@ -127,6 +127,7 @@ pub async fn emitir(
             cliente_documento: r.documento,
             cliente_nombre: r.nombre,
             detraccion: None,
+            fecha_hora: None,
         }),
     )
     .await
