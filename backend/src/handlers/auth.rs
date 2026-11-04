@@ -80,6 +80,29 @@ pub async fn leer_identidad_visual(conn: &libsql::Connection) -> (Option<String>
     }
 }
 
+/// Nombre del negocio que se muestra en el login: el de Configuración
+/// (configuracion_tienda.nombre_tienda), que el dueño puede cambiar. Si está
+/// vacío, es el de la plantilla o no se puede leer, el del registro
+/// (`respaldo`, tiendas.nombre_negocio en la central).
+pub async fn nombre_del_negocio(conn: &libsql::Connection, respaldo: &str) -> String {
+    let leido: Option<String> = match conn.query("SELECT nombre_tienda FROM configuracion_tienda LIMIT 1", ()).await {
+        Ok(mut filas) => match filas.next().await {
+            Ok(Some(f)) => f.get::<String>(0).ok(),
+            _ => None,
+        },
+        Err(_) => None,
+    };
+    elegir_nombre(leido.as_deref(), respaldo)
+}
+
+/// El de Configuración si es un nombre de verdad; si no, el del registro.
+fn elegir_nombre(configurado: Option<&str>, respaldo: &str) -> String {
+    match configurado.map(str::trim) {
+        Some(n) if !n.is_empty() && n != "Mi Minimarket" => n.to_string(),
+        _ => respaldo.to_string(),
+    }
+}
+
 /// Dirección del negocio para la sesión; no puede hacer fallar el login.
 async fn direccion_de(state: &AppState, identificador: &str) -> Option<String> {
     let central = state.tiendas.conexion_central().ok()?;
@@ -147,6 +170,7 @@ pub async fn login(
 
     let (logo_url, color_acento) = leer_identidad_visual(&conn).await;
     let negocio = crate::handlers::rubros::negocio(&conn).await;
+    let nombre_negocio = nombre_del_negocio(&conn, &tienda.nombre_negocio).await;
 
     let rol_nombre: Option<String> = match conn
         .query("SELECT nombre FROM roles WHERE id = ?1", libsql::params![rol_id])
@@ -185,7 +209,7 @@ pub async fn login(
         tienda: TiendaSesion {
             slug: direccion_de(&state, &tienda.identificador).await,
             identificador: tienda.identificador,
-            nombre_negocio: tienda.nombre_negocio,
+            nombre_negocio,
             logo_url,
             color_acento,
             modo_negocio: negocio.modo_negocio,
@@ -230,15 +254,16 @@ pub async fn identificar_usuario(
         modo_negocio: "TIENDA".to_string(),
         rubro_fijo: false,
     };
-    let (logo_url, color_acento, negocio) = match state.tiendas.conectar_cacheado(&tienda).await {
+    let (logo_url, color_acento, negocio, nombre_negocio) = match state.tiendas.conectar_cacheado(&tienda).await {
         Ok(db) => match db.connect() {
             Ok(conn) => {
                 let (logo, color) = leer_identidad_visual(&conn).await;
-                (logo, color, crate::handlers::rubros::negocio(&conn).await)
+                let nombre = nombre_del_negocio(&conn, &tienda.nombre_negocio).await;
+                (logo, color, crate::handlers::rubros::negocio(&conn).await, nombre)
             }
-            Err(_) => (None, None, sin_datos()),
+            Err(_) => (None, None, sin_datos(), tienda.nombre_negocio.clone()),
         },
-        Err(_) => (None, None, sin_datos()),
+        Err(_) => (None, None, sin_datos(), tienda.nombre_negocio.clone()),
     };
 
     Ok(Json(IdentificarUsuarioResponse {
@@ -246,7 +271,7 @@ pub async fn identificar_usuario(
         tienda: TiendaSesion {
             slug: direccion_de(&state, &tienda.identificador).await,
             identificador: tienda.identificador,
-            nombre_negocio: tienda.nombre_negocio,
+            nombre_negocio,
             logo_url,
             color_acento,
             modo_negocio: negocio.modo_negocio,
@@ -254,4 +279,16 @@ pub async fn identificar_usuario(
             modulos: negocio.modulos,
         },
     }))
+}
+#[cfg(test)]
+mod pruebas_nombre {
+    use super::elegir_nombre;
+
+    #[test]
+    fn nombre_de_configuracion_o_del_registro() {
+        assert_eq!(elegir_nombre(Some("FASA AUTOMOTRIZ"), "Venta repuestos"), "FASA AUTOMOTRIZ");
+        assert_eq!(elegir_nombre(Some("  "), "Venta repuestos"), "Venta repuestos");
+        assert_eq!(elegir_nombre(Some("Mi Minimarket"), "VERANE"), "VERANE");
+        assert_eq!(elegir_nombre(None, "VERANE"), "VERANE");
+    }
 }

@@ -217,14 +217,19 @@ pub async fn negocio_publico(
         (f.get(0).unwrap_or_default(), f.get::<String>(1).ok().filter(|s| !s.is_empty()))
     };
     let tienda = state.tiendas.buscar_por_identificador(&identificador).await.map_err(|_| no_existe())?;
-    let (logo_url, color_acento) = match state.tiendas.conectar_cacheado(&tienda).await.and_then(|db| db.connect().map_err(|e| e.to_string())) {
-        Ok(conn) => crate::handlers::auth::leer_identidad_visual(&conn).await,
-        Err(_) => (None, None),
-    };
+    // Nombre, logo y color de Configuración (si cambian ahí, cambian aquí).
+    let (logo_url, color_acento, nombre_negocio) =
+        match state.tiendas.conectar_cacheado(&tienda).await.and_then(|db| db.connect().map_err(|e| e.to_string())) {
+            Ok(conn) => {
+                let (logo, color) = crate::handlers::auth::leer_identidad_visual(&conn).await;
+                (logo, color, crate::handlers::auth::nombre_del_negocio(&conn, &tienda.nombre_negocio).await)
+            }
+            Err(_) => (None, None, tienda.nombre_negocio.clone()),
+        };
     Ok(Json(NegocioPublico {
         slug: slug.unwrap_or_else(|| tienda.identificador.clone()),
         identificador: tienda.identificador,
-        nombre_negocio: tienda.nombre_negocio,
+        nombre_negocio,
         logo_url,
         color_acento,
     }))

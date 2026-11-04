@@ -381,8 +381,20 @@ impl RespuestaSunat {
 pub const CODIGO_YA_REGISTRADO: i64 = 1033;
 
 /// Excepciones de SUNAT por el usuario SOL (clave incorrecta, usuario de
-/// baja o suspendido, sin perfil para enviar): reintentar no las arregla.
-pub const CODIGOS_CREDENCIALES: [i64; 4] = [102, 103, 104, 111];
+/// baja o suspendido): reintentar solo no las arregla, y reintentar con una
+/// clave mala puede bloquear el usuario. Quedan ERROR; el botón "Reenviar"
+/// las manda otra vez una sola vez, cuando ya se corrigió (envios_sunat).
+pub const CODIGOS_CREDENCIALES: [i64; 3] = [102, 103, 104];
+
+/// 0111 "No tiene el perfil para enviar comprobantes": pasa con un usuario
+/// secundario recién creado, hasta que SUNAT le activa el permiso (unas
+/// horas). Queda PENDIENTE y se reintenta solo (no es una clave mala: no
+/// bloquea el usuario).
+pub const CODIGO_SIN_PERFIL: i64 = 111;
+
+/// Inicio del mensaje de los errores del usuario SOL: con él, el botón
+/// "Reenviar" sabe que se puede volver a mandar (también los 0111 viejos).
+pub const PREFIJO_USUARIO_SOL: &str = "SUNAT no aceptó el usuario secundario SOL";
 
 /// Código de respuesta de SUNAT como número ("0", "2017", "4252"...).
 fn codigo_num(v: Option<&Value>) -> Option<i64> {
@@ -485,6 +497,7 @@ fn leer_resultado(sunat: &Value) -> RespuestaSunat {
             // Nunca se resuelven solos: reintentar no sirve.
             Some(CODIGO_YA_REGISTRADO) => EstadoEnvio::Error,
             Some(c) if CODIGOS_CREDENCIALES.contains(&c) => EstadoEnvio::Error,
+            // 0111 (sin perfil) y las demás excepciones: se reintenta.
             _ => EstadoEnvio::Pendiente,
         };
         r.mensaje = match codigo {
@@ -493,8 +506,12 @@ fn leer_resultado(sunat: &Value) -> RespuestaSunat {
                 mensaje
             ),
             Some(c) if CODIGOS_CREDENCIALES.contains(&c) => format!(
-                "SUNAT no aceptó el usuario secundario SOL ({}: {}). Revisa su clave y permisos y vuelve a registrar el negocio en el panel.",
-                c, mensaje
+                "{} ({}: {}). Revisa su clave y permisos, vuelve a registrar el negocio y usa «Reenviar».",
+                PREFIJO_USUARIO_SOL, c, mensaje
+            ),
+            Some(CODIGO_SIN_PERFIL) => format!(
+                "SUNAT todavía no activa el permiso de envío del usuario secundario SOL (111: {}). Pasa con un usuario recién creado y se activa en unas horas",
+                mensaje
             ),
             Some(c) => format!("SUNAT respondió {}: {}", c, mensaje),
             None => format!("SUNAT no respondió: {}", mensaje),
@@ -818,7 +835,16 @@ mod tests {
         assert_eq!(r.codigo, Some(CODIGO_YA_REGISTRADO));
         assert!(!r.incierto);
         let sol = r#"{"sunatResponse":{"success":false,"error":{"code":"0102","message":"Usuario o contrasena incorrectos"}}}"#;
-        assert_eq!(leer_respuesta(200, sol).estado, EstadoEnvio::Error);
+        let r = leer_respuesta(200, sol);
+        assert_eq!(r.estado, EstadoEnvio::Error);
+        assert!(r.mensaje.starts_with(PREFIJO_USUARIO_SOL));
+        // Usuario recién creado sin perfil todavía: se reintenta solo.
+        let perfil = r#"{"sunatResponse":{"success":false,"error":{"code":"0111","message":"No tiene el perfil para enviar comprobantes electronicos"}}}"#;
+        let r = leer_respuesta(200, perfil);
+        assert_eq!(r.estado, EstadoEnvio::Pendiente);
+        assert_eq!(r.codigo, Some(CODIGO_SIN_PERFIL));
+        assert!(r.mensaje.contains("111") && r.mensaje.ends_with("Se reintentará con el mismo número."));
+        assert!(!r.incierto);
         assert!(leer_respuesta(502, "<html>").incierto);
         assert!(!leer_respuesta(200, excepcion).incierto);
     }

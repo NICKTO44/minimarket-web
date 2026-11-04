@@ -180,6 +180,8 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
       onIdentidadActualizada?.({
         logo_url: actualizada.logo_path,
         color_acento: actualizada.color_acento,
+        // El login de este equipo muestra el nombre nuevo al toque.
+        ...(actualizada.nombre_tienda?.trim() ? { nombre_negocio: actualizada.nombre_tienda.trim() } : {}),
       });
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });

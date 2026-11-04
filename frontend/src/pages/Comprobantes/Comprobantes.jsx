@@ -22,6 +22,12 @@ import './Comprobantes.css';
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 // codigoEnA4: módulo "Venta en tabla" (código interno y precio sin IGV en la factura A4).
+// Boleta o factura que SUNAT no aceptó por el usuario secundario SOL (clave,
+// usuario de baja, o el permiso de envío que aún no se activaba): después de
+// corregirlo se vuelve a mandar con «Reenviar» (handlers/envios_sunat.rs).
+const PREFIJO_USUARIO_SOL = 'SUNAT no aceptó el usuario secundario SOL';
+const errorDeUsuarioSol = (c) => c.estado === 'ERROR' && String(c.mensaje_sunat || '').startsWith(PREFIJO_USUARIO_SOL);
+
 export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', direccion, telefono, ruc, identificadorNegocio, codigoEnA4 = false }) {
   const [comprobantes, setComprobantes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -748,7 +754,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                             {reenviando === `an-${c.id}` ? 'Consultando…' : '↻ Consultar anulación'}
                           </button>
                         )}
-                        {c.estado === 'PENDIENTE' && (
+                        {(c.estado === 'PENDIENTE' || errorDeUsuarioSol(c)) && (
                           <button
                             className="comp-boton-imprimir comp-boton-reenviar"
                             onClick={() => reenviar(c)}

@@ -395,8 +395,11 @@ function App() {
       .then((negocioPropio) => {
         if (!negocioPropio || negocioPropio.identificador !== identificadorEnSesion) return;
         setTiendaRecordada((actual) => {
-          if (!actual || actual.identificador !== identificadorEnSesion || actual.slug === negocioPropio.slug) return actual;
-          const actualizada = { ...actual, slug: negocioPropio.slug };
+          if (!actual || actual.identificador !== identificadorEnSesion) return actual;
+          // La dirección y el nombre de Configuración (el login los muestra).
+          const nombre = negocioPropio.nombre_negocio || actual.nombre_negocio;
+          if (actual.slug === negocioPropio.slug && actual.nombre_negocio === nombre) return actual;
+          const actualizada = { ...actual, slug: negocioPropio.slug, nombre_negocio: nombre };
           localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(actualizada));
           return actualizada;
         });

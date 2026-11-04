@@ -582,10 +582,13 @@
 }
 
 .login-tienda-logo {
-  width: 96px;
+  /* Logo entero (sin recortar): mismo alto de siempre y, si es ancho, un
+     poco más de ancho, sin pasarse. */
+  width: auto;
+  max-width: 200px;
   height: 96px;
   border-radius: 16px;
-  object-fit: cover;
+  object-fit: contain;
   margin-bottom: 6px;
 }
 
@@ -714,7 +717,8 @@
 
   .login-tienda-logo {
     align-self: center;
-    width: 88px;
+    width: auto;
+    max-width: 200px;
     height: 88px;
     margin-bottom: 16px;
   }
@@ -935,7 +939,9 @@
   }
 
   .login-hero-negocio img {
-    object-fit: cover;
+    box-sizing: border-box;
+    object-fit: contain;
+    padding: 8px;
   }
 
   .login-hero-negocio span {

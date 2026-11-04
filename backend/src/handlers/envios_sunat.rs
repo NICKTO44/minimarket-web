@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::logica::sunat_directo::{
-    self, ConsultaCdr, EstadoEnvio, RespuestaSunat, RespuestaTicket, CODIGO_YA_REGISTRADO, DIAS_PLAZO_ENVIO,
+    self, ConsultaCdr, EstadoEnvio, RespuestaSunat, RespuestaTicket, CODIGO_YA_REGISTRADO, DIAS_PLAZO_ENVIO, PREFIJO_USUARIO_SOL,
 };
 use crate::tenants::{TenantDb, TiendaConexion};
 use crate::AppState;
@@ -289,11 +289,18 @@ pub async fn documento_guardado(conn: &libsql::Connection, comprobante_id: i64) 
     Ok(texto.and_then(|t| serde_json::from_str(&t).ok()))
 }
 
-/// Reenvía una boleta o factura PENDIENTE y guarda el resultado.
+/// true si el comprobante quedó en ERROR por el usuario SOL (clave, baja o
+/// el 0111 de antes): esos sí se pueden volver a mandar con el botón.
+pub fn error_de_usuario_sol(estado: &str, mensaje: &str) -> bool {
+    estado == "ERROR" && mensaje.starts_with(PREFIJO_USUARIO_SOL)
+}
+
+/// Reenvía una boleta o factura PENDIENTE (o en ERROR por el usuario SOL,
+/// ver error_de_usuario_sol) y guarda el resultado.
 pub async fn reenviar_comprobante(conn: &libsql::Connection, lycet: &Lycet, comprobante_id: i64) -> Result<RespuestaSunat, Fallo> {
     let mut filas = conn
         .query(
-            "SELECT serie, numero, estado, proveedor FROM comprobantes_electronicos WHERE id = ?1",
+            "SELECT serie, numero, estado, proveedor, COALESCE(mensaje_sunat, '') FROM comprobantes_electronicos WHERE id = ?1",
             libsql::params![comprobante_id],
         )
         .await
@@ -303,13 +310,25 @@ pub async fn reenviar_comprobante(conn: &libsql::Connection, lycet: &Lycet, comp
     let numero: i64 = fila.get(1).unwrap_or_default();
     let estado: String = fila.get(2).unwrap_or_default();
     let proveedor: String = fila.get(3).unwrap_or_default();
+    let mensaje: String = fila.get(4).unwrap_or_default();
     if proveedor != "SUNAT_DIRECTO" {
         return Err((StatusCode::BAD_REQUEST, "Solo se reenvían aquí los comprobantes emitidos directo a SUNAT.".to_string()));
     }
-    if estado != "PENDIENTE" {
+    let por_usuario_sol = error_de_usuario_sol(&estado, &mensaje);
+    if estado != "PENDIENTE" && !por_usuario_sol {
         return Err((StatusCode::CONFLICT, format!("El comprobante {}-{} ya no está pendiente ({}).", serie, numero, estado)));
     }
     drop(filas);
+    // Error del usuario SOL ya corregido: vuelve a pendiente (con su mismo
+    // número) para mandarlo una vez. SUNAT no lo había procesado.
+    if por_usuario_sol {
+        conn.execute(
+            "UPDATE comprobantes_electronicos SET estado = 'PENDIENTE' WHERE id = ?1 AND estado = 'ERROR' AND mensaje_sunat LIKE ?2",
+            libsql::params![comprobante_id, format!("{}%", PREFIJO_USUARIO_SOL)],
+        )
+        .await
+        .map_err(interno)?;
+    }
     let documento = documento_guardado(conn, comprobante_id)
         .await?
         .ok_or_else(|| interno(format!("El comprobante {}-{} no tiene su documento guardado.", serie, numero)))?;
