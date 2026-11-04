@@ -32,6 +32,10 @@ pub struct VentaParaDevolucion {
     pub pago_efectivo_metodo: Option<String>,
     pub productos: Vec<ProductoVentaDetalle>,
     pub comprobante: Option<ComprobanteInfo>,
+    /// Módulo VENTA_FUERA_INVENTARIO: lo de afuera, aparte (no se devuelve);
+    /// solo para reimprimir el comprobante. None en una venta de siempre.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fuera_inventario: Option<crate::handlers::fuera_inventario::FueraDeVenta>,
 }
 
 #[derive(Debug, Deserialize)]

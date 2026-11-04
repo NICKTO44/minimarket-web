@@ -1,0 +1,50 @@
+/* Módulo "Vender algo que no está en inventario" (FueraInventario.jsx). */
+
+.fi-boton {
+  display: block;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 9px 12px;
+  border: 1px dashed var(--color-primario, #16a34a);
+  border-radius: 10px;
+  background: var(--color-primario-suave, #f0fdf4);
+  color: var(--color-primario-texto, #166534);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fi-boton:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.fi-boton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fi-boton-compacto {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+}
+
+.fi-etiqueta {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  width: fit-content;
+}
+
+.fi-error {
+  margin: 10px 0 0;
+  color: #b91c1c;
+  font-size: 12.5px;
+}

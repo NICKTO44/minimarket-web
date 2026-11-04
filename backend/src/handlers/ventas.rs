@@ -128,6 +128,31 @@ fn calcular_total(productos: &[crate::models::venta::ProductoVenta], total_envia
     Ok((subtotal, descuento, total))
 }
 
+/// Igual que `calcular_total`, para una venta que además lleva algo de
+/// afuera (módulo VENTA_FUERA_INVENTARIO): `total_enviado` es el total
+/// completo y `externo` lo de afuera. Devuelve los totales SOLO del
+/// inventario. Una venta puede llevar solo cosas de afuera: ahí el
+/// inventario es 0.
+fn calcular_total_con_fuera(
+    productos: &[crate::models::venta::ProductoVenta],
+    total_enviado: f64,
+    externo: f64,
+) -> Result<(f64, f64, f64), String> {
+    if !total_enviado.is_finite() {
+        return Err("El total de la venta no es válido.".into());
+    }
+    if productos.is_empty() {
+        if ((total_enviado - externo) * 100.0).round().abs() > 1.0 {
+            return Err(format!(
+                "El total de la venta (S/ {:.2}) no coincide con lo que no está en inventario (S/ {:.2}). Vuelve a cargar la página e inténtalo de nuevo.",
+                total_enviado, externo
+            ));
+        }
+        return Ok((0.0, 0.0, 0.0));
+    }
+    calcular_total(productos, redondear_2(total_enviado - externo))
+}
+
 /// ¿Ese precio de línea está permitido? Sin el módulo "Cambiar precio al
 /// vender", el precio es el del producto; si la venta sale de una
 /// cotización, también vale el precio que se le cotizó al cliente.
@@ -400,11 +425,39 @@ pub async fn procesar_venta(
         return Err((StatusCode::BAD_REQUEST, "Debes abrir una caja antes de procesar ventas".into()));
     }
 
+    // 1a-0. Módulo VENTA_FUERA_INVENTARIO: lo que se vende de afuera. Una
+    // venta de siempre no trae nada y aquí no pasa nada.
+    let fuera = crate::handlers::fuera_inventario::preparar(modulos.as_deref(), payload.fuera_inventario.as_deref())
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    if fuera.is_some()
+        && (payload.pedido_id.is_some()
+            || payload.cotizacion_id.is_some()
+            || payload.cambio_prenda.is_some()
+            || payload.orden_servicio_id.is_some()
+            || payload.encargo_id.is_some())
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Lo que no está en inventario se vende en una venta normal: sin pedido de mesa, cotización, cambio de prenda, orden ni encargo.".into(),
+        ));
+    }
+
     // 1a. Total calculado aquí, no el del navegador. Todo lo que sigue
     // (crédito, pago mixto, caja, comprobante) usa este total.
-    let (subtotal, descuento_total, total_servidor) =
-        calcular_total(&payload.productos, payload.total).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    // Con lo de afuera, el navegador manda el total completo; a la venta (y
+    // por eso a caja, reportes y créditos) va solo lo del inventario.
+    let (subtotal, descuento_total, total_servidor) = match &fuera {
+        None => calcular_total(&payload.productos, payload.total),
+        Some(f) => calcular_total_con_fuera(&payload.productos, payload.total, f.total),
+    }
+    .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     payload.total = total_servidor;
+    if fuera.is_some() && payload.credito.is_some() && payload.total <= 0.0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Al crédito se deja lo del inventario: esta venta solo tiene cosas que no están en inventario. Cóbrala al contado.".into(),
+        ));
+    }
 
     // 1b. Validar método de pago (y el reparto si es MIXTO) antes de
     // tocar stock o insertar nada.
@@ -463,6 +516,9 @@ pub async fn procesar_venta(
         }
     }
 
+    // Pago mixto como lo hizo el cliente (por el total completo), solo cuando
+    // la venta lleva algo de afuera: se guarda para reimprimir su comprobante.
+    let mut pago_cliente: (Option<f64>, Option<f64>) = (None, None);
     let (metodo_pago, pago_efectivo, pago_otro, pago_otro_metodo, pago_efectivo_metodo, monto_recibido, cambio) = if credito.is_some() {
         (
             "MIXTO".to_string(),
@@ -504,7 +560,23 @@ pub async fn procesar_venta(
             vuelto,
         )
     } else {
-        let r = validar_pago(&payload, billetera).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+        // Con lo de afuera el cliente paga el total completo: el pago se
+        // revisa contra ese total y, en un mixto, lo de afuera se descuenta
+        // primero de la parte en efectivo y luego de la otra. A la venta (y a
+        // la caja) va solo lo del inventario.
+        let total_inventario = payload.total;
+        if let Some(f) = &fuera {
+            payload.total = redondear_2(total_inventario + f.total);
+        }
+        let validado = validar_pago(&payload, billetera);
+        payload.total = total_inventario;
+        let mut r = validado.map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+        if let (Some(f), Some(pe), Some(po)) = (&fuera, r.pago_efectivo, r.pago_otro) {
+            pago_cliente = (Some(pe), Some(po));
+            let (pe, po) = crate::handlers::fuera_inventario::descontar_del_mixto(pe, po, f.total);
+            r.pago_efectivo = Some(pe);
+            r.pago_otro = Some(po);
+        }
         // Mixto sin efectivo (p. ej. Yape + Plin): no hay efectivo recibido ni vuelto.
         let (recibido, vuelto) = if r.pago_efectivo_metodo.is_some() {
             (None, None)
@@ -930,6 +1002,28 @@ pub async fn procesar_venta(
                 )
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al insertar detalle: {}", e)))?;
+            }
+
+            // 6a-2. Lo de afuera (módulo VENTA_FUERA_INVENTARIO): entra con la
+            //      venta o no entra. Una venta de siempre no hace nada aquí.
+            if let Some(f) = &fuera {
+                crate::handlers::fuera_inventario::registrar(&conn, venta_id, f, pago_cliente).await?;
+                // Solo cosas de afuera: el trigger de caja la contó como una
+                // venta de S/ 0; no es del sistema, así que no cuenta. Es la
+                // misma caja que eligió el trigger (la de la primera consulta).
+                if payload.productos.is_empty() {
+                    if let Some(caja) = caja_abierta {
+                        conn.execute(
+                            "UPDATE cajas SET numero_transacciones = MAX(COALESCE(numero_transacciones, 0) - 1, 0),
+                                    ticket_promedio = CASE WHEN COALESCE(numero_transacciones, 0) > 1
+                                                           THEN total_ventas / (numero_transacciones - 1) ELSE 0 END
+                             WHERE id = ?1",
+                            libsql::params![caja],
+                        )
+                        .await
+                        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al actualizar la caja: {}", e)))?;
+                    }
+                }
             }
 
             // 6b. Deja congelado cómo se cobró el IGV (tasa del negocio y qué líneas

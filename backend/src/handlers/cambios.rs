@@ -21,7 +21,7 @@ use crate::handlers::creditos::METODO_CREDITO;
 use crate::handlers::rubros::{exigir_modulo, MODULO_CAMBIOS};
 use crate::logica::igv::round2;
 use crate::logica::tiempo::{ahora_lima, hoy_lima};
-use crate::middleware_auth::exigir_admin;
+use crate::middleware_auth::exigir_solo_admin;
 use crate::models::auth::Claims;
 use crate::models::devolucion::ComprobanteInfo;
 use crate::tenants::TenantDb;
@@ -451,7 +451,7 @@ pub async fn guardar_config(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<GuardarCambios>,
 ) -> Resultado<ConfigCambios> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     if !(0..=DIAS_MAXIMO).contains(&payload.dias) {
         return Err(malo(format!("El plazo de cambio va de 0 (sin plazo) a {} días.", DIAS_MAXIMO)));
     }

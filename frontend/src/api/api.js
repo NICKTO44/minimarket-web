@@ -200,6 +200,9 @@ export const api = {
   repuestoQuitar: (id) => request(`/productos/${id}/repuesto`, { method: 'DELETE' }),
   // Módulo "3 precios de venta": Precio 2 y 3 de cada producto.
   preciosVenta: () => request('/precios-venta'),
+  // Equivalentes elegidos por el dueño (módulo EQUIVALENTES).
+  equivalentes: () => request('/equivalentes'),
+  equivalentesGuardar: (id, ids) => request(`/productos/${id}/equivalentes`, { method: 'PUT', body: JSON.stringify({ ids }) }),
   // Librería: ficha del libro (autor, editorial, serie, año, edición) y ventas por editorial.
   librosFichas: () => request('/libros/fichas'),
   libroGuardar: (id, ficha) => request(`/productos/${id}/libro`, { method: 'PUT', body: JSON.stringify(ficha) }),

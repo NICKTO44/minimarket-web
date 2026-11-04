@@ -107,6 +107,14 @@ pub async fn desglose_venta(conn: &libsql::Connection, venta_id: i64) -> Result<
         });
     }
 
+    // Módulo VENTA_FUERA_INVENTARIO: lo que se vendió de afuera va en el
+    // comprobante después de lo del inventario, y su total se suma al de la
+    // venta (que guarda solo lo del inventario). Una venta sin nada de
+    // afuera no trae líneas aquí y queda exactamente igual que siempre.
+    let fuera = crate::handlers::fuera_inventario::lineas_para_comprobante(conn, venta_id).await;
+    let total = if fuera.is_empty() { total } else { total + fuera.iter().map(|l| l.total).sum::<f64>() };
+    lineas.extend(fuera);
+
     let partes: Vec<(f64, Afectacion)> = lineas.iter().map(|l| (l.total, l.afectacion)).collect();
     Ok((lineas, desglosar(total, &partes, tasa)))
 }

@@ -31,6 +31,9 @@ import { esRespaldoLavanderia } from '../../utils/textosEncargos';
 import PreciosVentaCampos, { PreciosCelda } from './PreciosVentaCampos';
 import { useFormPreciosVenta } from '../../utils/tresPrecios';
 import FichaLibro from './FichaLibro';
+import EquivalentesCampo from './EquivalentesCampo';
+import { anchosRepuestos, columnasExtra, filaRepuesto, titulosRepuestos } from '../../utils/excelRepuestos';
+import { equivalentesElegidos, useFormEquivalentes } from '../../utils/equivalentes';
 import { resumenLibro, textoLibro, useFormLibro, valoresDe } from '../../utils/libros';
 import { coincidenTodas, palabrasDeBusqueda } from '../../utils/repuestos';
 import {
@@ -159,6 +162,9 @@ export default function Inventario({
   tresPrecios = false,
   // Librería: ficha del libro (autor, editorial, serie, año, edición).
   fichaLibro = false,
+  // Repuestos: equivalentes elegidos por el dueño (sección en el formulario y
+  // debajo de cada producto en la lista).
+  equivalentes = false,
   // Lubricentro / Repuestos: ficha del repuesto (marca, n.° de parte,
   // códigos alternos, ubicación, garantía) y vehículos compatibles.
   fichaRepuesto = false,
@@ -167,6 +173,7 @@ export default function Inventario({
   const conOpcionesVenta = presentaciones || precioMayor;
   const preciosVenta = useFormPreciosVenta(tresPrecios);
   const libro = useFormLibro(fichaLibro);
+  const eqv = useFormEquivalentes(equivalentes);
   // producto_id -> ficha del repuesto / [compatibilidades] (solo con sus módulos).
   const [repuestos, setRepuestos] = useState(() => new Map());
   const [compatibilidades, setCompatibilidades] = useState(() => new Map());
@@ -199,6 +206,9 @@ export default function Inventario({
   const [cargando, setCargando] = useState(true);
 
   const [mostrarForm, setMostrarForm] = useState(false);
+  const verCosto = fichaRepuesto && esAdmin;
+  // Repuestos: lo que se usa poco del formulario va tras "Ver más opciones".
+  const [masOpciones, setMasOpciones] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [form, setForm] = useState(FORM_VACIO);
   // Presentaciones y precios por mayor del producto (filas del formulario) y
@@ -384,6 +394,7 @@ export default function Inventario({
     setRepuestoOriginal(JSON.stringify(FICHA_REPUESTO_VACIA));
     preciosVenta.abrir(null);
     libro.abrir(null);
+    eqv.abrir(null);
     setCompatForm([]);
     setCompatOriginal('[]');
     setOpcionesVenta(OPCIONES_VACIAS);
@@ -458,6 +469,7 @@ export default function Inventario({
     setRepuestoOriginal(JSON.stringify(camposRepuesto));
     preciosVenta.abrir(p.id);
     libro.abrir(p.id);
+    eqv.abrir(p.id);
     const filasCompat = compatibilidadesAFormulario(compatibilidades.get(p.id));
     setCompatForm(filasCompat);
     setCompatOriginal(JSON.stringify(filasCompat));
@@ -486,6 +498,7 @@ export default function Inventario({
 
   const cerrarForm = () => {
     setMostrarForm(false);
+    setMasOpciones(false);
     setEditandoId(null);
     setForm(FORM_VACIO);
     setLotesProducto([]);
@@ -809,6 +822,21 @@ export default function Inventario({
         }
       }
 
+      // Equivalentes (solo si cambiaron).
+      if (eqv.cambiaron() && idParaImagen) {
+        try {
+          await eqv.guardar(idParaImagen);
+        } catch (e) {
+          setEditandoId(idParaImagen);
+          setMensaje({
+            tipo: 'error',
+            texto: `Producto guardado, pero no se pudieron guardar sus equivalentes (${e.message}). Toca Guardar para intentarlo de nuevo.`,
+          });
+          cargarTodo();
+          return;
+        }
+      }
+
       if (imagenArchivo && idParaImagen) {
         try {
           await api.productoSubirImagen(idParaImagen, await comprimirImagen(imagenArchivo));
@@ -869,6 +897,27 @@ export default function Inventario({
       setMensaje({ tipo: 'error', texto: e.message });
       return false;
     }
+  };
+
+  // Repuestos: las mismas columnas que su plantilla (marca, n.° de parte,
+  // los 3 precios y equivalentes), para editarlo y volver a importarlo tal cual.
+  const exportarRepuestos = () => {
+    const opciones = { tresPrecios, equivalentes, extras: columnasExtra(repuestos) };
+    const codigoDe = new Map(productos.map((x) => [x.id, String(x.codigo)]));
+    const filas = productos.map((p) =>
+      filaRepuesto(p, {
+        ficha: repuestos.get(p.id),
+        extra: preciosVenta.mapa.get(p.id),
+        tresPrecios,
+        extras: opciones.extras,
+        equivalentes: equivalentes ? (eqv.mapa.get(p.id) || []).map((id) => codigoDe.get(id)).filter(Boolean) : null,
+      })
+    );
+    descargarArchivo(
+      escribirXlsx([titulosRepuestos(opciones), ...filas], { anchos: anchosRepuestos(opciones) }),
+      `Productos-${hoyLima()}.xlsx`,
+      { tipo: TIPO_XLSX }
+    );
   };
 
   // Excel con todos los productos activos. Sirve también de plantilla: se
@@ -949,7 +998,7 @@ export default function Inventario({
               >
                 ⬆ Importar
               </button>
-              <button className="inv-boton-categorias" onClick={exportarProductos} disabled={productos.length === 0}>
+              <button className="inv-boton-categorias" onClick={fichaRepuesto ? exportarRepuestos : exportarProductos} disabled={productos.length === 0}>
                 ⬇ Exportar
               </button>
             </>
@@ -1036,14 +1085,19 @@ export default function Inventario({
         <p className="inv-cargando">Cargando...</p>
       ) : (
         <div className="inv-tabla-wrapper">
-          <table className="inv-tabla">
+          <table className={`inv-tabla${fichaRepuesto ? ' inv-tabla-compacta' : ''}`}>
             <thead>
               <tr>
                 <th></th>
                 <th>Código</th>
                 <th>Nombre</th>
+                {/* Repuestos: aplicación y marca en su propia columna. */}
+                {fichaRepuesto && <th>Aplicación</th>}
+                {fichaRepuesto && <th>Marca</th>}
                 <th>Categoría</th>
                 <th>{tresPrecios ? 'Precios' : 'Precio'}</th>
+                {/* Repuestos: el costo al lado del precio de venta (solo el administrador). */}
+                {verCosto && <th>P. compra</th>}
                 <th>Stock</th>
                 <th>Unidad</th>
                 <th></th>
@@ -1088,11 +1142,21 @@ export default function Inventario({
                       {fichaMedicamento && fichas.has(p.id) && (
                         <span className="inv-ficha-resumen">{resumenFicha(fichas.get(p.id))}</span>
                       )}
-                      {(fichaRepuesto || compatibilidad) && p.descripcion && (
+                      {/* Con la ficha del repuesto, aplicación y marca van en sus columnas
+                          y el N.° de parte ya no se muestra (se sigue buscando por él). */}
+                      {!fichaRepuesto && compatibilidad && p.descripcion && (
                         <span className="inv-descripcion-producto">{p.descripcion}</span>
                       )}
-                      {fichaRepuesto && repuestos.has(p.id) && (
-                        <span className="inv-ficha-resumen">{resumenRepuesto(repuestos.get(p.id))}</span>
+                      {/* Solo un aviso pequeño: el detalle se ve al editar el producto. */}
+                      {equivalentes && eqv.mapa.has(p.id) && (
+                        <span
+                          className="inv-tiene-equivalentes"
+                          title={equivalentesElegidos(p.id, eqv.mapa, productos)
+                            .map(({ producto: e }) => `${e.codigo} · ${e.nombre}`)
+                            .join('\n')}
+                        >
+                          🔁 {eqv.mapa.get(p.id).length} equivalente{eqv.mapa.get(p.id).length === 1 ? '' : 's'}
+                        </span>
                       )}
                       {fichaLibro && libro.mapa.has(p.id) && (
                         <span className="inv-ficha-resumen">📖 {resumenLibro(libro.mapa.get(p.id))}</span>
@@ -1107,8 +1171,11 @@ export default function Inventario({
                         <span className="inv-badge-sin-igv">{etiquetaAfectacion(p.afectacion_igv)}</span>
                       )}
                     </td>
+                    {fichaRepuesto && <td className="inv-col-aplicacion">{p.descripcion || '—'}</td>}
+                    {fichaRepuesto && <td className="inv-col-marca">{repuestos.get(p.id)?.marca || '—'}</td>}
                     <td>{p.categoria_nombre || '—'}</td>
                     <td>{tresPrecios ? <PreciosCelda precio={p.precio} extra={preciosVenta.mapa.get(p.id)} /> : `S/ ${p.precio.toFixed(2)}`}</td>
+                    {verCosto && <td>{p.precio_compra > 0 ? `S/ ${Number(p.precio_compra).toFixed(2)}` : '—'}</td>}
                     <td className={!verDesactivados && tieneStockBajo(p) ? 'inv-stock-bajo' : ''}>
                       {p.controla_stock === false ? (
                         <span className="inv-badge-preparado">preparado</span>
@@ -1140,7 +1207,7 @@ export default function Inventario({
               )}
               {filasTabla.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="inv-sin-resultados">
+                  <td colSpan={(fichaRepuesto ? 10 : 8) + (verCosto ? 1 : 0)} className="inv-sin-resultados">
                     {verDesactivados ? 'No hay productos desactivados.' : 'No hay productos que coincidan.'}
                   </td>
                 </tr>
@@ -1159,6 +1226,7 @@ export default function Inventario({
           compatibilidad={compatibilidad}
           tresPrecios={tresPrecios}
           fichaLibro={fichaLibro}
+          equivalentes={equivalentes}
           onCerrar={() => setImportando(false)}
           onTerminado={(resultado) => {
             setImportando(false);
@@ -1170,6 +1238,7 @@ export default function Inventario({
             });
             cargarTodo();
             if (fichaLibro) libro.recargar();
+            if (equivalentes) eqv.recargar();
           }}
         />
       )}
@@ -1383,6 +1452,31 @@ export default function Inventario({
               )}
             </div>
 
+            {/* Lo que más se usa, justo después de los datos: Precio 2 y 3, y equivalentes. */}
+            {tresPrecios && <PreciosVentaCampos campos={preciosVenta.campos} onCambiar={preciosVenta.setCampos} />}
+
+            {equivalentes && (
+              <EquivalentesCampo
+                productos={productos}
+                repuestos={repuestos}
+                propioId={editandoId}
+                elegidos={eqv.elegidos}
+                onAgregar={(id) => eqv.agregar(id, editandoId)}
+                onQuitar={eqv.quitar}
+              />
+            )}
+
+            {fichaRepuesto && (
+              <button
+                type="button"
+                className="inv-boton-mas-opciones"
+                aria-expanded={masOpciones}
+                onClick={() => setMasOpciones((v) => !v)}
+              >
+                {masOpciones ? 'Ocultar más opciones ▴' : 'Ver más opciones ▾'}
+              </button>
+            )}
+
             {fichaMedicamento && (
               <FichaMedicamento
                 campos={fichaForm}
@@ -1397,7 +1491,7 @@ export default function Inventario({
               />
             )}
 
-            {(fichaRepuesto || compatibilidad) && (
+            {(fichaRepuesto || compatibilidad) && (!fichaRepuesto || masOpciones) && (
               <FichaRepuesto
                 conFicha={fichaRepuesto}
                 conCompatibilidad={compatibilidad}
@@ -1409,8 +1503,6 @@ export default function Inventario({
                 vehiculos={vehiculosUsados}
               />
             )}
-
-            {tresPrecios && <PreciosVentaCampos campos={preciosVenta.campos} onCambiar={preciosVenta.setCampos} />}
 
             {fichaLibro && (
               <FichaLibro
@@ -1561,12 +1653,12 @@ export default function Inventario({
               </div>
             )}
 
-            {conOpcionesVenta && opcionesVentaOriginal === null && (
+            {conOpcionesVenta && (!fichaRepuesto || masOpciones) && opcionesVentaOriginal === null && (
               <p className="inv-mensaje inv-mensaje-error">
                 No se pudieron leer las presentaciones de este producto: cierra y vuelve a abrirlo antes de cambiarlas.
               </p>
             )}
-            {conOpcionesVenta && opcionesVentaOriginal !== null && (
+            {conOpcionesVenta && (!fichaRepuesto || masOpciones) && opcionesVentaOriginal !== null && (
               <OpcionesDeVenta
                 opciones={opcionesVenta}
                 onCambiar={setOpcionesVenta}

@@ -5,6 +5,8 @@ import { armarFilas, camposImportacion, columnasDe, filaDeTitulos, sugerirCampos
 import { descargarArchivo } from '../../utils/pdfTicket';
 import { opcionesUnidad } from '../../utils/unidades';
 import './ImportarProductos.css';
+import { anchosRepuestos, titulosRepuestos } from '../../utils/excelRepuestos';
+import { aplicarEquivalentesImportados } from '../../utils/equivalentes';
 
 // Importar productos desde el Excel o CSV de otro sistema (solo el
 // administrador). Tres pasos: subir el archivo, decir qué es cada columna y
@@ -38,8 +40,10 @@ export default function ImportarProductos({
   tresPrecios = false,
   // Librería: columnas Autor, Editorial, Serie, Año y Edición.
   fichaLibro = false,
+  // Repuestos: columna "Equivalentes" (códigos); al importar solo se agregan.
+  equivalentes = false,
 }) {
-  const CAMPOS = camposImportacion({ ficha: fichaMedicamento, repuesto: fichaRepuesto, compatibilidad, tresPrecios, libro: fichaLibro });
+  const CAMPOS = camposImportacion({ ficha: fichaMedicamento, repuesto: fichaRepuesto, compatibilidad, tresPrecios, libro: fichaLibro, equivalentes });
   const OBLIGATORIOS = CAMPOS.filter((c) => c.obligatorio);
   const [paso, setPaso] = useState('ARCHIVO');
   const [ocupado, setOcupado] = useState(false);
@@ -63,6 +67,8 @@ export default function ImportarProductos({
   const [existentes, setExistentes] = useState('SALTAR');
   const [soloProblemas, setSoloProblemas] = useState(false);
   const [resultado, setResultado] = useState(null);
+  // Lo que pasó con la columna "Equivalentes" (null = el archivo no la traía).
+  const [resultadoEquivalentes, setResultadoEquivalentes] = useState(null);
 
   const filaTitulos = conTitulos ? (detectada >= 0 ? detectada : hoja.findIndex((f) => f.some((c) => c !== ''))) : -1;
   const columnas = useMemo(() => columnasDe(hoja, filaTitulos), [hoja, filaTitulos]);
@@ -157,6 +163,13 @@ export default function ImportarProductos({
     setError(null);
     try {
       const respuesta = await pedir(armado.filas, false, existentes);
+      if (equivalentes && respuesta?.guardado) {
+        try {
+          setResultadoEquivalentes(await aplicarEquivalentesImportados(armado.filas));
+        } catch (e) {
+          setResultadoEquivalentes({ actualizados: 0, noEncontrados: [], errores: 1, mensaje: e.message });
+        }
+      }
       setResultado(respuesta);
       setRevision(respuesta);
       setPaso('LISTO');
@@ -180,6 +193,15 @@ export default function ImportarProductos({
   const hayLotes = armado.filas.some((f) => f.vencimiento || f.lote);
 
   const descargarPlantilla = () => {
+    // Repuestos: su propia plantilla (sin lote ni vencimiento, con marca,
+    // n.° de parte y los 3 precios), la misma que sale al exportar.
+    if (fichaRepuesto) {
+      const opciones = { tresPrecios, equivalentes };
+      descargarArchivo(escribirXlsx([titulosRepuestos(opciones)], { anchos: anchosRepuestos(opciones) }), 'Plantilla-repuestos.xlsx', {
+        tipo: TIPO_XLSX,
+      });
+      return;
+    }
     const titulos = [
       ...TITULOS_PLANTILLA,
       ...(fichaMedicamento ? TITULOS_FICHA : []),
@@ -539,6 +561,18 @@ export default function ImportarProductos({
                 <li className="imp-ok">✓ {plural(resultado.lotes_guardados, 'lote registrado', 'lotes registrados')} con su vencimiento.</li>
               )}
               {resultado.categorias_nuevas.length > 0 && <li>Categorías creadas: {resultado.categorias_nuevas.join(', ')}.</li>}
+              {resultadoEquivalentes?.actualizados > 0 && (
+                <li className="imp-ok">✓ Equivalentes agregados en {plural(resultadoEquivalentes.actualizados, 'producto', 'productos')}.</li>
+              )}
+              {resultadoEquivalentes?.noEncontrados.length > 0 && (
+                <li className="imp-pendiente">
+                  Equivalentes con códigos que no existen (no se agregaron): {resultadoEquivalentes.noEncontrados.slice(0, 8).join(', ')}
+                  {resultadoEquivalentes.noEncontrados.length > 8 ? '…' : ''}.
+                </li>
+              )}
+              {resultadoEquivalentes?.errores > 0 && (
+                <li className="imp-pendiente">No se pudieron guardar algunos equivalentes: revísalos en Productos.</li>
+              )}
               {resultado.existentes > resultado.actualizados && (
                 <li>{plural(resultado.existentes - resultado.actualizados, 'producto ya existía y no se tocó', 'productos ya existían y no se tocaron')}.</li>
               )}

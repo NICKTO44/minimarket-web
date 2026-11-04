@@ -24,6 +24,8 @@ async function datosExtra() {
 export function ExportarPedido({ productos, categorias, onCerrar }) {
   const [filtro, setFiltro] = useState('BAJO_MINIMO');
   const [categoriaId, setCategoriaId] = useState('');
+  // Con el stock del negocio (para él); sin stock, para mandárselo al proveedor.
+  const [conStock, setConStock] = useState(true);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState(null);
 
@@ -36,7 +38,7 @@ export function ExportarPedido({ productos, categorias, onCerrar }) {
     try {
       const { fichas, precios } = await datosExtra();
       // La cantidad sugerida solo con "bajo stock mínimo"; con todos o una categoría la columna va vacía.
-      const hoja = hojaPedido(lista, { completo: false, fichas, precios, sugerir: filtro === 'BAJO_MINIMO' });
+      const hoja = hojaPedido(lista, { completo: false, fichas, precios, sugerir: filtro === 'BAJO_MINIMO', conStock });
       const nombre = `Pedido-${hoyLima()}.xlsx`;
       descargarArchivo(escribirLibro([hoja]), nombre, { tipo: TIPO_XLSX });
       onCerrar();
@@ -76,6 +78,20 @@ export function ExportarPedido({ productos, categorias, onCerrar }) {
             </select>
           )}
         </fieldset>
+
+        <label className="pedido-opcion pedido-con-stock">
+          <input type="checkbox" checked={conStock} onChange={(e) => setConStock(e.target.checked)} />
+          <span>
+            <strong>Exportar con mi stock</strong> (columna "Stock actual", para saber cuánto pedir)
+          </span>
+        </label>
+        {conStock ? (
+          <p className="pedido-aviso-stock">
+            Si este Excel es para enviárselo al proveedor, desmarca la casilla: se exportará sin tu stock.
+          </p>
+        ) : (
+          <p className="pedido-aviso-stock pedido-aviso-stock-ok">Se exportará sin tu stock: listo para enviárselo al proveedor.</p>
+        )}
 
         <p className="pedido-cuenta">
           {lista.length === 0

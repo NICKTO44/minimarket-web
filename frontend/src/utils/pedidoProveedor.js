@@ -54,13 +54,16 @@ const COLUMNAS_COMPLETO = [
  * P1/P2/P3 (para el negocio); si no, solo lo que necesita el proveedor.
  * fichas: Map producto_id -> ficha del repuesto; precios: Map -> { precio_2, precio_3 }.
  */
-export function hojaPedido(lista, { completo, fichas, precios, sugerir }) {
+export function hojaPedido(lista, { completo, fichas, precios, sugerir, conStock = false }) {
   const numero = (n) => (Number(n) > 0 ? Number(n) : '');
   const filas = lista.map((p) => {
     const ficha = fichas?.get(p.id);
     const cantidad = sugerir && estaBajoMinimo(p) ? cantidadSugerida(p) : '';
     const comunes = [String(p.codigo || ''), ficha?.numero_parte || '', ficha?.marca || '', p.nombre, p.descripcion || ''];
-    if (!completo) return [...comunes, etiquetaUnidad(p.unidad_medida), cantidad, ''];
+    // conStock: columna "Stock actual" (para el negocio; sin ella, para el proveedor).
+    if (!completo) {
+      return [...comunes, etiquetaUnidad(p.unidad_medida), ...(conStock ? [controlaStock(p) ? Number(p.stock) : ''] : []), cantidad, ''];
+    }
     const extra = precios?.get(p.id);
     return [
       ...comunes,
@@ -76,15 +79,18 @@ export function hojaPedido(lista, { completo, fichas, precios, sugerir }) {
       '',
     ];
   });
+  const columnas = conStock ? [...COLUMNAS_PROVEEDOR.slice(0, 6), 'Stock actual', ...COLUMNAS_PROVEEDOR.slice(6)] : COLUMNAS_PROVEEDOR;
   if (!completo) {
     // Al final, un espacio para que el proveedor agregue lo que el negocio
     // aún no tiene (sin código: al cargarlo salen como "Productos nuevos").
-    filas.push(['', '', '', '', '', '', '', '']);
-    filas.push(['', '', '', TITULO_NUEVOS, '', '', '', '']);
+    filas.push(columnas.map(() => ''));
+    filas.push(columnas.map((_, i) => (i === 3 ? TITULO_NUEVOS : '')));
   }
   return completo
     ? { nombre: 'Pedido', filas: [COLUMNAS_COMPLETO, ...filas], anchos: [14, 15, 14, 42, 38, 18, 10, 8, 12, 12, 11, 11, 11, 16, 13], soles: [9, 10, 11, 12, 14] }
-    : { nombre: 'Pedido', filas: [COLUMNAS_PROVEEDOR, ...filas], anchos: [14, 15, 14, 42, 38, 10, 16, 15], soles: [7] };
+    : conStock
+      ? { nombre: 'Pedido', filas: [columnas, ...filas], anchos: [14, 15, 14, 42, 38, 10, 13, 16, 15], soles: [8] }
+      : { nombre: 'Pedido', filas: [columnas, ...filas], anchos: [14, 15, 14, 42, 38, 10, 16, 15], soles: [7] };
 }
 
 // Títulos que se reconocen al cargar (ya normalizados).

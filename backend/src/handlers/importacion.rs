@@ -922,12 +922,27 @@ pub async fn importar_productos(
             let guardar_fila = |r: &Revisada| r.padre.is_none() && (r.estado == "LISTO" || (actualizar && r.estado == "EXISTE"));
             let ids = ids_por_codigo(&tx, revisadas.iter().filter(|r| guardar_fila(r) && r.existente.is_none()).map(|r| r.codigo.clone()).collect()).await?;
             let id_de = |r: &Revisada| r.existente.map(|e| e.id).or_else(|| ids.get(&r.codigo.to_lowercase()).copied());
-            let fichas: Vec<(i64, crate::handlers::repuestos::FichaRepuesto)> = revisadas
+            let mut fichas: Vec<(i64, crate::handlers::repuestos::FichaRepuesto)> = revisadas
                 .iter()
                 .zip(fichas_repuesto.iter())
                 .filter(|(r, _)| guardar_fila(r))
                 .filter_map(|(r, f)| Some((id_de(r)?, f.clone()?)))
                 .collect();
+            // Al actualizar, lo que el archivo no trae no borra lo que el producto ya tenía.
+            if actualizar && !fichas.is_empty() {
+                let previas: std::collections::HashMap<i64, crate::handlers::repuestos::FichaRepuesto> =
+                    crate::handlers::repuestos::leer_todas(&tx)
+                        .await
+                        .map_err(|(_, e)| e)?
+                        .into_iter()
+                        .filter_map(|f| Some((f.producto_id?, f)))
+                        .collect();
+                for (id, f) in fichas.iter_mut() {
+                    if let Some(previa) = previas.get(id) {
+                        *f = crate::handlers::repuestos::completar_con(f.clone(), previa);
+                    }
+                }
+            }
             if !fichas.is_empty() {
                 crate::handlers::repuestos::guardar_en(&tx, &fichas).await?;
             }

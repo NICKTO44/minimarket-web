@@ -158,8 +158,16 @@ async fn nombre_rol_cacheado(tienda_id: i64, rol_id: i64, db: &libsql::Database)
     }
     let conn = db.connect().ok()?;
     let nombre = crate::handlers::mesas::nombre_rol(&conn, rol_id).await?;
-    cache_roles().lock().ok()?.insert((tienda_id, rol_id), nombre.clone());
+    recordar_rol(tienda_id, rol_id, &nombre);
     Some(nombre)
+}
+
+/// Guarda en la caché el nombre de un rol de un negocio. La usa el control
+/// de cada petición (arriba) y las pruebas.
+pub fn recordar_rol(tienda_id: i64, rol_id: i64, nombre: &str) {
+    if let Ok(mut cache) = cache_roles().lock() {
+        cache.insert((tienda_id, rol_id), nombre.to_string());
+    }
 }
 
 /// Qué puede usar cada rol limitado. Cualquier otro rol: todo (como antes).
@@ -410,11 +418,42 @@ mod pruebas {
 /// rol_id del administrador del negocio (tabla roles).
 pub const ROL_ADMIN: i64 = 1;
 
-/// Corta la petición si quien la hace no es administrador. El rol sale del
-/// JWT (firmado por el backend), nunca de lo que mande el navegador.
-/// Configuración y Suscripción son solo para el administrador; el cajero
-/// usa todo lo demás.
+/// Rol Vendedor (migración 0060): lo mismo que el administrador, menos
+/// Configuración y Suscripción.
+pub const ROL_VENDEDOR: &str = "VENDEDOR";
+
+/// ¿Es el rol Vendedor? Su id cambia entre negocios: se mira el nombre en la
+/// caché de roles, que el control de cada petición (requiere_auth) llena
+/// antes de llegar a cualquier handler. Ante cualquier duda: no.
+fn es_vendedor(claims: &Claims) -> bool {
+    claims.rol_id != ROL_ADMIN
+        && cache_roles()
+            .lock()
+            .ok()
+            .and_then(|c| c.get(&(claims.tienda_id, claims.rol_id)).cloned())
+            .as_deref()
+            == Some(ROL_VENDEDOR)
+}
+
+/// ¿Tiene los permisos del administrador? El administrador y el vendedor.
+pub fn es_admin(claims: &Claims) -> bool {
+    claims.rol_id == ROL_ADMIN || es_vendedor(claims)
+}
+
+/// Corta la petición si quien la hace no es administrador (o vendedor, que
+/// tiene sus mismos permisos salvo Configuración y Suscripción). El rol sale
+/// del JWT (firmado por el backend) y de la base, nunca de lo que mande el
+/// navegador.
 pub fn exigir_admin(claims: &Claims) -> Result<(), (StatusCode, String)> {
+    if !es_admin(claims) {
+        return Err((StatusCode::FORBIDDEN, "Solo el administrador del negocio puede hacer esto.".to_string()));
+    }
+    Ok(())
+}
+
+/// Solo el administrador: Configuración (datos del negocio, usuarios, rubro
+/// y módulos, unidades, mesas...) y Suscripción. El vendedor no.
+pub fn exigir_solo_admin(claims: &Claims) -> Result<(), (StatusCode, String)> {
     if claims.rol_id != ROL_ADMIN {
         return Err((StatusCode::FORBIDDEN, "Solo el administrador del negocio puede hacer esto.".to_string()));
     }

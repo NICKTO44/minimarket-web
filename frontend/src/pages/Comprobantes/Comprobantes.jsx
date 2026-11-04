@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { api, API_URL } from '../../api/api';
-import { datosA4DeDocumento, imprimirComprobanteA4 } from '../../utils/facturaA4';
+import { datosA4DeDocumento, datosA4DeNotaVenta, imprimirComprobanteA4 } from '../../utils/facturaA4';
 import Recibo from '../../components/Recibo';
 import FormularioNotaCredito from '../../components/FormularioNotaCredito';
 import FormularioAnulacion from '../../components/FormularioAnulacion';
@@ -14,6 +14,7 @@ import { descargarArchivo, pdfDeVenta } from '../../utils/pdfTicket';
 import { enlaceComprobantePublico } from '../../utils/enlacePublico';
 import { imprimirTicket as imprimirSoloTicket } from '../../utils/imprimirTicket';
 import { a4Propio, datosDelTicket, facturaConA4, pagoDeVenta } from '../../utils/documentoVenta';
+import { etiquetaRol } from '../../utils/menu';
 import { codigosDeVenta } from '../../utils/codigosVenta';
 import { etiquetaTicket } from '../../utils/papelTicket';
 import './Comprobantes.css';
@@ -330,15 +331,44 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   // Nuestro ticket de 80 mm (boleta, nota simple, y también la factura).
   const imprimirTicket = async (comp) => {
     try {
-      setVentaParaImprimir(await datosDelTicket(comp));
+      setVentaParaImprimir(await datosDelTicket(comp, { conCodigos: codigoEnA4 }));
       setTimeout(() => imprimirSoloTicket(), 200);
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
     }
   };
 
+  // Venta en tabla: la nota de venta también en hoja A4 / A5 (con lo del ticket).
+  const imprimirNotaA4 = async (comp, papel = 'A4') => {
+    try {
+      const ticket = await datosDelTicket(comp, { conCodigos: true });
+      const datos = datosA4DeNotaVenta(
+        { ...ticket, venta: { ...ticket.venta, pagoTexto: await pagoDeVenta(comp.folio_venta) } },
+        {
+          nombreComercial: nombreTienda,
+          razonSocial: cfgEmisor?.razon_social,
+          ruc: cfgEmisor?.ruc || ruc,
+          direccion: cfgEmisor?.direccion || direccion,
+          telefono: cfgEmisor?.telefono || telefono,
+          email: cfgEmisor?.email,
+          logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,
+          color: cfgEmisor?.color_acento,
+        }
+      );
+      imprimirComprobanteA4(datos, { papel });
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: `No se pudo preparar la hoja A4: ${e.message}` });
+    }
+  };
+  const notaConA4 = (comp) => codigoEnA4 && comp.tipo === 'NINGUNO';
+
   // El PDF oficial en A4, incrustado en el modal (renderizado con pdf.js).
-  const verA4 = (comp) => (comp.enlace_pdf ? setPdfVisible(api.comprobantePdfUrl(comp.id)) : imprimirA4Propio(comp));
+  const verA4 = (comp) =>
+    notaConA4(comp)
+      ? imprimirNotaA4(comp)
+      : comp.enlace_pdf
+        ? setPdfVisible(api.comprobantePdfUrl(comp.id))
+        : imprimirA4Propio(comp);
 
   const reimprimir = (evento, comp) => {
     setMensaje(null);
@@ -353,6 +383,15 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         },
         // Venta en tabla: también en media hoja A5 (solo nuestra hoja propia).
         ...(codigoEnA4 && !comp.enlace_pdf ? [{ cual: 'a5', titulo: 'Media hoja A5', detalle: 'El mismo diseño, en hoja A5' }] : []),
+      ]);
+      return;
+    }
+    // Venta en tabla: la nota de venta en ticket, A4 o A5.
+    if (notaConA4(comp)) {
+      abrirMenu(evento, comp, [
+        { cual: 'ticket', titulo: etiquetaTicket(), detalle: 'Para la impresora térmica' },
+        { cual: 'a4', titulo: 'Hoja A4', detalle: 'Con el logo del negocio' },
+        { cual: 'a5', titulo: 'Media hoja A5', detalle: 'El mismo diseño, en hoja A5' },
       ]);
       return;
     }
@@ -376,7 +415,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         entregarPdf(await respuesta.blob(), `Factura-${comp.serie}-${String(comp.numero).padStart(6, '0')}.pdf`);
         return;
       }
-      const datos = await datosDelTicket(comp);
+      const datos = await datosDelTicket(comp, { conCodigos: codigoEnA4 });
       const { bytes, nombre } = pdfDeVenta({
         ...datos,
         // La fila ya trae al cliente: va en el PDF aunque la venta no lo detalle.
@@ -388,6 +427,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         telefono,
         ruc,
         cajero: usuario?.nombre || '',
+        etiquetaCajero: etiquetaRol(usuario),
       });
       entregarPdf(bytes, nombre);
     } catch (e) {
@@ -501,7 +541,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     else if (cual === 'pdf80') exportarPdf(comp, true);
     else if (cual === 'ticket') imprimirTicket(comp);
     else if (cual === 'a4') verA4(comp);
-    else if (cual === 'a5') imprimirA4Propio(comp, 'A5');
+    else if (cual === 'a5') (notaConA4(comp) ? imprimirNotaA4(comp, 'A5') : imprimirA4Propio(comp, 'A5'));
     else descargarOficial(comp, cual);
   };
 
@@ -624,7 +664,15 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                   </td>
                   <td className="comp-folio-venta">{c.folio_venta}</td>
                   <td>{c.cliente_nombre || '—'}</td>
-                  <td>S/ {c.monto.toFixed(2)}</td>
+                  <td>
+                    S/ {c.monto.toFixed(2)}
+                    {/* Módulo "Vender algo que no está en inventario": el monto ya lo incluye. */}
+                    {c.fuera_inventario > 0 && (
+                      <span className="comp-fuera-inventario" title="Incluye lo que no está en inventario (no entra a caja ni reportes)">
+                        Incluye S/ {c.fuera_inventario.toFixed(2)} fuera de inventario
+                      </span>
+                    )}
+                  </td>
                   <td>
                     {c.estado ? (
                       <>
@@ -852,6 +900,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
           telefono={telefono}
           ruc={ruc}
           cajero={usuario?.nombre || ''}
+          etiquetaCajero={etiquetaRol(usuario)}
           fecha={ventaParaImprimir.fecha}
           logo={logoNegocio}
         />

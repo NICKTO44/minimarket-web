@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::logica::tiempo;
-use crate::middleware_auth::{exigir_admin, ROL_ADMIN};
+use crate::middleware_auth::exigir_admin;
 use crate::models::auth::Claims;
 use crate::tenants::TenantDb;
 
@@ -252,7 +252,7 @@ pub async fn registrar(
     Extension(claims): Extension<Claims>,
     Json(datos): Json<NuevoGasto>,
 ) -> Result<Json<GastoRegistrado>, Fallo> {
-    let es_admin = claims.rol_id == ROL_ADMIN;
+    let es_admin = crate::middleware_auth::es_admin(&claims);
     let gasto = validar(&datos, es_admin, &tiempo::hoy_lima()).map_err(malo)?;
     let conn = tenant.0.connect().map_err(e500)?;
 

@@ -10,7 +10,7 @@ use axum::{extract::Extension, Json, http::StatusCode};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::middleware_auth::exigir_admin;
+use crate::middleware_auth::exigir_solo_admin;
 use crate::models::auth::Claims;
 use crate::models::unidad::*;
 use crate::tenants::TenantDb;
@@ -130,7 +130,7 @@ pub async fn guardar_unidades(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<GuardarUnidades>,
 ) -> Resultado<UnidadesNegocio> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     if let Some(mala) = payload.activas.iter().find(|u| !es_valida(u)) {
         return Err((StatusCode::BAD_REQUEST, format!("Unidad no válida: {}", mala)));
     }

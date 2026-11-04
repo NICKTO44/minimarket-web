@@ -39,4 +39,8 @@ pub struct ComprobanteResumen {
     /// por WhatsApp. Ver logica/enlace_publico.rs.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub clave_publica: Option<String>,
+    /// Módulo VENTA_FUERA_INVENTARIO: lo de afuera que lleva el comprobante
+    /// (ya sumado en `monto`). None en una venta de siempre.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fuera_inventario: Option<f64>,
 }

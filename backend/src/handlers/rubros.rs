@@ -12,7 +12,7 @@ use axum::{extract::Extension, Json, http::StatusCode};
 use std::sync::Arc;
 
 use crate::handlers::mesas::{aplicar_modo_negocio, modo_restaurante};
-use crate::middleware_auth::exigir_admin;
+use crate::middleware_auth::exigir_solo_admin;
 use crate::models::auth::Claims;
 use crate::models::rubro::*;
 use crate::tenants::TenantDb;
@@ -82,6 +82,17 @@ pub const MODULO_VENTA_TABLA: &str = "VENTA_TABLA";
 /// Librería: autor, editorial, serie, año y edición de los libros, para
 /// buscarlos y filtrarlos en el punto de venta (handlers/libros.rs).
 pub const MODULO_FICHA_LIBRO: &str = "FICHA_LIBRO";
+/// Repuestos: el dueño elige a mano qué productos son equivalentes (forman
+/// un grupo); Productos y el punto de venta los muestran al buscar
+/// (handlers/equivalentes.rs).
+pub const MODULO_EQUIVALENTES: &str = "EQUIVALENTES";
+/// Menú de navegación arriba (barra horizontal) en vez del lateral, solo en
+/// computadoras y laptops. Es solo de pantalla: cualquier rubro puede usarlo.
+pub const MODULO_MENU_ARRIBA: &str = "MENU_ARRIBA";
+/// Vender algo que el negocio consigue afuera y no está en su inventario.
+/// Solo sale en el comprobante (boleta, factura o nota de venta); no entra a
+/// caja, reportes, ganancias, stock ni créditos (handlers/fuera_inventario.rs).
+pub const MODULO_VENTA_FUERA_INVENTARIO: &str = "VENTA_FUERA_INVENTARIO";
 /// Lubricentro: vehículos de los clientes (placa), kilometraje y próximo
 /// cambio en la venta, historial por placa y recordatorios
 /// (handlers/vehiculos.rs).
@@ -160,6 +171,9 @@ const MODULOS: &[&str] = &[
     MODULO_TRES_PRECIOS,
     MODULO_VENTA_TABLA,
     MODULO_FICHA_LIBRO,
+    MODULO_EQUIVALENTES,
+    MODULO_MENU_ARRIBA,
+    MODULO_VENTA_FUERA_INVENTARIO,
     MODULO_VEHICULOS,
     MODULO_ORDENES_SERVICIO,
     MODULO_PAQUETES,
@@ -345,7 +359,7 @@ pub async fn guardar_negocio(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<GuardarNegocio>,
 ) -> Resultado<Negocio> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let rubro = payload.rubro.trim().to_uppercase();
     if !rubro_valido(&rubro) {
         return Err((StatusCode::BAD_REQUEST, "Rubro no válido.".to_string()));

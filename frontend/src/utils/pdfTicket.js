@@ -226,7 +226,7 @@ const soles = (monto) => `S/.${Number(monto).toFixed(2)}`;
  * (texto ya listo para mostrar).
  * Devuelve { bytes, nombre } con el archivo y un nombre sugerido.
  */
-export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, direccion, telefono, ruc, cajero, fecha }) {
+export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, direccion, telefono, ruc, cajero, etiquetaCajero = 'Cajero', fecha }) {
   const esComprobante = !!comprobante;
   const numeroDocumento = comprobante ? `${comprobante.serie}-${String(comprobante.numero).padStart(6, '0')}` : null;
   const encabezado = comprobante
@@ -271,11 +271,17 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
   if (fecha) l.fila(esFactura ? 'Emisión' : 'Fecha', fecha);
   l.fila('Moneda', 'SOLES');
   if (esFactura) l.fila('Forma de pago', venta.credito || venta.metodoPago === 'CREDITO' ? 'CRÉDITO' : 'CONTADO');
-  if (cajero) l.fila('Cajero', cajero);
+  if (cajero) l.fila(etiquetaCajero, cajero);
   l.linea();
 
   for (const item of items) {
     l.parrafo(item.nombre, { negrita: true });
+    // Venta en tabla: código interno y precio sin IGV de la línea.
+    if (item.codigo || item.sinIgv != null) {
+      l.parrafo(
+        [item.codigo && `Cód. ${item.codigo}`, item.sinIgv != null && `P. sin IGV S/.${Number(item.sinIgv).toFixed(2)}`].filter(Boolean).join(' · ')
+      );
+    }
     l.fila(`${formatoCantidad(item.cantidad)} x S/.${formatoPrecio(item.precio)}`, soles(subtotalLinea(item.precio, item.cantidad)));
     l.espacio(2);
   }

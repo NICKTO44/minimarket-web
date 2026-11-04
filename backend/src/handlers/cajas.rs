@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use crate::tenants::TenantDb;
 use crate::models::auth::Claims;
-use crate::middleware_auth::ROL_ADMIN;
 use crate::models::caja::{AbrirCajaRequest, CerrarCajaRequest, MovimientoCajaRequest, CajaResponse};
 use crate::models::caja::CajaEstado;
 
@@ -96,7 +95,7 @@ pub async fn cerrar_caja(
     let ingresos_total: f64 = row.get(5).unwrap_or_default();
 
     // Quién cierra y con qué rol sale del JWT, no del navegador.
-    if caja_usuario_id != claims.sub && claims.rol_id != ROL_ADMIN {
+    if caja_usuario_id != claims.sub && !crate::middleware_auth::es_admin(&claims) {
         return Err((StatusCode::FORBIDDEN, "Solo el cajero que abrió la caja o un administrador pueden cerrarla".into()));
     }
 

@@ -77,6 +77,12 @@ pub struct NuevaVenta {
     /// ENTREGADO con esta venta.
     #[serde(default)]
     pub encargo_id: Option<i64>,
+    /// Módulo VENTA_FUERA_INVENTARIO: lo que se vende de afuera (no está en
+    /// el inventario). Solo va al comprobante; `total` y el pago llegan por
+    /// el total completo y el servidor deja en la venta solo lo del
+    /// inventario. None en una venta de siempre.
+    #[serde(default)]
+    pub fuera_inventario: Option<Vec<crate::handlers::fuera_inventario::LineaFuera>>,
 }
 
 #[derive(Debug, Serialize)]

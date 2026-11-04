@@ -6,6 +6,7 @@ import PosBloqueado from './components/PosBloqueado';
 import Caja from './pages/Caja/Caja';
 import Sidebar from './components/Sidebar';
 import NavegacionMovil from './components/NavegacionMovil';
+import MenuArriba from './components/MenuArriba';
 import './App.css';
 import Inventario from './pages/Inventario/Inventario';
 import LibroRecetas from './pages/Recetas/LibroRecetas';
@@ -45,6 +46,7 @@ import DireccionNegocio from './components/DireccionNegocio';
 import { irADireccion, leerDireccion } from './utils/direccion';
 import { usarAppDelNegocio } from './utils/appInstalable';
 import {
+  conPermisosDeAdmin,
   esAlmacen,
   esCajero,
   esMesero,
@@ -73,6 +75,9 @@ import {
   MODULO_TRES_PRECIOS,
   MODULO_VENTA_TABLA,
   MODULO_FICHA_LIBRO,
+  MODULO_EQUIVALENTES,
+  MODULO_MENU_ARRIBA,
+  MODULO_VENTA_FUERA_INVENTARIO,
   MODULO_VEHICULOS,
   MODULO_ORDENES_SERVICIO,
   MODULO_PAQUETES,
@@ -566,8 +571,25 @@ function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${negocio.modulos.includes(MODULO_MENU_ARRIBA) ? ' app-menu-arriba' : ''}`}>
       <DireccionNegocio slug={tiendaRecordada?.slug} pantalla={pantallaVisible} onCambiarPantalla={setPantalla} />
+      {/* Módulo "Menú arriba": solo se ve en computadoras (MenuArriba.css). */}
+      {negocio.modulos.includes(MODULO_MENU_ARRIBA) && (
+        <MenuArriba
+          pantalla={pantallaVisible}
+          restaurante={restaurante}
+          etiquetas={etiquetas}
+          modulos={negocio.modulos}
+          insignias={{ MESAS: pedidosListos }}
+          onCambiarPantalla={setPantalla}
+          usuario={usuarioActual}
+          onLogout={handleLogout}
+          nombreTienda={nombreTienda}
+          diasRestantesSuscripcion={estadoSuscripcion?.dias_restantes ?? null}
+          logoUrl={identidadNegocio.logo}
+          versionLogo={versionLogo}
+        />
+      )}
       <Sidebar
         pantalla={pantallaVisible}
         restaurante={restaurante}
@@ -637,6 +659,8 @@ function App() {
               tresPrecios={negocio.modulos.includes(MODULO_TRES_PRECIOS)}
               ventaTabla={negocio.modulos.includes(MODULO_VENTA_TABLA)}
               fichaLibro={negocio.modulos.includes(MODULO_FICHA_LIBRO)}
+              equivalentes={negocio.modulos.includes(MODULO_EQUIVALENTES)}
+              fueraInventario={negocio.modulos.includes(MODULO_VENTA_FUERA_INVENTARIO)}
               vehiculos={negocio.modulos.includes(MODULO_VEHICULOS)}
               paquetes={negocio.modulos.includes(MODULO_PAQUETES)}
               ordenACargar={negocio.modulos.includes(MODULO_ORDENES_SERVICIO) ? ordenACargar : null}
@@ -671,7 +695,7 @@ function App() {
           <Inventario
             servicios={negocio.modulos.includes(MODULO_SERVICIOS)}
             etiquetas={etiquetas}
-            esAdmin={usuarioActual?.rol_id === 1}
+            esAdmin={conPermisosDeAdmin(usuarioActual)}
             variantes={negocio.modulos.includes(MODULO_VARIANTES)}
             presentaciones={negocio.modulos.includes(MODULO_PRESENTACIONES)}
             precioMayor={negocio.modulos.includes(MODULO_PRECIO_MAYOR)}
@@ -680,12 +704,13 @@ function App() {
             compatibilidad={negocio.modulos.includes(MODULO_COMPATIBILIDAD)}
             tresPrecios={negocio.modulos.includes(MODULO_TRES_PRECIOS)}
             fichaLibro={negocio.modulos.includes(MODULO_FICHA_LIBRO)}
+            equivalentes={negocio.modulos.includes(MODULO_EQUIVALENTES)}
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS)}
             verSinPrecio={productosSinPrecio}
             onSinPrecioVisto={() => setProductosSinPrecio(false)}
           />
         )}
-        {pantallaVisible === 'STOCK' && <StockLotes esAdmin={usuarioActual?.rol_id === 1} />}
+        {pantallaVisible === 'STOCK' && <StockLotes esAdmin={conPermisosDeAdmin(usuarioActual)} />}
         {pantallaVisible === 'PROVEEDORES' && (
           <Proveedores
             variantes={negocio.modulos.includes(MODULO_VARIANTES)}
@@ -724,7 +749,7 @@ function App() {
         {pantallaVisible === 'VEHICULOS' && <Vehiculos nombreTienda={nombreTienda} />}
         {pantallaVisible === 'ORDENES' && (
           <Ordenes
-            esAdmin={usuarioActual?.rol_id === 1}
+            esAdmin={conPermisosDeAdmin(usuarioActual)}
             conPaquetes={negocio.modulos.includes(MODULO_PAQUETES)}
             nombreTienda={nombreTienda}
             direccion={configuracionTienda?.direccion}
@@ -738,9 +763,9 @@ function App() {
             }}
           />
         )}
-        {pantallaVisible === 'PAQUETES' && usuarioActual?.rol_id === 1 && <Paquetes />}
+        {pantallaVisible === 'PAQUETES' && conPermisosDeAdmin(usuarioActual) && <Paquetes />}
         {pantallaVisible === 'PRODUCCION' && (
-          <Produccion esAdmin={usuarioActual?.rol_id === 1} conRecetas={negocio.modulos.includes(MODULO_INSUMOS)} />
+          <Produccion esAdmin={conPermisosDeAdmin(usuarioActual)} conRecetas={negocio.modulos.includes(MODULO_INSUMOS)} />
         )}
         {pantallaVisible === 'ENCARGOS' && (
           <Encargos
@@ -782,7 +807,7 @@ function App() {
         )}
         {pantallaVisible === 'GUIAS' && (
           <Guias
-            esAdmin={usuarioActual?.rol_id === 1}
+            esAdmin={conPermisosDeAdmin(usuarioActual)}
             nombreTienda={nombreTienda}
             direccion={configuracionTienda?.direccion}
             telefono={configuracionTienda?.telefono}
@@ -802,8 +827,8 @@ function App() {
         )}
         {pantallaVisible === 'REPORTES' && (
           <Reportes
-            ganancias={negocio.modulos.includes(MODULO_GANANCIAS) && usuarioActual?.rol_id === 1}
-            costeo={negocio.rubro === 'RESTAURANTE' && negocio.modulos.includes(MODULO_COSTEO) && usuarioActual?.rol_id === 1}
+            ganancias={negocio.modulos.includes(MODULO_GANANCIAS) && conPermisosDeAdmin(usuarioActual)}
+            costeo={negocio.rubro === 'RESTAURANTE' && negocio.modulos.includes(MODULO_COSTEO) && conPermisosDeAdmin(usuarioActual)}
             editoriales={negocio.modulos.includes(MODULO_FICHA_LIBRO)}
             metodoInicial={metodoReporte}
             onFiltroUsado={() => setMetodoReporte(null)}
@@ -813,8 +838,8 @@ function App() {
             }}
           />
         )}
-        {pantallaVisible === 'GASTOS' && usuarioActual?.rol_id === 1 && <Gastos />}
-        {pantallaVisible === 'RECETAS' && usuarioActual?.rol_id === 1 && <LibroRecetas />}
+        {pantallaVisible === 'GASTOS' && conPermisosDeAdmin(usuarioActual) && <Gastos />}
+        {pantallaVisible === 'RECETAS' && conPermisosDeAdmin(usuarioActual) && <LibroRecetas />}
         {pantallaVisible === 'SUSCRIPCION' && usuarioActual?.rol_id === 1 && (
           <Suscripcion
             estadoSuscripcion={estadoSuscripcion}

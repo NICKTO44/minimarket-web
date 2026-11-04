@@ -44,7 +44,11 @@ pub async fn emitir_comprobante(
     if !vigente {
         return Err((StatusCode::BAD_REQUEST, "Esa venta no está vigente: no se le puede emitir comprobante.".into()));
     }
-    if por_devolver == 0 {
+    // Una venta que lleva algo de afuera (módulo VENTA_FUERA_INVENTARIO)
+    // siempre tiene qué emitir: lo de afuera no se devuelve. Sin nada de
+    // afuera es 0 y todo queda como siempre.
+    let fuera_total = crate::handlers::fuera_inventario::total_de(&conn, payload.venta_id).await;
+    if por_devolver == 0 && fuera_total <= 0.0 {
         return Err((
             StatusCode::BAD_REQUEST,
             "Esa venta ya se devolvió completa: no se le puede emitir comprobante.".into(),
@@ -215,7 +219,11 @@ pub async fn emitir_comprobante(
         // Venta al crédito con saldo pendiente: la factura sale "al crédito".
         // (Solo la factura lleva forma de pago; en boleta no se consulta.)
         credito: if payload.tipo == "FACTURA" {
-            crate::handlers::creditos::pendiente_de_venta(&conn, payload.venta_id).await
+            // El cliente debe también lo de afuera (no está en Créditos, que
+            // es solo del inventario): la cuota de la factura lo suma.
+            crate::handlers::creditos::pendiente_de_venta(&conn, payload.venta_id)
+                .await
+                .map(|(saldo, vence)| if fuera_total > 0.0 { (((saldo + fuera_total) * 100.0).round() / 100.0, vence) } else { (saldo, vence) })
         } else {
             None
         },

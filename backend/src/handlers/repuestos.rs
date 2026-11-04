@@ -217,6 +217,20 @@ pub fn ficha_desde_importada(f: &RepuestoImportado) -> Result<Option<FichaRepues
     Ok(if vacia(&ficha) { None } else { Some(ficha) })
 }
 
+/// Al importar con "Actualizar": lo que el archivo no trae (una columna que
+/// no está o una celda vacía) se queda como estaba en la ficha guardada.
+/// Así, un Excel sin "Ubicación" o "Garantía" no borra esos datos.
+pub fn completar_con(nueva: FichaRepuesto, previa: &FichaRepuesto) -> FichaRepuesto {
+    FichaRepuesto {
+        producto_id: nueva.producto_id,
+        marca: nueva.marca.or_else(|| previa.marca.clone()),
+        numero_parte: nueva.numero_parte.or_else(|| previa.numero_parte.clone()),
+        ubicacion: nueva.ubicacion.or_else(|| previa.ubicacion.clone()),
+        garantia_dias: nueva.garantia_dias.or(previa.garantia_dias),
+        codigos: if nueva.codigos.is_empty() { previa.codigos.clone() } else { nueva.codigos },
+    }
+}
+
 /// Guarda (o reemplaza) fichas dentro de la transacción que reciba. Cada
 /// ítem: id del producto y la ficha ya validada. Una ficha vacía borra la
 /// que hubiera.

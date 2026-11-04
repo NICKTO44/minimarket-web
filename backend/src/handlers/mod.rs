@@ -47,6 +47,8 @@ pub mod medicamentos;
 pub mod recetas;
 pub mod repuestos;
 pub mod libros;
+pub mod equivalentes;
+pub mod fuera_inventario;
 pub mod precios_venta;
 pub mod compatibilidad;
 pub mod vehiculos;

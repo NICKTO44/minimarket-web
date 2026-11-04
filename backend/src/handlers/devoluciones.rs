@@ -117,10 +117,12 @@ pub async fn buscar_venta_para_devolucion(
 
     let pago_efectivo_metodo = if metodo_pago == "MIXTO" { medio_segunda_parte(&conn, venta_id).await } else { None };
 
+    let fuera_inventario = crate::handlers::fuera_inventario::de_venta(&conn, venta_id).await;
+
     Ok(Json(VentaParaDevolucion {
         venta_id, folio: folio_venta, fecha_hora, total, metodo_pago,
         pago_efectivo, pago_otro, pago_otro_metodo, pago_efectivo_metodo,
-        productos, comprobante,
+        productos, comprobante, fuera_inventario,
     }))
 }
 

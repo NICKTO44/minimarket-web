@@ -40,6 +40,10 @@ export const MODULO_TRES_PRECIOS = 'TRES_PRECIOS';
 export const MODULO_VENTA_TABLA = 'VENTA_TABLA';
 // Librería: autor, editorial, serie, año y edición de los libros; búsqueda y filtro por editorial.
 export const MODULO_FICHA_LIBRO = 'FICHA_LIBRO';
+export const MODULO_EQUIVALENTES = 'EQUIVALENTES';
+export const MODULO_MENU_ARRIBA = 'MENU_ARRIBA';
+// Vender algo que no está en inventario: solo sale en el comprobante.
+export const MODULO_VENTA_FUERA_INVENTARIO = 'VENTA_FUERA_INVENTARIO';
 // Lubricentro: vehículos de los clientes, placa y kilometraje en la venta.
 export const MODULO_VEHICULOS = 'VEHICULOS';
 // Lubricentro: órdenes de servicio, mecánicos y comisiones. Necesita Vehículos.
@@ -198,6 +202,24 @@ export const MODULOS = [
     descripcion:
       'El punto de venta como tabla, igual que un sistema de facturación: buscas el producto, entra como una fila con marca, categoría, unidad, cantidad, costo, precio sin IGV, precio y descuento por producto, y abajo el subtotal, el descuento y el total.',
     rubros: ['LUBRICENTRO'],
+  },
+  {
+    valor: MODULO_EQUIVALENTES,
+    label: 'Equivalentes',
+    descripcion:
+      'Eliges a mano qué productos son equivalentes (resuelven lo mismo). Al buscar en Productos y en el punto de venta, debajo de cada producto salen sus equivalentes con su stock y precio, para ofrecer otro si no hay o queda poco.',
+  },
+  {
+    valor: MODULO_MENU_ARRIBA,
+    label: 'Menú arriba',
+    descripcion:
+      'En computadoras y laptops, el menú va en una barra arriba (en vez de la columna de la izquierda) y la pantalla gana todo el ancho. Lo que no entra queda en "Más". En tablets y celulares no cambia nada.',
+  },
+  {
+    valor: MODULO_VENTA_FUERA_INVENTARIO,
+    label: 'Vender algo que no está en inventario',
+    descripcion:
+      'En el punto de venta, un botón para vender algo que consigues afuera (nombre, cantidad, precio con IGV, unidad y código). Sale en la boleta, factura o nota de venta con el total completo, pero no entra a caja, reportes, ganancias, stock ni créditos: para el sistema solo cuenta lo de tu inventario.',
   },
   {
     valor: MODULO_FICHA_LIBRO,

@@ -6,6 +6,8 @@
 import { api } from '../api/api';
 import { fechaHoraLima } from './formato';
 import { pagoParaImprimir, textoPago } from './metodoPago';
+import { lineasDeVenta, precioSinIgv } from './codigosVenta';
+import { lineasFuera, ventaDelCliente } from './fueraInventario';
 
 // Comprobante con hoja A4 (además del ticket de 80 mm):
 // - la factura de FacturaLibre (su PDF oficial);
@@ -18,8 +20,16 @@ export const facturaConA4 = (comp) =>
 // Datos del ticket propio de una venta (nota simple, boleta, o comprobante
 // sin PDF oficial), con los datos reales que ya trae la fila (hash, RUC
 // emisor, fecha) para que el QR salga correcto. Lo usan Imprimir y PDF.
-export const datosDelTicket = async (comp) => {
-  const detalle = await api.ventaParaDevolucion(comp.folio_venta);
+// conCodigos (módulo "Venta en tabla"): cada línea lleva su código interno
+// y su precio sin IGV, como la hoja A4.
+export const datosDelTicket = async (comp, { conCodigos = false } = {}) => {
+  // Con lo de afuera (módulo "Vender algo que no está en inventario"), el
+  // comprobante lleva el total completo y esas líneas al final. Sin nada de
+  // afuera, la venta queda igual.
+  const leida = await api.ventaParaDevolucion(comp.folio_venta);
+  const detalle = ventaDelCliente(leida);
+  const productos = [...leida.productos, ...lineasFuera(leida)];
+  const lineas = conCodigos ? await lineasDeVenta(comp.folio_venta) : null;
   // Desglose de IGV como se cobró (tasa, gravado, exonerado). Si el
   // servidor aún no lo ofrece, se imprime como siempre (todo al 18 %).
   const igvVenta = await api.igvVenta(comp.venta_id).catch(() => null);
@@ -68,11 +78,19 @@ export const datosDelTicket = async (comp) => {
       pagoSegundo: detalle.pago_efectivo,
       pagoSegundoMetodo: detalle.pago_efectivo_metodo,
     },
-    items: detalle.productos.map((p) => {
+    items: productos.map((p, i) => {
       // Descuento de la línea (un paquete): lo cobrado es `subtotal`. Sin
       // descuento la diferencia es 0 y el ticket sale como siempre.
       const descuento = Math.round((p.cantidad * p.precio_unitario - (p.subtotal ?? p.cantidad * p.precio_unitario)) * 100) / 100;
-      return { nombre: p.nombre, cantidad: p.cantidad, precio: p.precio_unitario, ...(descuento > 0.004 ? { descuento } : {}) };
+      const linea = lineas?.length === productos.length ? lineas[i] : null;
+      const cobrado = p.cantidad > 0 ? (p.subtotal ?? p.cantidad * p.precio_unitario) / p.cantidad : p.precio_unitario;
+      return {
+        nombre: p.nombre,
+        cantidad: p.cantidad,
+        precio: p.precio_unitario,
+        ...(descuento > 0.004 ? { descuento } : {}),
+        ...(linea ? { codigo: linea.codigo, sinIgv: precioSinIgv(cobrado, linea.afectacion) } : {}),
+      };
     }),
     comprobante: comp.id
       ? {
@@ -106,5 +124,5 @@ export const datosDelTicket = async (comp) => {
 export const pagoDeVenta = async (folio) => {
   if (!folio) return null;
   const detalle = await api.ventaParaDevolucion(folio).catch(() => null);
-  return textoPago(pagoParaImprimir(detalle)) || null;
+  return textoPago(pagoParaImprimir(ventaDelCliente(detalle))) || null;
 };

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::handlers::rubros::{negocio, MODULO_DETRACCION};
 use crate::logica::detraccion::*;
 use crate::logica::igv::round2;
-use crate::middleware_auth::exigir_admin;
+use crate::middleware_auth::exigir_solo_admin;
 use crate::models::auth::Claims;
 use crate::tenants::TenantDb;
 
@@ -107,7 +107,7 @@ pub async fn guardar_detraccion(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<GuardarDetraccion>,
 ) -> Resultado<DetraccionRespuesta> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let malo = |m: &str| (StatusCode::BAD_REQUEST, m.to_string());
     if !porcentaje_valido(payload.porcentaje) {
         return Err(malo("El porcentaje de detracción debe ser mayor a 0 y hasta 30."));

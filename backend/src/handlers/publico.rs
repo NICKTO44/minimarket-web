@@ -144,6 +144,16 @@ pub async fn ver_comprobante_publico(
             precio: row.get(2).unwrap_or_default(),
         });
     }
+    // Lo de afuera (módulo VENTA_FUERA_INVENTARIO) también va en el
+    // comprobante del cliente, con el total completo. Sin nada de afuera no
+    // cambia nada.
+    let mut total = total;
+    if let Some(f) = crate::handlers::fuera_inventario::de_venta(&conn, venta_id).await {
+        total = ((total + f.total) * 100.0).round() / 100.0;
+        for l in f.lineas {
+            items.push(ItemPublico { nombre: l.nombre, cantidad: l.cantidad, precio: l.precio_unitario });
+        }
+    }
 
     let mut rcfg = conn
         .query("SELECT nombre_tienda, direccion, telefono, ruc FROM configuracion_tienda LIMIT 1", ())

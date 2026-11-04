@@ -2,7 +2,7 @@ use axum::{extract::{Extension, Path, State}, Json, http::StatusCode};
 use std::sync::Arc;
 
 use crate::AppState;
-use crate::middleware_auth::{exigir_admin, ROL_ADMIN};
+use crate::middleware_auth::{exigir_solo_admin, ROL_ADMIN};
 use crate::models::auth::Claims;
 
 use crate::tenants::TenantDb;
@@ -83,7 +83,7 @@ pub async fn actualizar_configuracion(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<ActualizarConfiguracion>,
 ) -> Result<Json<AccionResponse>, (StatusCode, String)> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     // La tasa de IGV se usa de verdad al cobrar y al emitir comprobantes:
     // no se acepta un valor fuera de rango.
     if !(payload.iva_porcentaje > 0.0 && payload.iva_porcentaje <= 30.0) {
@@ -165,7 +165,7 @@ pub async fn guardar_datos_negocio(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<DatosNegocio>,
 ) -> Result<Json<AccionResponse>, (StatusCode, String)> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let ruc = payload.ruc.as_deref().map(str::trim).filter(|s| !s.is_empty());
@@ -226,7 +226,7 @@ pub async fn crear_usuario(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<NuevoUsuario>,
 ) -> Result<Json<AccionResponse>, (StatusCode, String)> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
 
     let username = payload.username.trim().to_string();
     if username.chars().count() < 3 || username.chars().any(|c| c.is_whitespace()) {
@@ -293,7 +293,7 @@ pub async fn desactivar_usuario(
     Extension(claims): Extension<Claims>,
     Path(id): Path<i64>,
 ) -> Result<Json<AccionResponse>, (StatusCode, String)> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     if id == claims.sub {
         return Err((StatusCode::BAD_REQUEST, "No puedes desactivar tu propio usuario.".into()));
     }
@@ -344,7 +344,7 @@ pub async fn reactivar_usuario(
     Extension(claims): Extension<Claims>,
     Path(id): Path<i64>,
 ) -> Result<Json<AccionResponse>, (StatusCode, String)> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut r = conn

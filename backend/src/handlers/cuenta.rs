@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::handlers::auth::firmar_sesion;
-use crate::middleware_auth::exigir_admin;
+use crate::middleware_auth::exigir_solo_admin;
 use crate::models::auth::Claims;
 use crate::tenants::TenantDb;
 use crate::AppState;
@@ -169,7 +169,7 @@ pub async fn restablecer_clave_usuario(
     Path(id): Path<i64>,
     Json(datos): Json<RestablecerClave>,
 ) -> Result<Json<ClaveRestablecida>, Fallo> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     if id == claims.sub {
         return Err((
             StatusCode::BAD_REQUEST,

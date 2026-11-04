@@ -117,6 +117,12 @@
     font-weight: 700;
   }
 
+  /* Venta en tabla: "Cód. X · P. sin IGV S/.Y", chico, bajo el nombre. */
+  .recibo-item-codigo {
+    font-size: 0.85em;
+    overflow-wrap: anywhere;
+  }
+
   /* La cantidad o el monto (derecha) nunca se parte en dos líneas; si falta
      espacio, lo que baja de línea es el texto de la izquierda (un código largo). */
   .recibo-item-detalle span:first-child {

@@ -9,7 +9,7 @@ import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
 import { ChevronRight, ShoppingCart } from 'lucide-react';
 import { METODOS_DE_ABONO, METODOS_DE_COBRO, METODOS_OTRO_MIXTO, METODOS_SEGUNDO_MIXTO, nombreMetodo, pagoParaImprimir, textoPago } from '../../utils/metodoPago';
 import { tituloPedido } from '../../utils/mesas';
-import { abreviaturaUnidad } from '../../utils/unidades';
+import { abreviaturaUnidad, etiquetaUnidad } from '../../utils/unidades';
 import { UNIDAD_PIE_TABLAR, formatoCantidad, formatoPrecio, leerCantidad, seVendeFraccionado, subtotalLinea } from '../../utils/medidas';
 import CalculadoraPieTablar from '../../components/CalculadoraPieTablar';
 import CantidadFraccionada from '../../components/CantidadFraccionada';
@@ -19,7 +19,7 @@ import CotizacionImprimible from '../../components/CotizacionImprimible';
 import { numeroCotizacion } from '../../utils/formato';
 import '../../components/PantallaModulo.css';
 import SelectorTalla from '../../components/SelectorTalla';
-import { datosA4DeDocumento, imprimirComprobanteA4 } from '../../utils/facturaA4';
+import { datosA4DeDocumento, datosA4DeNotaVenta, imprimirComprobanteA4 } from '../../utils/facturaA4';
 import { agruparPorModelo } from '../../utils/variantes';
 import { esRespaldoLavanderia } from '../../utils/textosEncargos';
 import AvisoNotaCredito from '../../components/AvisoNotaCredito';
@@ -31,10 +31,14 @@ import AlternativasMedicamento from '../../components/AlternativasMedicamento';
 import SelectorPrecio, { PreciosTarjeta } from '../../components/SelectorPrecio';
 import { opcionesDePrecio, usePreciosVenta } from '../../utils/tresPrecios';
 import VentaTabla, { ResultadosTabla } from './VentaTabla';
-import { codigosDeVenta } from '../../utils/codigosVenta';
+import { BotonFueraInventario, EtiquetaFueraInventario, FormularioFueraInventario } from './FueraInventario';
+import { esFueraInventario, fueraParaEnviar } from '../../utils/fueraInventario';
+import { etiquetaRol } from '../../utils/menu';
+import { codigosDeVenta, precioSinIgv } from '../../utils/codigosVenta';
 import { deEditorial, resumenLibro, textoLibro, useFichasLibro, valoresDe } from '../../utils/libros';
 import { coincidenTodas, palabrasDeBusqueda } from '../../utils/repuestos';
 import EquivalentesRepuesto from '../../components/EquivalentesRepuesto';
+import { equivalentesElegidos, useEquivalentes } from '../../utils/equivalentes';
 import VehiculoVenta from '../../components/VehiculoVenta';
 import ElegirPaquete from '../../components/ElegirPaquete';
 import { VEHICULO_VACIO, lineasDePaquete, vehiculoParaEnviar } from '../../utils/vehiculos';
@@ -322,6 +326,13 @@ export default function POS({
   ventaTabla = false,
   // Librería: buscar por autor, editorial o serie y filtrar por editorial.
   fichaLibro = false,
+  // Repuestos: equivalentes elegidos por el dueño. Salen debajo de cada
+  // resultado de la búsqueda (venta en tabla) y reemplazan a los equivalentes
+  // por código cuando no hay stock.
+  equivalentes = false,
+  // Módulo "Vender algo que no está en inventario": entra al carrito como una
+  // línea más y solo sale en el comprobante. Apagado, no se ve nada.
+  fueraInventario = false,
   // Lubricentro: placa y kilometraje en la venta, paquetes y el cobro de
   // una orden de servicio (viene de Órdenes de servicio).
   vehiculos = false,
@@ -369,6 +380,8 @@ export default function POS({
   // Categoría elegida para ver solo sus productos (null = todas).
   const [categoriaFiltro, setCategoriaFiltro] = useState(null);
   const buscadorRef = useRef(null);
+  // Formulario "Vender algo que no está en inventario" abierto.
+  const [fueraAbierto, setFueraAbierto] = useState(false);
   const [carrito, setCarritoCrudo] = useState(() =>
     pedidoACobrar
       ? carritoDePedido(pedidoACobrar)
@@ -422,6 +435,8 @@ export default function POS({
   }, [fichaMedicamento, recetas, alternativas]);
   // Lubricentro: fichas de repuesto y compatibilidades (solo con sus módulos).
   const [repuestos, setRepuestos] = useState(() => new Map());
+  // Equivalentes elegidos por el dueño: producto_id -> [ids].
+  const [gruposEquivalentes] = useEquivalentes(equivalentes);
   const [compatibilidades, setCompatibilidades] = useState(() => new Map());
   useEffect(() => {
     if (fichaRepuesto) {
@@ -911,7 +926,13 @@ export default function POS({
   // Sin stock (o ya todo en el carrito): si hay otro con el mismo principio
   // activo, concentración y forma, se ofrece en vez de solo avisar.
   // Lubricentro: equivalentes por código con lo que queda para vender.
-  const equivalentesPara = (id) => (fichaRepuesto ? equivalentesDe(id, repuestos, productos, (p) => disponibleDe(p.id)) : []);
+  // Con el módulo "Equivalentes", los que eligió el dueño (no los por código).
+  const equivalentesPara = (id) =>
+    equivalentes
+      ? equivalentesElegidos(id, gruposEquivalentes, productos, (p) => disponibleDe(p.id)).map((a) => ({ ...a, ficha: repuestos.get(a.producto.id) }))
+      : fichaRepuesto
+        ? equivalentesDe(id, repuestos, productos, (p) => disponibleDe(p.id))
+        : [];
   const ofrecerAlternativas = (producto) => {
     const elegido = productos.find((p) => p.id === producto.id) || producto;
     if (alternativas && alternativasPara(producto.id).some((a) => a.conStock)) {
@@ -1118,7 +1139,24 @@ export default function POS({
   const cerrarCobroTabla = useCallback(() => setCarritoAbierto(false), []);
 
   // Venta en tabla: lo que se ve en la lista bajo el buscador.
-  const resultadosTabla = enTabla && busqueda.trim() ? productosFiltrados.slice(0, 30) : null;
+  // Con "Equivalentes", al final de la lista van los equivalentes de lo
+  // encontrado (una sola vez cada uno, y no los que ya salieron como resultado).
+  const principalesTabla = enTabla && busqueda.trim() ? productosFiltrados.slice(0, 30) : null;
+  const equivalenteDeTabla = new Map();
+  const resultadosTabla = (() => {
+    if (!principalesTabla || !equivalentes) return principalesTabla;
+    const vistos = new Set(principalesTabla.map((p) => p.id));
+    const extra = [];
+    for (const p of principalesTabla) {
+      for (const { producto: e } of equivalentesElegidos(p.id, gruposEquivalentes, productos, (x) => disponibleDe(x.id))) {
+        if (vistos.has(e.id)) continue;
+        vistos.add(e.id);
+        extra.push(e);
+        equivalenteDeTabla.set(e.id, p);
+      }
+    }
+    return [...principalesTabla, ...extra];
+  })();
 
   const elegirEnTabla = (producto) => {
     if (agregarAlCarrito(producto)) {
@@ -1365,6 +1403,11 @@ export default function POS({
       : total;
   const aDevolver = enCambio ? redondear2(Math.max(0, aFavor - total)) : 0;
 
+  // "Vender algo que no está en inventario": solo en una venta normal (no al
+  // cobrar una mesa, un cambio, una cotización, una orden ni un encargo).
+  const puedeVenderFuera =
+    fueraInventario && !cobrandoPedido && !enCambio && !cotizacionEnVenta && !ordenEnVenta && !encargoEnVenta;
+
   const esMixto = metodoPago === 'MIXTO';
   const esCredito = metodoPago === 'CREDITO';
   const adelantoNum = redondear2(parseFloat(String(creditoAdelanto).replace(',', '.')) || 0);
@@ -1512,7 +1555,7 @@ export default function POS({
     setMensaje(null);
     try {
       const resultado = await api.ventaCrear({
-        productos: carrito.map((i) => ({
+        productos: carrito.filter((i) => !esFueraInventario(i)).map((i) => ({
           id: i.id,
           nombre: i.nombre,
           precio: i.precio,
@@ -1554,6 +1597,8 @@ export default function POS({
         ...(placaVenta?.vehiculo ? { vehiculo: placaVenta.vehiculo } : {}),
         ...(ordenEnVenta ? { orden_servicio_id: ordenEnVenta.id } : {}),
         ...(encargoEnVenta ? { encargo_id: encargoEnVenta.id } : {}),
+        // Lo que no está en inventario: solo si hay (si no, la venta va como siempre).
+        ...(carrito.some(esFueraInventario) ? { fuera_inventario: fueraParaEnviar(carrito) } : {}),
       });
       // La receta era de esta venta: la siguiente empieza en blanco.
       setRecetaDatos(RECETA_VACIA);
@@ -1636,6 +1681,17 @@ export default function POS({
           precio: i.precio,
           // Solo las líneas con descuento (p. ej. de un paquete) lo muestran.
           ...(i.descuentoMonto > 0 ? { descuento: i.descuentoMonto, motivoDescuento: i.paquete ? `Desc. ${i.paquete.nombre}` : null } : {}),
+          // Venta en tabla: código interno y precio sin IGV (de lo cobrado) en el ticket y la hoja.
+          ...(ventaTabla
+            ? {
+                codigo: (esFueraInventario(i) ? i.codigo : productoPorId.get(i.id)?.codigo) || '',
+                sinIgv: precioSinIgv(
+                  i.cantidad > 0 ? (i.precio * i.cantidad - (i.descuentoMonto || 0)) / i.cantidad : i.precio,
+                  productoPorId.get(i.id)?.afectacion_igv
+                ),
+                unidad: etiquetaUnidad(productoPorId.get(i.id)?.unidad_medida || i.unidad_medida),
+              }
+            : {}),
         })),
         // Lubricentro: garantía de cada repuesto que la tiene (una vez por producto).
         garantias: fichaRepuesto
@@ -1727,7 +1783,15 @@ export default function POS({
   // Emisión directa: el A4 es nuestro diseño (utils/facturaA4.js), armado
   // con el documento que se envió a SUNAT; solo si SUNAT lo aceptó. Ahí la
   // boleta también se puede imprimir en ticket o en A4, igual que la factura.
+  // Venta en tabla: la nota de venta también sale en hoja A4 / A5.
+  const notaConA4 =
+    ventaTabla &&
+    !!ultimaVentaParaImprimir &&
+    ultimaVentaParaImprimir.tipoComprobante === 'NINGUNO' &&
+    !ultimaVentaParaImprimir.comprobante &&
+    !ultimaVentaParaImprimir.comprobantePendiente;
   const facturaConA4 = (() => {
+    if (notaConA4) return true;
     const comp = ultimaVentaParaImprimir?.comprobante;
     if (!comp?.comprobante_id) return false;
     if (comp.tipo === 'FACTURA') return !!comp.enlace_pdf || comp.estado === 'ACEPTADO';
@@ -1735,7 +1799,30 @@ export default function POS({
       comp.tipo === 'BOLETA' && !comp.enlace_pdf && comp.estado === 'ACEPTADO' && cfgEmisor?.facturacion_proveedor === 'SUNAT_DIRECTO'
     );
   })();
-  const nombreUltimoComprobante = ultimaVentaParaImprimir?.comprobante?.tipo === 'FACTURA' ? 'factura' : 'boleta';
+  const nombreUltimoComprobante = notaConA4
+    ? 'nota de venta'
+    : ultimaVentaParaImprimir?.comprobante?.tipo === 'FACTURA'
+      ? 'factura'
+      : 'boleta';
+
+  // Nota de venta en hoja A4 / A5 (Venta en tabla): con lo mismo del ticket.
+  const imprimirNotaA4 = (papel = 'A4') => {
+    const v = ultimaVentaParaImprimir;
+    const datos = datosA4DeNotaVenta(
+      { ...v, venta: { ...v.venta, pagoTexto: textoPago(pagoParaImprimir(v.venta)) || null }, fecha: new Date().toLocaleString('es-PE') },
+      {
+        nombreComercial: nombreTienda,
+        razonSocial: cfgEmisor?.razon_social,
+        ruc: cfgEmisor?.ruc || ruc,
+        direccion: cfgEmisor?.direccion || direccion,
+        telefono: cfgEmisor?.telefono || telefono,
+        email: cfgEmisor?.email,
+        logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,
+        color: cfgEmisor?.color_acento,
+      }
+    );
+    imprimirComprobanteA4(datos, { papel });
+  };
 
   // papel: 'A4' o 'A5' (media hoja, módulo "Venta en tabla").
   const imprimirA4Propio = async (comp, papel = 'A4') => {
@@ -1760,7 +1847,9 @@ export default function POS({
   // formato: 'A4' abre el PDF de la factura (o nuestro A4); cualquier otro, el ticket.
   const imprimirComprobante = (formato) => {
     const comp = ultimaVentaParaImprimir?.comprobante;
-    if (formato === 'A4' && facturaConA4 && comp.enlace_pdf) {
+    if ((formato === 'A4' || formato === 'A5') && notaConA4) {
+      imprimirNotaA4(formato);
+    } else if (formato === 'A4' && facturaConA4 && comp.enlace_pdf) {
       setPdfVisible(api.comprobantePdfUrl(comp.comprobante_id));
     } else if (formato === 'A4' && facturaConA4) {
       imprimirA4Propio(comp);
@@ -2007,6 +2096,7 @@ export default function POS({
               disponibleDe={(id) => disponibleDe(id)}
               preciosExtra={tresPrecios ? preciosExtra : null}
               marcaDe={(p) => (fichaRepuesto ? repuestos.get(p.id)?.marca : null)}
+              equivalenteDe={equivalenteDeTabla}
             />
             <VentaTabla
               carrito={carrito}
@@ -2023,6 +2113,7 @@ export default function POS({
               onDescuento={fijarDescuento}
               onQuitar={(item) => (item.paquete ? quitarPaquete(item.paquete.grupo) : quitarDelCarrito(claveDe(item)))}
               onCobrar={abrirCobroTabla}
+              extraBarra={puedeVenderFuera ? <BotonFueraInventario compacto onClick={() => setFueraAbierto(true)} disabled={procesando} /> : null}
               cobroAbierto={carritoAbierto}
               onCerrarCobro={cerrarCobroTabla}
             />
@@ -2488,11 +2579,13 @@ export default function POS({
 
         {/* Venta en tabla: las líneas ya están en la tabla; aquí queda el cobro. */}
         <div className="pos-carrito-items" hidden={enTabla}>
+          {puedeVenderFuera && <BotonFueraInventario onClick={() => setFueraAbierto(true)} disabled={procesando} />}
           {carrito.length === 0 && <p className="pos-carrito-vacio">{enCambio ? 'Elige la prenda nueva' : 'Carrito vacío'}</p>}
           {carrito.map((item) => (
             <div key={claveDe(item)} className="pos-carrito-item">
               <div className="pos-carrito-item-info">
                 <span className="pos-carrito-item-nombre">{item.nombre}</span>
+                {esFueraInventario(item) && <EtiquetaFueraInventario />}
                 {item.detalle && <span className="pos-carrito-item-detalle">{item.detalle}</span>}
                 {item.descuentoMonto > 0 && (
                   <span className="pos-carrito-item-detalle">
@@ -2501,6 +2594,7 @@ export default function POS({
                   </span>
                 )}
                 {alternativas &&
+                  !esFueraInventario(item) &&
                   !item.presentacion &&
                   !cobrandoPedido &&
                   alternativasPara(item.id).some((a) => a.conStock) && (
@@ -2513,6 +2607,7 @@ export default function POS({
                     </button>
                   )}
                 {fichaRepuesto &&
+                  !esFueraInventario(item) &&
                   !item.presentacion &&
                   !esLineaMedida(item) &&
                   !cobrandoPedido &&
@@ -2942,7 +3037,7 @@ export default function POS({
             </div>
           )}
 
-          {cotizaciones && carrito.length > 0 && !cobrandoPedido && !cotizacionEnVenta && !enCambio && !encargoEnVenta && (
+          {cotizaciones && carrito.length > 0 && !cobrandoPedido && !cotizacionEnVenta && !enCambio && !encargoEnVenta && !carrito.some(esFueraInventario) && (
             <button
               type="button"
               className="pos-cotizar"
@@ -2976,6 +3071,16 @@ export default function POS({
           </button>
         </div>
       </div>
+
+      {fueraAbierto && (
+        <FormularioFueraInventario
+          onCerrar={() => setFueraAbierto(false)}
+          onAgregar={(linea) => {
+            setCarrito((prev) => [...prev, linea]);
+            setFueraAbierto(false);
+          }}
+        />
+      )}
 
       {nuevaCotizacion && (
         <div className="pm-velo" onMouseDown={(e) => e.target === e.currentTarget && !guardandoCotizacion && setNuevaCotizacion(null)}>
@@ -3395,6 +3500,7 @@ export default function POS({
           telefono={telefono}
           ruc={ruc}
           cajero={usuario.nombre}
+          etiquetaCajero={etiquetaRol(usuario)}
           diasCambio={cambios ? diasCambio : 0}
           logo={logoNegocio}
           garantias={ultimaVentaParaImprimir.garantias || []}

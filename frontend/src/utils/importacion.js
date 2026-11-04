@@ -40,6 +40,9 @@ export const CAMPOS_REPUESTO = [
   { valor: 'garantia', label: 'Garantía (días)', repuesto: true },
 ];
 
+/** Repuestos: códigos de los productos equivalentes (módulo "Equivalentes"). Al importar solo se agregan. */
+export const CAMPOS_EQUIVALENTES = [{ valor: 'equivalentes', label: 'Equivalentes (códigos)', equivalentes: true }];
+
 /** Lubricentro: vehículos compatibles (módulo "Compatibilidad con vehículos"). */
 export const CAMPOS_COMPATIBILIDAD = [{ valor: 'compatible', label: 'Compatible con (vehículos)', compatibilidad: true }];
 
@@ -59,9 +62,10 @@ export const CAMPOS_LIBRO = [
 ];
 
 /** Los campos que se pueden elegir en este negocio. */
-export function camposImportacion({ ficha = false, repuesto = false, compatibilidad = false, tresPrecios = false, libro = false } = {}) {
+export function camposImportacion({ ficha = false, repuesto = false, compatibilidad = false, tresPrecios = false, libro = false, equivalentes = false } = {}) {
   return [
     ...CAMPOS,
+    ...(equivalentes ? CAMPOS_EQUIVALENTES : []),
     ...(ficha ? CAMPOS_FICHA : []),
     ...(repuesto ? CAMPOS_REPUESTO : []),
     ...(compatibilidad ? CAMPOS_COMPATIBILIDAD : []),
@@ -99,6 +103,8 @@ const NOMBRES = {
   marca_repuesto: ['marca', 'marcarepuesto', 'marcadelrepuesto', 'brand', 'fabricante'],
   numero_parte: ['numerodeparte', 'numeroparte', 'ndeparte', 'nodeparte', 'nparte', 'nrodeparte', 'nroparte', 'partnumber', 'pn', 'codigofabricante',
     'codigooem', 'oem', 'codigooriginal', 'codfabricante', 'npieza', 'numerodepieza'],
+  // Antes que los códigos alternos: con el módulo "Equivalentes", la columna es suya.
+  equivalentes: ['equivalentes', 'equivalente', 'equivalencias', 'productosequivalentes', 'codigosequivalentes'],
   codigos_alternos: ['codigosalternos', 'codigoalterno', 'alternos', 'alterno', 'equivalencias', 'equivalentes', 'equivalencia',
     'referenciascruzadas', 'crossreference', 'reemplazos', 'reemplaza', 'otroscodigos'],
   ubicacion: ['ubicacion', 'ubic', 'estante', 'anaquel', 'percha', 'casillero', 'posicion', 'ubicacionalmacen'],
@@ -142,6 +148,7 @@ function campoParecido(clave, permitidos = new Set()) {
     if (clave.includes('editorial')) return 'libro_editorial';
   }
   if (clave.includes('lote') && !clave.includes('cant') && !clave.includes('stock')) return 'lote';
+  if (clave.includes('equivalen') && permitidos.has('equivalentes')) return 'equivalentes';
   const alterno = clave.includes('alterno') || clave.includes('equivalen') || clave.includes('reemplaz');
   if (alterno && lubricentro('codigos_alternos')) return 'codigos_alternos';
   if ((clave.includes('compatib') || clave.includes('aplicacion') || clave.includes('vehicul')) && lubricentro('compatible')) return 'compatible';
@@ -421,6 +428,8 @@ export function armarFilas(filas, filaTitulos, mapa) {
       ...repuestoDeFila(fila, texto, columna),
       ...preciosDeFila(fila, numero, columna),
       ...libroDeFila(fila, texto, columna),
+      // Módulo "Equivalentes": se aplican después de importar (no van al servidor de productos).
+      ...(columna.equivalentes !== undefined ? { equivalentes: texto(fila, 'equivalentes') || null } : {}),
     });
   });
   return { filas: salida, unidadesRaras };

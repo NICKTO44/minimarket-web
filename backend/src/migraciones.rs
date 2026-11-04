@@ -140,7 +140,7 @@ pub async fn ventas_sin_productos(tienda: &TiendaConexion) -> Result<Vec<(String
     let conn = db.connect().map_err(|e| e.to_string())?;
     let mut filas = conn
         .query(
-            "SELECT v.folio, v.fecha_hora, CAST(v.total AS REAL) FROM ventas v
+            "SELECT v.folio, v.fecha_hora, CAST(v.total AS REAL), v.id FROM ventas v
              WHERE v.estado = 'COMPLETADA'
                AND NOT EXISTS (SELECT 1 FROM detalles_venta d WHERE d.venta_id = v.id)
              ORDER BY v.id DESC LIMIT 20",
@@ -149,8 +149,17 @@ pub async fn ventas_sin_productos(tienda: &TiendaConexion) -> Result<Vec<(String
         .await
         .map_err(|e| e.to_string())?;
     let mut ventas = Vec::new();
+    let mut ids = Vec::new();
     while let Some(f) = filas.next().await.map_err(|e| e.to_string())? {
         ventas.push((f.get(0).unwrap_or_default(), f.get(1).unwrap_or_default(), f.get(2).unwrap_or(0.0)));
+        ids.push(f.get::<i64>(3).unwrap_or_default());
+    }
+    drop(filas);
+    // Una venta solo de cosas que no están en inventario (módulo
+    // VENTA_FUERA_INVENTARIO) no tiene productos y está completa: no se avisa.
+    let de_afuera = crate::handlers::fuera_inventario::totales_de(&conn, &ids).await;
+    if !de_afuera.is_empty() {
+        ventas = ventas.into_iter().zip(ids).filter(|(_, id)| !de_afuera.contains_key(id)).map(|(v, _)| v).collect();
     }
     Ok(ventas)
 }

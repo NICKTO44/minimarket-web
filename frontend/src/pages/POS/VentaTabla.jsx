@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { formatoPrecio, seVendeFraccionado, subtotalLinea } from '../../utils/medidas';
 import { etiquetaUnidad } from '../../utils/unidades';
 import { opcionesDePrecio } from '../../utils/tresPrecios';
 import './VentaTabla.css';
+import { EtiquetaFueraInventario } from './FueraInventario';
+import { esFueraInventario } from '../../utils/fueraInventario';
 
 // Módulo "Venta en tabla" (Lubricentro): en vez de tarjetas, el buscador
 // muestra una lista y lo elegido entra como una fila de una tabla, como en
@@ -65,7 +67,7 @@ function CampoNumero({ valor, onAplicar, etiqueta, className, decimales = 2 }) {
 }
 
 /** Lista que aparece bajo el buscador mientras se escribe. */
-export function ResultadosTabla({ resultados, resaltado, onElegir, onResaltar, disponibleDe, preciosExtra, marcaDe, total }) {
+export function ResultadosTabla({ resultados, resaltado, onElegir, onResaltar, disponibleDe, preciosExtra, marcaDe, total, equivalenteDe }) {
   if (!resultados) return null;
   return (
     <div className="vt-resultados" role="listbox" aria-label="Productos encontrados">
@@ -81,18 +83,25 @@ export function ResultadosTabla({ resultados, resaltado, onElegir, onResaltar, d
             const stock = p.controla_stock === false ? null : disponibleDe(p.id);
             const opciones = opcionesDePrecio(p.precio, preciosExtra?.get(p.id));
             const marca = marcaDe(p);
+            // Equivalente (módulo "Equivalentes"): van al final de la lista, bajo su título.
+            const de = equivalenteDe?.get(p.id);
+            const primeroDelGrupo = de && !equivalenteDe.has(resultados[i - 1]?.id);
             return (
+              <Fragment key={p.id}>
+              {primeroDelGrupo && <p className="vt-equivalentes-titulo">🔁 Equivalentes de lo que buscaste</p>}
               <button
-                key={p.id}
                 type="button"
                 role="option"
                 aria-selected={i === resaltado}
-                className={`vt-resultado${i === resaltado ? ' vt-resultado-activo' : ''}`}
+                className={`vt-resultado${i === resaltado ? ' vt-resultado-activo' : ''}${de ? ' vt-resultado-equivalente' : ''}${
+                  primeroDelGrupo ? ' vt-resultado-equivalente-primero' : ''
+                }`}
                 onMouseEnter={() => onResaltar(i)}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onElegir(p)}
               >
                 <span className="vt-resultado-info">
+                  {de && <span className="vt-equivalente-etiqueta">🔁 Equivalente de {de.codigo}</span>}
                   <span className="vt-resultado-nombre">{p.nombre}</span>
                   <span className="vt-resultado-detalle">
                     {[p.codigo, marca, p.descripcion].filter(Boolean).join(' · ')}
@@ -113,6 +122,7 @@ export function ResultadosTabla({ resultados, resaltado, onElegir, onResaltar, d
                   )}
                 </span>
               </button>
+              </Fragment>
             );
           })}
         </>
@@ -141,6 +151,8 @@ export default function VentaTabla({
   onCobrar,
   cobroAbierto = false,
   onCerrarCobro,
+  // Módulo "Vender algo que no está en inventario": su botón, en la barra.
+  extraBarra = null,
 }) {
   const subtotal = r2(carrito.reduce((s, i) => s + subtotalLinea(i.precio, i.cantidad), 0));
   const descuento = r2(carrito.reduce((s, i) => s + (i.descuentoMonto || 0), 0));
@@ -209,6 +221,7 @@ export default function VentaTabla({
                   <td className="vt-col-n">{idx + 1}</td>
                   <td className="vt-producto">
                     <span className="vt-nombre">{item.nombre}</span>
+                    {esFueraInventario(item) && <EtiquetaFueraInventario />}
                     {item.detalle && <span className="vt-sub">{item.detalle}</span>}
                     <span className="vt-sub">{dato('codigo')}</span>
                     {dato('descripcion') && <span className="vt-sub vt-aplicacion">{dato('descripcion')}</span>}
@@ -285,7 +298,7 @@ export default function VentaTabla({
                     )}
                   </td>
                   <td>
-                    {item.paquete ? (
+                    {item.paquete || esFueraInventario(item) ? (
                       <span className="vt-precio-fijo">{formatoPrecio(item.descuentoMonto || 0)}</span>
                     ) : (
                       <CampoNumero
@@ -340,6 +353,7 @@ export default function VentaTabla({
         </table>
       )}
       <div className="vt-barra">
+        {extraBarra}
         <span className="vt-barra-info">
           {hayVenta
             ? `${carrito.length} producto${carrito.length === 1 ? '' : 's'}`

@@ -76,6 +76,10 @@ pub async fn ventas_por_rango(
         venta.productos = productos.remove(&venta.id).unwrap_or_default();
         venta.comprobante = comprobantes.remove(&venta.id);
     }
+    // Las ventas solo de cosas que no están en inventario no son del sistema
+    // (están en Comprobantes). Sin ninguna, la lista queda igual.
+    let solo_fuera = crate::handlers::fuera_inventario::solo_fuera_en_rango(&conn, &rango.fecha_inicio, &rango.fecha_fin).await;
+    ventas.retain(|v| !solo_fuera.iter().any(|(id, _)| *id == v.id));
 
     Ok(Json(ventas))
 }
@@ -220,10 +224,27 @@ pub async fn estadisticas_completas(
     // Gastos del período (por la fecha del gasto, que ya es de Perú). Los ven
     // el administrador y el cajero (que maneja la caja); inventario no.
     const ROL_CAJERO: i64 = 2;
-    let gastos = if claims.rol_id == crate::middleware_auth::ROL_ADMIN || claims.rol_id == ROL_CAJERO {
+    let gastos = if crate::middleware_auth::es_admin(&claims) || claims.rol_id == ROL_CAJERO {
         crate::handlers::gastos::total_del_rango(&conn, &rango.fecha_inicio, &rango.fecha_fin).await
     } else {
         None
+    };
+
+    let mut por_metodo = por_metodo;
+    // Las ventas solo de cosas que no están en inventario (S/ 0 para el
+    // sistema) no cuentan como ventas. Sin ninguna, todo queda igual.
+    let solo_fuera = crate::handlers::fuera_inventario::solo_fuera_en_rango(&conn, &rango.fecha_inicio, &rango.fecha_fin).await;
+    let (ventas_cantidad, ticket_promedio) = if solo_fuera.is_empty() {
+        (ventas_cantidad, ticket_promedio)
+    } else {
+        let cantidad = (ventas_cantidad - solo_fuera.len() as i64).max(0);
+        for (_, metodo) in &solo_fuera {
+            if let Some(p) = por_metodo.iter_mut().find(|p| Some(&p.metodo) == metodo.as_ref()) {
+                p.cantidad -= 1;
+            }
+        }
+        por_metodo.retain(|p| p.cantidad > 0 || p.monto.abs() > 0.004);
+        (cantidad, if cantidad > 0 { ventas_total / cantidad as f64 } else { 0.0 })
     };
 
     Ok(Json(EstadisticasCompletas {

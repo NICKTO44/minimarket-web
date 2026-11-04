@@ -239,6 +239,9 @@ async fn main() {
             "/productos/:id/libro",
             axum::routing::put(handlers::libros::guardar).delete(handlers::libros::quitar),
         )
+        // Equivalentes elegidos por el dueño (handlers/equivalentes.rs).
+        .route("/equivalentes", get(handlers::equivalentes::todos))
+        .route("/productos/:id/equivalentes", axum::routing::put(handlers::equivalentes::guardar))
         // Módulo "3 precios de venta" (handlers/precios_venta.rs).
         .route("/precios-venta", get(handlers::precios_venta::todos))
         .route("/productos/:id/precios-venta", axum::routing::put(handlers::precios_venta::guardar))

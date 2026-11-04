@@ -17,7 +17,7 @@ use std::sync::Arc;
 use crate::handlers::rubros::{exigir_modulo, MODULO_GUIAS};
 use crate::logica::guias::*;
 use crate::logica::tiempo::{ahora_lima, hoy_lima};
-use crate::middleware_auth::exigir_admin;
+use crate::middleware_auth::exigir_solo_admin;
 use crate::models::auth::Claims;
 use crate::tenants::TenantDb;
 
@@ -129,7 +129,7 @@ pub async fn guardar_config(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<GuardarConfig>,
 ) -> Resultado<ConfigGuias> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let serie = payload.serie.trim().to_uppercase();
     // Las guías de remitente electrónicas usan series que empiezan con T.
     if serie.len() != 4 || !serie.starts_with('T') || !serie.chars().all(|c| c.is_ascii_alphanumeric()) {

@@ -88,7 +88,7 @@ pub async fn subir_logo_tienda(
     Extension(claims): Extension<Claims>,
     mut multipart: Multipart,
 ) -> Result<Json<AccionResponse>, (StatusCode, String)> {
-    crate::middleware_auth::exigir_admin(&claims)?;
+    crate::middleware_auth::exigir_solo_admin(&claims)?;
     let mut bytes: Option<Vec<u8>> = None;
 
     while let Some(field) = multipart

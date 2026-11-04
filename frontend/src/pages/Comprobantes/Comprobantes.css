@@ -720,3 +720,13 @@
   color: var(--color-primario-texto, #16181d) !important;
   font-weight: 700;
 }
+
+/* Módulo "Vender algo que no está en inventario": marca bajo el monto. */
+.comp-fuera-inventario {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #92400e;
+  white-space: nowrap;
+}

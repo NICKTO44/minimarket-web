@@ -25,6 +25,8 @@ export default function Recibo({
   telefono,
   ruc,
   cajero,
+  // Rol de quien imprime, junto a su nombre ("Vendedor", "Administrador"...).
+  etiquetaCajero = 'Cajero',
   comprobante,
   cliente,
   diasCambio = 0,
@@ -160,7 +162,7 @@ export default function Recibo({
         </div>
       )}
       <div className="recibo-fila-meta">
-        <span>Cajero</span>
+        <span>{etiquetaCajero}</span>
         <span>{cajero}</span>
       </div>
       {vehiculo?.placa && (
@@ -186,6 +188,14 @@ export default function Recibo({
       {items.map((item, idx) => (
         <div key={idx} className="recibo-item">
           <div className="recibo-item-nombre">{item.nombre}</div>
+          {/* Venta en tabla: código interno y precio sin IGV de la línea. */}
+          {(item.codigo || item.sinIgv != null) && (
+            <div className="recibo-item-codigo">
+              {[item.codigo && `Cód. ${item.codigo}`, item.sinIgv != null && `P. sin IGV S/.${Number(item.sinIgv).toFixed(2)}`]
+                .filter(Boolean)
+                .join(' · ')}
+            </div>
+          )}
           <div className="recibo-item-detalle">
             <span>{formatoCantidad(item.cantidad)} x S/.{formatoPrecio(item.precio)}</span>
             <span>S/.{subtotalLinea(item.precio, item.cantidad).toFixed(2)}</span>

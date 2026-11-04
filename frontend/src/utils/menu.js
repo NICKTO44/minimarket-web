@@ -112,6 +112,25 @@ export function esRepartidor(usuario) {
   return usuario?.rol_nombre === 'REPARTIDOR';
 }
 
+/**
+ * true si es Vendedor: lo mismo que el administrador, menos Configuración y
+ * Suscripción (el backend lo bloquea igual).
+ */
+export function esVendedor(usuario) {
+  return usuario?.rol_nombre === 'VENDEDOR';
+}
+
+/** Pantallas que el vendedor no ve: solo son del administrador. */
+export const PANTALLAS_SOLO_ADMINISTRADOR = ['CONFIGURACION', 'SUSCRIPCION'];
+
+/**
+ * true si tiene los permisos del administrador en las pantallas (gastos,
+ * IGV, costo, ganancias...): el administrador y el vendedor.
+ */
+export function conPermisosDeAdmin(usuario) {
+  return usuario?.rol_id === 1 || esVendedor(usuario);
+}
+
 /** Pantallas que puede abrir cada rol limitado (modo restaurante). */
 export const PANTALLAS_MESERO = ['MESAS', 'CARTA'];
 /** El repartidor: "Mis entregas" (la pantalla MESAS de la dark kitchen). */
@@ -127,6 +146,7 @@ export function etiquetaRol(usuario) {
   if (esPreparacion(usuario)) return 'Barra / Cocina';
   if (esAlmacen(usuario)) return 'Almacén';
   if (esRepartidor(usuario)) return 'Repartidor';
+  if (esVendedor(usuario)) return 'Vendedor';
   return 'Cajero';
 }
 
@@ -164,6 +184,8 @@ export function gruposParaUsuario(usuario, { restaurante = false, etiquetas = {}
       if (preparacion) return PANTALLAS_PREPARACION.includes(i.id);
       // El cajero solo cobra: la carta del día la arman los demás.
       if (i.sinCajero && esCajero(usuario)) return false;
+      // El vendedor: todo lo del administrador menos Configuración y Suscripción.
+      if (esVendedor(usuario)) return !PANTALLAS_SOLO_ADMINISTRADOR.includes(i.id);
       return esAdmin || !i.soloAdmin;
       }),
   })).filter((g) => g.items.length > 0);

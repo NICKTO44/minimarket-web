@@ -35,6 +35,7 @@ const NOMBRE_ROL = {
   MESERO: 'Mesero (toma pedidos, no cobra)',
   PREPARACION: 'Barra / Cocina (marca los pedidos listos)',
   REPARTIDOR: 'Repartidor (sus entregas; cobra contra entrega)',
+  VENDEDOR: 'Vendedor (todo menos Configuración y Suscripción)',
 };
 
 export default function Configuracion({ onIdentidadActualizada, usuarioActualId, onNegocioCambiado }) {

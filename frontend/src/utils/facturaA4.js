@@ -103,7 +103,8 @@ export function htmlComprobanteA4(datos) {
   const esFactura = comprobante.tipo === 'FACTURA';
   const nombreTipo = nombreDelTipo(comprobante.tipo);
   const referencia = datos.referencia;
-  const numero = `${comprobante.serie}-${String(comprobante.numero).padStart(8, '0')}`;
+  const esNotaVenta = comprobante.tipo === 'NOTA_VENTA';
+  const numero = esNotaVenta ? comprobante.numero : `${comprobante.serie}-${String(comprobante.numero).padStart(8, '0')}`;
   const acento = acentoImprimible(emisor.color);
   const suave = aclarar(acento, 0.08);
   const medio = aclarar(acento, 0.18);
@@ -124,7 +125,7 @@ export function htmlComprobanteA4(datos) {
     ['Op. inafecta', totales.inafectas, totales.inafectas > 0],
     [`IGV ${String(totales.tasa ?? 18).replace('.', ',')} %`, totales.igv, true],
   ]
-    .filter(([, , ver]) => ver)
+    .filter(([, , ver]) => ver && !esNotaVenta)
     .map(([etiqueta, monto]) => `<tr><th>${etiqueta}</th><td>S/ ${soles(monto)}</td></tr>`)
     .join('');
 
@@ -270,6 +271,12 @@ export function htmlComprobanteA4(datos) {
   .items .fuerte { font-weight: 700; }
   .items .cod { white-space: nowrap; font-weight: 600; }
   .codigo { display: block; font-size: 7.6pt; color: var(--tenue); margin-top: 0.4mm; }
+  /* Venta en tabla: letra más chica y cada producto en una sola fila (el
+     nombre largo se corta con "…" en vez de saltar de línea). */
+  .items.compacta { table-layout: auto; }
+  .items.compacta td { font-size: 8pt; padding: 1.5mm 2mm; white-space: nowrap; }
+  .items.compacta thead th { padding: 1.8mm 2mm; }
+  .items.compacta td.desc { max-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 7pt; letter-spacing: -0.01em; }
 
   .pie-items { display: grid; grid-template-columns: 1fr 70mm; gap: 8mm; margin-top: 5mm; page-break-inside: avoid; }
   .letras { background: var(--suave); border-radius: 2.5mm; padding: 3mm 4mm; margin: 0 0 4mm; }
@@ -326,7 +333,7 @@ export function htmlComprobanteA4(datos) {
 
   <section class="datos">${bloqueCliente}${bloqueFechas}</section>
 
-  <table class="items">
+  <table class="items${conColumnas ? ' compacta' : ''}">
     <thead>
       <tr>${titulosItems}</tr>
     </thead>
@@ -350,7 +357,11 @@ export function htmlComprobanteA4(datos) {
     ${qr ? `<img src="${escapar(qr)}" alt="Código QR de SUNAT">` : ''}
     <div>
       <p class="gracias">¡Gracias por su preferencia!</p>
-      <p>Representación impresa de la ${nombreTipo.toLowerCase()}. Consulte su validez en sunat.gob.pe.</p>
+      ${
+        esNotaVenta
+          ? '<p>Documento interno de venta. No es un comprobante de pago electrónico.</p>'
+          : `<p>Representación impresa de la ${nombreTipo.toLowerCase()}. Consulte su validez en sunat.gob.pe.</p>`
+      }
       ${comprobante.hash ? `<p class="tenue hash">Valor resumen: ${escapar(comprobante.hash)}</p>` : ''}
     </div>
   </footer>
@@ -362,6 +373,7 @@ export function htmlComprobanteA4(datos) {
 
 function nombreDelTipo(tipo) {
   if (tipo === 'FACTURA') return 'Factura electrónica';
+  if (tipo === 'NOTA_VENTA') return 'Nota de venta';
   if (tipo === 'NOTA_CREDITO') return 'Nota de crédito electrónica';
   return 'Boleta de venta electrónica';
 }
@@ -404,7 +416,10 @@ const ESTILO_A5 = `
   .legal img { width: 18mm; height: 18mm; }
   .legal p { font-size: 6.6pt; margin-bottom: 0.8mm; }
   .legal .gracias { font-size: 8.2pt; }
-  .firma { margin-top: 2mm; font-size: 6.4pt; }`;
+  .firma { margin-top: 2mm; font-size: 6.4pt; }
+  .items.compacta td { font-size: 6.6pt; padding: 1.1mm 1.2mm; }
+  .items.compacta thead th { padding: 1.4mm 1.2mm; }
+  .items.compacta td.desc { font-size: 5.8pt; }`;
 
 /** papel: 'A4' (por defecto) o 'A5'. */
 export function imprimirComprobanteA4(datos, { papel = 'A4' } = {}) {
@@ -518,14 +533,14 @@ export async function datosA4DeDocumento(doc, extra = {}) {
           nombre: cli.rznSocial,
           direccion: cli.address?.direccion,
         },
-    // "Venta en tabla": solo en la factura, con el código interno de cada
+    // "Venta en tabla": factura y boleta, con el código interno de cada
     // línea (extra.codigos, en el orden de la venta) y su valor sin IGV.
-    columnasRepuesto: !!extra.columnasRepuesto && tipo === 'FACTURA',
+    columnasRepuesto: !!extra.columnasRepuesto && tipo !== 'NOTA_CREDITO',
     items: detalles.map((d, i) => ({
       cantidad: d.cantidad,
       unidad: NOMBRE_UNIDAD[d.unidad] || d.unidad,
       descripcion: d.descripcion,
-      ...(extra.columnasRepuesto && tipo === 'FACTURA'
+      ...(extra.columnasRepuesto && tipo !== 'NOTA_CREDITO'
         ? { codigo: extra.codigos?.length === detalles.length ? extra.codigos[i] : '', valorUnitario: d.mtoValorUnitario }
         : {}),
       precioUnitario: d.mtoPrecioUnitario,
@@ -678,4 +693,42 @@ export function htmlComprobanteTicket(datos) {
   </div>
 </body>
 </html>`;
+}
+
+/**
+ * Hoja A4 / A5 de una nota de venta (módulo "Venta en tabla"): el mismo
+ * diseño de la boleta, sin IGV desglosado ni QR (no va a SUNAT).
+ * ticket: lo que arma el ticket de 80 mm ({ venta, items, cliente, fecha });
+ * cada item puede traer codigo, sinIgv y unidad.
+ */
+export function datosA4DeNotaVenta(ticket, emisor = {}) {
+  const { venta = {}, items = [], cliente, fecha } = ticket;
+  const [dia, hora] = String(fecha || '').split(/,?\s+(?=\d{1,2}:)/);
+  return {
+    emisor,
+    comprobante: { tipo: 'NOTA_VENTA', numero: venta.folio || '', fechaEmision: dia || new Date().toLocaleDateString('es-PE'), horaEmision: hora || '' },
+    cliente: cliente?.nombre_razon_social
+      ? {
+          tipoDocumento: cliente.numero_documento?.length === 11 ? 'RUC' : 'DNI',
+          numeroDocumento: cliente.numero_documento || null,
+          nombre: cliente.nombre_razon_social,
+          direccion: cliente.direccion,
+        }
+      : null,
+    pago: venta.pagoTexto || null,
+    columnasRepuesto: true,
+    items: items.map((it) => {
+      const importe = r2(it.cantidad * it.precio - (it.descuento || 0));
+      return {
+        cantidad: it.cantidad,
+        unidad: it.unidad || 'Unidad',
+        codigo: it.codigo || '',
+        descripcion: it.nombre,
+        valorUnitario: it.sinIgv ?? it.precio,
+        precioUnitario: it.precio,
+        importe,
+      };
+    }),
+    totales: { total: venta.total ?? items.reduce((s, it) => s + r2(it.cantidad * it.precio - (it.descuento || 0)), 0) },
+  };
 }

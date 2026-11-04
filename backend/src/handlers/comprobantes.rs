@@ -124,6 +124,7 @@ pub async fn listar_comprobantes(
             proveedor: row.get::<String>(19).ok(),
             notas: Vec::new(),
             anulacion: None,
+            fuera_inventario: None,
         });
     }
 
@@ -133,6 +134,16 @@ pub async fn listar_comprobantes(
         .filter(|c| c.proveedor.as_deref() == Some("SUNAT_DIRECTO"))
         .filter_map(|c| c.id)
         .collect();
+    // Lo de afuera (módulo VENTA_FUERA_INVENTARIO): el comprobante es por
+    // el total completo; la venta guarda solo lo del inventario.
+    let ventas: Vec<i64> = comprobantes.iter().map(|c| c.venta_id).collect();
+    let fuera = crate::handlers::fuera_inventario::totales_de(&conn, &ventas).await;
+    for c in comprobantes.iter_mut() {
+        if let Some(t) = fuera.get(&c.venta_id) {
+            c.monto = ((c.monto + t) * 100.0).round() / 100.0;
+            c.fuera_inventario = Some(*t);
+        }
+    }
     let mut notas = crate::handlers::notas_credito::notas_de(&conn, &directos).await;
     let mut anulaciones = crate::handlers::anulaciones::anulaciones_de(&conn, &directos).await;
     for c in comprobantes.iter_mut() {

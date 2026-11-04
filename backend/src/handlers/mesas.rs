@@ -10,7 +10,7 @@ use axum::{extract::{Extension, Path}, Json, http::StatusCode};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::middleware_auth::exigir_admin;
+use crate::middleware_auth::exigir_solo_admin;
 use crate::models::auth::Claims;
 use crate::models::mesa::*;
 use crate::tenants::TenantDb;
@@ -359,7 +359,7 @@ pub async fn crear_mesa(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<MesaPayload>,
 ) -> Resultado<Respuesta> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let conn = tenant.0.connect().map_err(e500)?;
     exigir_modulo(&conn).await?;
     let (nombre, zona, capacidad, orden) = validar_mesa(&payload)?;
@@ -378,7 +378,7 @@ pub async fn actualizar_mesa(
     Path(id): Path<i64>,
     Json(payload): Json<MesaPayload>,
 ) -> Resultado<Respuesta> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let conn = tenant.0.connect().map_err(e500)?;
     exigir_modulo(&conn).await?;
     let (nombre, zona, capacidad, orden) = validar_mesa(&payload)?;
@@ -400,7 +400,7 @@ pub async fn desactivar_mesa(
     Extension(claims): Extension<Claims>,
     Path(id): Path<i64>,
 ) -> Resultado<Respuesta> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let conn = tenant.0.connect().map_err(e500)?;
     exigir_modulo(&conn).await?;
     let mut filas = conn
@@ -1076,7 +1076,7 @@ pub async fn crear_grupo_modificador(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<GrupoPayload>,
 ) -> Resultado<Respuesta> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let conn = tenant.0.connect().map_err(e500)?;
     exigir_modulo(&conn).await?;
     let (nombre, opciones) = validar_grupo(&payload)?;
@@ -1097,7 +1097,7 @@ pub async fn actualizar_grupo_modificador(
     Path(id): Path<i64>,
     Json(payload): Json<GrupoPayload>,
 ) -> Resultado<Respuesta> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let conn = tenant.0.connect().map_err(e500)?;
     exigir_modulo(&conn).await?;
     let (nombre, opciones) = validar_grupo(&payload)?;
@@ -1120,7 +1120,7 @@ pub async fn desactivar_grupo_modificador(
     Extension(claims): Extension<Claims>,
     Path(id): Path<i64>,
 ) -> Resultado<Respuesta> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let conn = tenant.0.connect().map_err(e500)?;
     exigir_modulo(&conn).await?;
     conn.execute("UPDATE grupos_modificadores SET activo = 0 WHERE id = ?1", libsql::params![id])
@@ -1144,7 +1144,7 @@ pub async fn cambiar_modo_negocio(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<ModoNegocioPayload>,
 ) -> Resultado<Respuesta> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let modo = payload.modo_negocio.trim().to_uppercase();
     if modo != "TIENDA" && modo != "RESTAURANTE" {
         return Err(error(StatusCode::BAD_REQUEST, "Tipo de negocio no válido."));
@@ -1199,7 +1199,7 @@ pub async fn listar_roles(
     Extension(tenant): Extension<Arc<TenantDb>>,
     Extension(claims): Extension<Claims>,
 ) -> Resultado<Vec<RolResumen>> {
-    exigir_admin(&claims)?;
+    exigir_solo_admin(&claims)?;
     let conn = tenant.0.connect().map_err(e500)?;
     let restaurante = modo_restaurante(&conn).await;
     let repartidores = crate::handlers::rubros::negocio(&conn)
