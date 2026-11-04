@@ -733,7 +733,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                         </button>
                       </div>
                     )}
-                    {c.proveedor === 'SUNAT_DIRECTO' && c.id && ['ACEPTADO', 'PENDIENTE'].includes(c.estado) && (
+                    {c.proveedor === 'SUNAT_DIRECTO' && c.id && (['ACEPTADO', 'PENDIENTE'].includes(c.estado) || errorDeUsuarioSol(c)) && (
                       <div className="comp-acciones-sunat">
                         {c.estado === 'ACEPTADO' && vigente(c) && (
                           <button className="comp-boton-imprimir comp-boton-nota" onClick={() => setNotaPara(c)}>
