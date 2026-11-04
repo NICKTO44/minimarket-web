@@ -42,6 +42,16 @@ fn caja_de(usuario_id: i64) -> String {
 /// cobrado por ella en la caja abierta. `monto` es la parte de la venta que
 /// fue por Yape/Plin (toda la venta, o la parte digital de un pago mixto).
 /// Solo números y nombres fijos: se escriben directo en la sentencia.
+/// Solo anota la billetera de la venta ("YAPE" o "PLIN"), sin sumar nada en
+/// la caja. Para ventas cuyo monto de inventario es 0 (todo fuera de inventario).
+pub async fn marcar_billetera(conn: &libsql::Connection, venta_id: i64, billetera: Option<&str>) {
+    if let Some(b @ ("YAPE" | "PLIN")) = billetera {
+        let _ = conn
+            .execute("UPDATE ventas SET billetera = ?1 WHERE id = ?2", libsql::params![b.to_string(), venta_id])
+            .await;
+    }
+}
+
 pub async fn anotar_venta(conn: &libsql::Connection, venta_id: i64, usuario_id: i64, billetera: Option<&str>, monto: f64) {
     if !(monto > 0.0) || !monto.is_finite() {
         return;

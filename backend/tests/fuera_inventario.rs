@@ -248,6 +248,15 @@ async fn venta_solo_de_afuera_queda_en_cero_para_el_sistema() {
     assert_eq!(doc["details"].as_array().unwrap().len(), 1);
     assert_eq!(doc["details"][0]["descripcion"], "Bomba de agua Toyota");
 
+    // Cobrada por Yape: a caja no entra nada, pero queda que fue Yape (el
+    // comprobante dice "Yape" y no "Yape/Plin").
+    let yape = vender(&t, json!({"total": 120, "fuera_inventario": [bomba()], "metodo_pago": "YAPE"})).await.unwrap();
+    assert_eq!(caja(&t).await, (0.0, 0.0, 0.0, 0.0));
+    assert_eq!(real(&t, "SELECT ventas_yape FROM cajas WHERE estado = 'ABIERTA'").await, 0.0);
+    let conn = t.0.connect().unwrap();
+    let mut f = conn.query("SELECT billetera FROM ventas WHERE id = ?1", libsql::params![yape]).await.unwrap();
+    assert_eq!(f.next().await.unwrap().unwrap().get::<String>(0).unwrap(), "YAPE");
+
     // Al crédito no: no queda nada del inventario que deber.
     let e = vender(&t, json!({"total": 120, "fuera_inventario": [bomba()], "cliente_id": 1, "credito": {"adelanto": 0}}))
         .await

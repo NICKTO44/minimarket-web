@@ -1052,6 +1052,13 @@ pub async fn procesar_venta(
             };
             if por_billetera > 0.0 {
                 crate::handlers::billeteras::anotar_venta(&conn, venta_id, usuario_id, billetera, por_billetera).await;
+            } else if metodo_pago == crate::handlers::billeteras::YAPE_PLIN
+                || (metodo_pago == "MIXTO" && pago_otro_metodo.as_deref() == Some(crate::handlers::billeteras::YAPE_PLIN))
+            {
+                // Venta solo de lo de afuera (módulo VENTA_FUERA_INVENTARIO):
+                // a caja no entra nada, pero el comprobante debe decir "Yape"
+                // o "Plin" y no "Yape/Plin".
+                crate::handlers::billeteras::marcar_billetera(&conn, venta_id, billetera).await;
             }
             // Mixto cuya otra parte también fue por Yape o Plin (p. ej. Yape +
             // Plin): esa parte suma en la línea de su billetera.
