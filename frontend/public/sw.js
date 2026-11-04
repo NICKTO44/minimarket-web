@@ -39,6 +39,18 @@ const revisarAppGuardada = () =>
     .catch(() => false);
 revisarAppGuardada();
 
+// Cloudflare Pages redirige /index.html → / (308). Una respuesta "redirigida"
+// no sirve para abrir una página (Chrome corta con ERR_FAILED), así que se
+// vuelve a armar como respuesta normal, al guardarla y al usarla.
+async function copiaLimpia(respuesta) {
+  if (!respuesta || !respuesta.redirected) return respuesta;
+  return new Response(await respuesta.blob(), {
+    status: respuesta.status,
+    statusText: respuesta.statusText,
+    headers: respuesta.headers,
+  });
+}
+
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (evento) => evento.waitUntil(self.clients.claim()));
 
@@ -55,7 +67,7 @@ self.addEventListener('message', (evento) => {
       await Promise.all(
         archivos.map((url) =>
           fetch(url, { cache: 'no-cache' })
-            .then((r) => (r.ok ? cache.put(url, r) : null))
+            .then(async (r) => (r.ok ? cache.put(url, await copiaLimpia(r)) : null))
             .catch(() => null)
         )
       );
@@ -84,14 +96,16 @@ self.addEventListener('fetch', (evento) => {
           // Con la app guardada, la página queda al día para abrirla sin internet.
           if (appGuardada && respuesta.ok) {
             const copia = respuesta.clone();
-            caches.open(CACHE_APP).then((c) => c.put('/index.html', copia)).catch(() => {});
+            copiaLimpia(copia)
+              .then((limpia) => caches.open(CACHE_APP).then((c) => c.put('/index.html', limpia)))
+              .catch(() => {});
           }
           return respuesta;
         } catch {
           if (appGuardada) {
             const cache = await caches.open(CACHE_APP);
-            const guardada = (await cache.match('/index.html')) || (await cache.match('/'));
-            if (guardada) return guardada;
+            const guardada = (await cache.match('/')) || (await cache.match('/index.html'));
+            if (guardada) return copiaLimpia(guardada);
           }
           return sinConexion();
         }
@@ -116,7 +130,7 @@ self.addEventListener('fetch', (evento) => {
         return respuesta;
       } catch (error) {
         const guardada = await caches.match(url.pathname, { cacheName: CACHE_APP });
-        if (guardada) return guardada;
+        if (guardada) return copiaLimpia(guardada);
         throw error;
       }
     })()
