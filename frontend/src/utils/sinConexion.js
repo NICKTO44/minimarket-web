@@ -32,6 +32,7 @@ export const HORAS_AVISO = 48;
 const RUTAS_GUARDADAS = new Set([
   '/productos',
   '/productos/opciones-venta',
+  '/categorias',
   '/clientes/todos',
   '/cajas/abierta',
   '/cajas/movimientos',
@@ -53,7 +54,7 @@ const RUTAS_GUARDADAS = new Set([
 
 // Se piden apenas se enciende, para que haya copia aunque el cajero no
 // haya abierto esas pantallas.
-const RUTAS_PRECARGA = ['/productos', '/clientes/todos', '/configuracion', '/cajas/abierta', '/gastos/categorias', '/unidades'];
+const RUTAS_PRECARGA = ['/productos', '/categorias', '/clientes/todos', '/configuracion', '/cajas/abierta', '/gastos/categorias', '/unidades'];
 
 function leerActivo() {
   try {

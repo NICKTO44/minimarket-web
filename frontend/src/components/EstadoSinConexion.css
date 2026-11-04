@@ -293,14 +293,17 @@
   color: #b91c1c !important;
 }
 
-/* En el celular cada pantalla dentro de .app-contenido mide el 100% (App.css):
-   el aviso y su ventana no son pantallas. */
-.app-shell .app-contenido > .esc-barra {
+/* En el celular (App.css) y con el menú arriba (MenuArriba.css) cada pantalla
+   dentro de .app-contenido mide el 100%: el aviso y su ventana no son
+   pantallas. La clase repetida le gana a la regla del menú arriba. */
+.app-shell .app-contenido > .esc-barra,
+.app-shell.app-menu-arriba .app-contenido > .esc-barra.esc-barra {
   height: auto;
   padding-bottom: 9px;
 }
 
-.app-shell .app-contenido > .esc-velo {
+.app-shell .app-contenido > .esc-velo,
+.app-shell.app-menu-arriba .app-contenido > .esc-velo.esc-velo {
   height: auto;
   padding-bottom: 16px;
 }
