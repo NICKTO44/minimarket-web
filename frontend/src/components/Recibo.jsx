@@ -182,7 +182,7 @@ export default function Recibo({
         <span>Moneda</span>
         <span>SOLES</span>
       </div>
-      {esFactura && (
+      {esFactura && !(clasico && pago) && (
         <div className="recibo-fila-meta">
           <span>Forma de pago</span>
           <span>{formaPago}</span>
@@ -303,7 +303,7 @@ export default function Recibo({
       {pago && (
         <>
           <div className="recibo-fila-meta">
-            <span>Pago</span>
+            <span>{clasico ? 'Forma de pago' : 'Pago'}</span>
             <span>{pago.titulo}</span>
           </div>
           {pago.partes.map((p, i) => (

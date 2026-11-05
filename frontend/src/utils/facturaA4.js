@@ -102,7 +102,7 @@ export function iniciales(nombre) {
  *   referencia: { documento: 'BM01-15', tipo: 'Boleta'|'Factura', motivo } | null (solo notas),
  *   cliente: { tipoDocumento: 'RUC'|'DNI'|..., numeroDocumento, nombre, direccion } | null,
  *   items: [{ cantidad, unidad, codigo, descripcion, precioUnitario, valorUnitario, importe }],
- *   papel: 'A4' (por defecto) o 'A5' (media hoja vertical, módulo "Venta en tabla"),
+ *   papel: 'A4' (por defecto) o 'A5' (media hoja horizontal, módulo "Venta en tabla"),
  *   columnasRepuesto: true para sacar el código interno y el precio sin IGV en
  *     columnas propias (módulo "Venta en tabla"; solo la impresión, no SUNAT),
  *   totales: { gravadas, exoneradas, inafectas, igv, tasa, total },
@@ -214,8 +214,8 @@ export function htmlComprobanteA4(datos) {
         ${comprobante.horaEmision && !clasico ? `<dt>Hora</dt><dd>${escapar(comprobante.horaEmision)}</dd>` : ''}
         ${credito ? `<dt>Vencimiento</dt><dd>${escapar(cuotas[cuotas.length - 1].fecha)}</dd>` : ''}
         <dt>Moneda</dt><dd>Soles (PEN)</dd>
-        ${esFactura ? `<dt>Forma de pago</dt><dd>${escapar(datos.formaPago || 'Contado')}</dd>` : ''}
-        ${datos.pago && comprobante.tipo !== 'NOTA_CREDITO' ? `<dt>Pago</dt><dd>${escapar(datos.pago)}</dd>` : ''}
+        ${esFactura && !(clasico && datos.pago) ? `<dt>Forma de pago</dt><dd>${escapar(datos.formaPago || 'Contado')}</dd>` : ''}
+        ${datos.pago && comprobante.tipo !== 'NOTA_CREDITO' ? `<dt>${clasico ? 'Forma de pago' : 'Pago'}</dt><dd>${escapar(datos.pago)}</dd>` : ''}
       </dl>
     </div>`;
 
@@ -256,13 +256,13 @@ export function htmlComprobanteA4(datos) {
 
   .cabecera { display: grid; grid-template-columns: 1fr 64mm; gap: 8mm; align-items: center; }
   .negocio { display: flex; gap: 5mm; align-items: center; min-width: 0; }
-  .logo { width: 26mm; height: 26mm; object-fit: contain; flex: none; }
+  .logo { width: 32mm; height: 32mm; object-fit: contain; flex: none; }
   .monograma {
-    width: 22mm; height: 22mm; flex: none; border-radius: 50%;
+    width: 26mm; height: 26mm; flex: none; border-radius: 50%;
     display: grid; place-items: center; background: var(--acento); color: #fff;
     font-size: 17pt; font-weight: 700; letter-spacing: 0.02em;
   }
-  .nombre-comercial { font-size: 19pt; font-weight: 800; line-height: 1.05; margin: 0 0 1.2mm; letter-spacing: -0.015em; }
+  .nombre-comercial { font-size: 15pt; font-weight: 800; line-height: 1.05; margin: 0 0 1.2mm; letter-spacing: -0.015em; }
   .razon { font-size: 8.6pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; margin: 0 0 1.2mm; }
   .negocio p { margin: 0; }
   .negocio .linea { font-size: 8.6pt; color: var(--tenue); }
@@ -417,50 +417,52 @@ function nombreDelTipo(tipo) {
 }
 
 /** Imprime el A4 desde un iframe oculto (no toca la página actual). */
-// Media hoja A5 vertical (148 x 210 mm): el mismo diseño del A4, más compacto.
+// Media hoja A5 horizontal (210 x 148 mm): el mismo diseño del A4, casi
+// del mismo ancho, con menos alto (todo más junto).
 const ESTILO_A5 = `
-  @page { size: A5; margin: 7mm 8mm 8mm; }
-  body { font-size: 7.6pt; line-height: 1.36; }
-  .hoja { width: 132mm; }
-  .cabecera, .datos { grid-template-columns: 1fr 46mm; gap: 4mm; }
-  .negocio { gap: 3mm; }
-  .logo { width: 17mm; height: 17mm; }
-  .monograma { width: 14mm; height: 14mm; font-size: 11.5pt; }
-  .nombre-comercial { font-size: 13pt; margin-bottom: 0.8mm; }
-  .razon, .negocio .linea { font-size: 6.8pt; }
+  @page { size: A5 landscape; margin: 6mm 8mm 7mm; }
+  body { font-size: 7.8pt; line-height: 1.32; }
+  .hoja { width: 194mm; }
+  .cabecera, .datos { grid-template-columns: 1fr 58mm; gap: 6mm; }
+  .negocio { gap: 4mm; }
+  .logo { width: 22mm; height: 22mm; }
+  .monograma { width: 18mm; height: 18mm; font-size: 13pt; }
+  .nombre-comercial { font-size: 12pt; margin-bottom: 0.8mm; }
+  .razon, .negocio .linea { font-size: 7.2pt; }
   .documento { border-radius: 2mm; }
-  .documento .ruc { padding: 1.8mm 1.5mm 1.5mm; font-size: 8.4pt; }
-  .documento .tipo { padding: 1.3mm 1.5mm; font-size: 6.8pt; }
-  .documento .numero { padding: 1.8mm 1.5mm 2mm; font-size: 11.5pt; }
-  .franja { height: 0.9mm; margin: 3.5mm 0 3mm; }
-  .datos { margin-bottom: 3.5mm; }
-  .tarjeta { padding: 2.4mm 3mm; border-radius: 2mm; }
-  .etiqueta { font-size: 6.2pt; margin-bottom: 0.8mm; }
-  .dato-grande { font-size: 8.8pt; }
-  .fechas { column-gap: 2.5mm; row-gap: 0.6mm; }
-  .recuadro-cliente { padding: 1.6mm 2.5mm; border-radius: 2mm; }
-  .recuadro-cliente th, .recuadro-cliente td { padding: 0.25mm 0; }
-  .recuadro-cliente td.dos-puntos { padding: 0.25mm 1.5mm 0.25mm 2mm; }
-  .items thead th { font-size: 6.2pt; padding: 1.6mm 1.3mm; letter-spacing: 0.03em; }
-  .items td { padding: 1.5mm 1.3mm; }
-  .items .n { width: 5mm; }
-  .codigo { font-size: 6.4pt; }
-  .pie-items { grid-template-columns: 1fr 50mm; gap: 4mm; margin-top: 3mm; }
-  .letras { padding: 2mm 3mm; margin-bottom: 2.5mm; border-radius: 2mm; }
-  .totales th, .totales td { padding: 0.7mm 0; }
-  .total-caja { padding: 2mm 3mm; border-radius: 2mm; margin-top: 1.5mm; }
-  .total-caja span { font-size: 7pt; }
-  .total-caja strong { font-size: 11.5pt; }
-  .aparte { margin-bottom: 2.5mm; }
-  .aparte h3 { font-size: 7.6pt; }
-  .legal { margin-top: 5mm; padding: 2.5mm; gap: 3mm; border-radius: 2mm; }
-  .legal img { width: 18mm; height: 18mm; }
-  .legal p { font-size: 6.6pt; margin-bottom: 0.8mm; }
-  .legal .gracias { font-size: 8.2pt; }
-  .firma { margin-top: 2mm; font-size: 6.4pt; }
-  .items.compacta td { font-size: 6.6pt; padding: 1.1mm 1.2mm; }
-  .items.compacta thead th { padding: 1.4mm 1.2mm; }
-  .items.compacta td.desc { font-size: 5.8pt; }`;
+  .documento .ruc { padding: 1.6mm 1.5mm 1.3mm; font-size: 9pt; }
+  .documento .tipo { padding: 1.2mm 1.5mm; font-size: 7.2pt; }
+  .documento .numero { padding: 1.6mm 1.5mm 1.8mm; font-size: 12.5pt; }
+  .franja { height: 0.8mm; margin: 2.5mm 0 2.2mm; }
+  .datos { margin-bottom: 2.5mm; }
+  .tarjeta { padding: 2mm 3.2mm; border-radius: 2mm; }
+  .etiqueta { font-size: 6.4pt; margin-bottom: 0.6mm; }
+  .etiqueta.separado { margin-top: 1.8mm; }
+  .dato-grande { font-size: 9pt; }
+  .fechas { column-gap: 3mm; row-gap: 0.4mm; }
+  .recuadro-cliente { padding: 1.4mm 2.8mm; border-radius: 2mm; }
+  .recuadro-cliente th, .recuadro-cliente td { padding: 0.2mm 0; }
+  .recuadro-cliente td.dos-puntos { padding: 0.2mm 1.5mm 0.2mm 2mm; }
+  .items thead th { font-size: 6.6pt; padding: 1.4mm 1.6mm; letter-spacing: 0.03em; }
+  .items td { padding: 0.9mm 1.6mm; }
+  .items .n { width: 6mm; }
+  .codigo { font-size: 6.6pt; }
+  .pie-items { grid-template-columns: 1fr 62mm; gap: 6mm; margin-top: 2.5mm; }
+  .letras { padding: 1.8mm 3mm; margin-bottom: 2mm; border-radius: 2mm; }
+  .totales th, .totales td { padding: 0.5mm 0; }
+  .total-caja { padding: 1.8mm 3mm; border-radius: 2mm; margin-top: 1.2mm; }
+  .total-caja span { font-size: 7.2pt; }
+  .total-caja strong { font-size: 12pt; }
+  .aparte { margin-bottom: 2mm; }
+  .aparte h3 { font-size: 7.8pt; }
+  .legal { margin-top: 2.5mm; padding: 1.4mm 2.5mm; gap: 3mm; border-radius: 2mm; }
+  .legal img { width: 13mm; height: 13mm; }
+  .legal p { font-size: 6.6pt; margin-bottom: 0.4mm; }
+  .legal .gracias { font-size: 8pt; }
+  .firma { margin-top: 1mm; font-size: 6pt; }
+  .items.compacta td { font-size: 6.8pt; padding: 1mm 1.4mm; }
+  .items.compacta thead th { padding: 1.3mm 1.4mm; }
+  .items.compacta td.desc { font-size: 6pt; }`;
 
 /** papel: 'A4' (por defecto) o 'A5'. */
 export function imprimirComprobanteA4(datos, { papel = 'A4' } = {}) {

@@ -277,7 +277,8 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
   l.fila('Venta', venta.folio);
   if (fecha) l.fila(esFactura ? 'Emisión' : 'Fecha', clasico ? soloFecha(fecha) : fecha);
   l.fila('Moneda', 'SOLES');
-  if (esFactura) l.fila('Forma de pago', venta.credito || venta.metodoPago === 'CREDITO' ? 'CRÉDITO' : 'CONTADO');
+  // Formato clásico: la forma de pago va una sola vez, abajo (Contado / Crédito).
+  if (esFactura && !clasico) l.fila('Forma de pago', venta.credito || venta.metodoPago === 'CREDITO' ? 'CRÉDITO' : 'CONTADO');
   if (clasico && (vendedor || cajero)) l.fila('Vendedor', vendedor || cajero);
   else if (cajero) l.fila(etiquetaCajero, cajero);
   l.linea();
@@ -324,7 +325,7 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
   const pago = pagoParaImprimir(venta);
   if (pago) {
     l.espacio(2);
-    l.fila('Pago', pago.titulo);
+    l.fila(clasico ? 'Forma de pago' : 'Pago', pago.titulo);
     for (const parte of pago.partes) l.fila(`  ${parte.nombre}`, soles(parte.monto));
   }
 

@@ -41,6 +41,7 @@ import Vehiculos from './pages/Vehiculos/Vehiculos';
 import Ordenes from './pages/Ordenes/Ordenes';
 import Encargos from './pages/Encargos/Encargos';
 import Reparaciones from './pages/Reparaciones/Reparaciones';
+import Catalogo from './pages/Catalogo/Catalogo';
 import Produccion from './pages/Produccion/Produccion';
 import Paquetes from './pages/Paquetes/Paquetes';
 import AvisosListos from './components/AvisosListos';
@@ -84,6 +85,7 @@ import {
   MODULO_VENTA_FUERA_INVENTARIO,
   MODULO_VENTA_SIN_CONEXION,
   MODULO_COMPROBANTE_CLASICO,
+  MODULO_CATALOGO,
   MODULO_VEHICULOS,
   MODULO_ORDENES_SERVICIO,
   MODULO_PAQUETES,
@@ -111,6 +113,7 @@ const MODULO_DE_PANTALLA = {
   ENCARGOS: MODULO_ENCARGOS,
   REPARACIONES: MODULO_REPARACIONES,
   PRODUCCION: MODULO_PRODUCCION,
+  CATALOGO: MODULO_CATALOGO,
 };
 
 function App() {
@@ -740,6 +743,13 @@ function App() {
           />
         )}
         {pantallaVisible === 'STOCK' && <StockLotes esAdmin={conPermisosDeAdmin(usuarioActual)} />}
+        {pantallaVisible === 'CATALOGO' && (
+          <Catalogo
+            fichaRepuesto={negocio.modulos.includes(MODULO_FICHA_REPUESTO)}
+            compatibilidad={negocio.modulos.includes(MODULO_COMPATIBILIDAD)}
+            tresPrecios={negocio.modulos.includes(MODULO_TRES_PRECIOS)}
+          />
+        )}
         {pantallaVisible === 'PROVEEDORES' && (
           <Proveedores
             variantes={negocio.modulos.includes(MODULO_VARIANTES)}

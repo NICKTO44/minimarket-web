@@ -29,6 +29,7 @@ import {
   CakeSlice,
   Wheat,
   Smartphone,
+  Images,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
@@ -60,6 +61,7 @@ export const GRUPOS_MENU = [
     titulo: 'Inventario',
     items: [
       { id: 'PRODUCTOS', label: 'Productos', icono: Package },
+      { id: 'CATALOGO', label: 'Catálogo', icono: Images, modulo: 'CATALOGO' },
       { id: 'STOCK', label: 'Stock y Lotes', icono: Boxes },
       { id: 'PROVEEDORES', label: 'Proveedores', icono: Truck },
       { id: 'DEVOLUCIONES', label: 'Devoluciones', icono: Undo2 },
@@ -137,7 +139,7 @@ export const PANTALLAS_MESERO = ['MESAS', 'CARTA'];
 export const PANTALLAS_REPARTIDOR = ['MESAS'];
 export const PANTALLAS_PREPARACION = ['PREPARACION', 'CARTA'];
 /** Pantallas de Almacén, en cualquier rubro (el backend bloquea el resto). */
-export const PANTALLAS_ALMACEN = ['PRODUCTOS', 'STOCK', 'PROVEEDORES', 'REPORTES', 'PRODUCCION'];
+export const PANTALLAS_ALMACEN = ['PRODUCTOS', 'CATALOGO', 'STOCK', 'PROVEEDORES', 'REPORTES', 'PRODUCCION'];
 
 /** Nombre del rol para mostrar en el menú. */
 export function etiquetaRol(usuario) {

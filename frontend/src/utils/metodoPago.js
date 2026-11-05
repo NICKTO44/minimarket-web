@@ -78,13 +78,21 @@ export function describirPago(venta) {
  *  - Al crédito recién vendido (venta.credito): null, ya tiene su bloque.
  */
 export function pagoParaImprimir(venta) {
-  const pago = pagoDetallado(venta);
-  // Módulo "Comprobante formato clásico": solo el medio, sin montos
-  // ("Efectivo", "Yape / Plin", "Al crédito").
-  if (!pago || !comprobanteClasico() || !pago.partes.length) return pago;
-  if (pago.titulo === 'Al crédito') return { titulo: pago.titulo, partes: [] };
-  const medios = [...new Set(pago.partes.map((p) => p.nombre))];
-  return { titulo: medios.join(' / '), partes: [] };
+  // Módulo "Comprobante formato clásico": solo "Contado" o "Crédito".
+  // Efectivo, Yape, Plin, tarjeta, transferencia o mixto = Contado; al
+  // crédito (con o sin adelanto) = Crédito. Sin montos ni medios.
+  if (comprobanteClasico()) return formaDePagoClasica(venta);
+  return pagoDetallado(venta);
+}
+
+/** Formato clásico: { titulo: 'Contado' | 'Crédito', partes: [] }, o null sin venta. */
+function formaDePagoClasica(venta) {
+  if (!venta) return null;
+  const metodo = venta.metodoPago ?? venta.metodo_pago;
+  const otroMetodo = venta.pagoOtroMetodo ?? venta.pago_otro_metodo;
+  const alCredito = !!venta.credito || metodo === METODO_CREDITO || otroMetodo === METODO_CREDITO;
+  if (!metodo && !alCredito) return null;
+  return { titulo: alCredito ? 'Crédito' : 'Contado', partes: [] };
 }
 
 function pagoDetallado(venta) {

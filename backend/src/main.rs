@@ -76,6 +76,16 @@ async fn main() {
         jwt_secret,
     });
 
+    // Miniaturas de las fotos de producto subidas antes de que existieran
+    // (las usa el Catálogo). En segundo plano y de a una; si ya están, no
+    // hace nada.
+    tokio::spawn(async {
+        let creadas = handlers::imagenes::crear_miniaturas_faltantes(std::path::Path::new("uploads/productos")).await;
+        if creadas > 0 {
+            println!("🖼️  {} miniatura(s) de productos creadas", creadas);
+        }
+    });
+
     // Migraciones automáticas para TODOS los negocios ya existentes --
     // corre en segundo plano, sin bloquear el arranque del servidor ni
     // el chequeo de salud de deploy.sh. Cada vez que el contenedor se

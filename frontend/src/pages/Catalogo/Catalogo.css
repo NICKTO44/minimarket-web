@@ -1,0 +1,281 @@
+/* Catálogo (módulo CATALOGO): tarjetas solo para mirar. Sobre
+   components/PantallaModulo.css (pm-*). */
+
+.cat-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.cat-buscar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 320px;
+  min-width: 0;
+  color: var(--pm-tenue);
+}
+
+.cat-buscar > svg {
+  position: absolute;
+  left: 12px;
+  pointer-events: none;
+}
+
+.cat-buscar input {
+  width: 100%;
+  height: 44px;
+  padding: 0 38px 0 40px;
+  border: 1px solid var(--pm-borde);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--pm-texto);
+  font: inherit;
+  font-size: 15px;
+}
+
+.cat-buscar input:focus {
+  outline: 2px solid #2563eb33;
+  border-color: #2563eb;
+}
+
+.cat-limpiar {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  padding: 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pm-tenue);
+  cursor: pointer;
+}
+
+.cat-filtros select {
+  height: 44px;
+  max-width: 100%;
+  padding: 0 12px;
+  border: 1px solid var(--pm-borde);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--pm-texto);
+  font: inherit;
+  font-size: 14px;
+}
+
+.cat-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--pm-borde);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cat-grilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+/* Solo para mirar: sin botón, sin enlace, sin cursor de mano. */
+.cat-tarjeta {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--pm-borde);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.cat-foto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  padding: 10px;
+  background: #fff;
+  border-bottom: 1px solid #f0f1f4;
+}
+
+.cat-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cat-foto-vacia {
+  color: #c4c8d0;
+  background: #f8f9fb;
+}
+
+.cat-cuerpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 12px 8px;
+  text-align: center;
+}
+
+.cat-marca {
+  margin: 0;
+  color: #757575;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.cat-nombre {
+  margin: 0;
+  color: #1e4e8c;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.cat-parte {
+  white-space: nowrap;
+}
+
+.cat-aplicacion {
+  margin: 0;
+  color: #222;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.cat-precios {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.cat-precio {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  max-width: 92px;
+  padding: 2px;
+  color: #333;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.cat-precio small {
+  color: #757575;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.cat-ubicacion {
+  margin: 2px 0 0;
+  color: #757575;
+  font-size: 12px;
+}
+
+.cat-pie {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr 0.8fr;
+  margin: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid #f0f1f4;
+}
+
+.cat-pie > div {
+  min-width: 0;
+  text-align: center;
+}
+
+.cat-pie > div:first-child {
+  text-align: left;
+}
+
+.cat-pie > div:last-child {
+  text-align: right;
+}
+
+.cat-pie dt {
+  color: #222;
+  font-size: 11.5px;
+}
+
+.cat-pie dd {
+  margin: 0;
+  overflow: hidden;
+  color: #222;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-pie .cat-rojo dt,
+.cat-pie .cat-rojo dd {
+  color: #e53935;
+}
+
+.cat-agotado .cat-foto img {
+  opacity: 0.55;
+}
+
+.cat-vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 60px 20px;
+  color: var(--pm-tenue);
+}
+
+.cat-fin {
+  height: 1px;
+}
+
+@media (max-width: 899px) {
+  .cat-layout {
+    padding: 14px 12px 40px;
+  }
+
+  .cat-grilla {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+  }
+
+  /* Tarjeta angosta: los tres precios uno debajo del otro (no se montan). */
+  .cat-precios {
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .cat-precio {
+    flex: none;
+    flex-direction: row;
+    justify-content: space-between;
+    max-width: none;
+    padding: 1px 4px;
+    font-size: 12px;
+  }
+
+  .cat-filtros select,
+  .cat-check {
+    flex: 1 1 140px;
+  }
+}
