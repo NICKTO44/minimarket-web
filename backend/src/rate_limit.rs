@@ -36,10 +36,11 @@ impl LimitadorIntentos {
         })
     }
 
-    /// Preset para login/registro/identificar: 5 FALLOS reales cada 15
-    /// minutos. Se usa junto con bloqueado()/registrar_fallo().
+    /// Preset para login/registro/identificar: 5 FALLOS reales cada 2
+    /// minutos (antes 15: un cliente que se equivoca no puede esperar
+    /// tanto). Se usa junto con bloqueado()/registrar_fallo().
     pub fn estricto() -> Arc<Self> {
-        Self::nuevo(5, Duration::from_secs(15 * 60))
+        Self::nuevo(5, Duration::from_secs(2 * 60))
     }
 
     /// Preset para verificar-usuario: 30 consultas por minuto, cuenta
