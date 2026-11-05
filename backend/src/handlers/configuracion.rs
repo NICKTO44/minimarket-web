@@ -49,6 +49,8 @@ pub async fn obtener_configuracion(
             modulos: negocio.modulos,
             razon_social: None,
             facturacion_proveedor: None,
+            codigo_establecimiento: None,
+            sucursal: None,
             };
             // Datos de la emisión directa (migración 0020). Aparte y sin
             // fallar: una base sin esas columnas devuelve lo de siempre.
@@ -60,6 +62,11 @@ pub async fn obtener_configuracion(
                     config.razon_social = f.get::<String>(0).ok().filter(|s| !s.trim().is_empty());
                     config.facturacion_proveedor = f.get::<String>(1).ok();
                 }
+            }
+            // Establecimiento anexo (migración 0062), también sin fallar.
+            if let Some((codigo, direccion)) = crate::handlers::facturacion_directa::sucursal_del_negocio(&conn).await {
+                config.codigo_establecimiento = Some(codigo);
+                config.sucursal = Some(direccion);
             }
             // Todos los usuarios leen la configuración (nombre, RUC, series...),
             // pero el token de FacturaLibre es un secreto: solo lo ve el

@@ -510,6 +510,7 @@ async fn main() {
         .route("/panel/negocios/:id/tipo", axum::routing::put(handlers::panel::cambiar_tipo))
         .route("/panel/negocios/:id/facturacion", get(handlers::panel::detalle_facturacion))
         .route("/panel/negocios/:id/facturacion/datos", axum::routing::put(handlers::panel::guardar_datos))
+        .route("/panel/negocios/:id/facturacion/establecimiento", axum::routing::put(handlers::panel::guardar_establecimiento))
         .route(
             "/panel/negocios/:id/facturacion/alta",
             post(handlers::panel::dar_de_alta).layer(DefaultBodyLimit::max(2 * 1024 * 1024)),

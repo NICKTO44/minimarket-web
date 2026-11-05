@@ -27,9 +27,28 @@ pub struct Emisor {
     pub departamento: String,
     pub provincia: String,
     pub distrito: String,
+    /// Código del establecimiento desde donde se emite (Ficha RUC): "0000"
+    /// = domicilio fiscal, otro = establecimiento anexo (migración 0062).
+    /// Vacío = "0000".
+    pub codigo_establecimiento: String,
+}
+
+/// Código de establecimiento válido para SUNAT: 4 dígitos; si no, "0000".
+pub fn codigo_establecimiento(valor: &str) -> String {
+    let v = valor.trim();
+    if v.len() == 4 && v.chars().all(|c| c.is_ascii_digit()) {
+        v.to_string()
+    } else {
+        "0000".to_string()
+    }
 }
 
 impl Emisor {
+    /// Código del local para el XML (AddressTypeCode del emisor).
+    pub fn cod_local(&self) -> String {
+        codigo_establecimiento(&self.codigo_establecimiento)
+    }
+
     /// Qué dato falta para poder emitir (None = está completo).
     pub fn dato_faltante(&self) -> Option<&'static str> {
         let vacio = |s: &str| s.trim().is_empty();
@@ -164,8 +183,9 @@ pub fn armar_documento(
                 "distrito": emisor.distrito.trim(),
                 "urbanizacion": "-",
                 "direccion": emisor.direccion.trim(),
-                // Catálogo de establecimientos de SUNAT: 0000 = domicilio fiscal.
-                "codLocal": "0000",
+                // Establecimiento de la Ficha RUC: 0000 = domicilio fiscal,
+                // otro = anexo configurado en el panel (migración 0062).
+                "codLocal": emisor.cod_local(),
             },
         },
         "client": cliente,
@@ -670,6 +690,7 @@ mod tests {
             departamento: "CUSCO".into(),
             provincia: "CUSCO".into(),
             distrito: "CUSCO".into(),
+            codigo_establecimiento: String::new(),
         }
     }
 
@@ -700,6 +721,28 @@ mod tests {
             detraccion: None,
             credito: None,
         }
+    }
+
+    #[test]
+    fn establecimiento_por_defecto_domicilio_fiscal() {
+        // Sin configurar (todos los negocios de hoy): igual que siempre.
+        let doc = armar_documento(&boleta(), &emisor(), "BM01", 7, "2026-10-08", "15:04:05", "");
+        assert_eq!(doc["company"]["address"]["codLocal"], "0000");
+        assert_eq!(doc["company"]["address"]["direccion"], "AV. DE PRUEBA 123");
+    }
+
+    #[test]
+    fn establecimiento_anexo() {
+        let anexo = Emisor { codigo_establecimiento: "0001".into(), ..emisor() };
+        let doc = armar_documento(&boleta(), &anexo, "BM01", 7, "2026-10-08", "15:04:05", "");
+        assert_eq!(doc["company"]["address"]["codLocal"], "0001");
+        // La dirección del XML sigue siendo la fiscal.
+        assert_eq!(doc["company"]["address"]["direccion"], "AV. DE PRUEBA 123");
+        // Un valor raro nunca llega a SUNAT: vuelve al domicilio fiscal.
+        for malo in ["1", "00012", "AB01", " "] {
+            assert_eq!(codigo_establecimiento(malo), "0000", "{malo}");
+        }
+        assert_eq!(codigo_establecimiento(" 0002 "), "0002");
     }
 
     #[test]
@@ -923,6 +966,7 @@ mod beta {
             departamento: "CUSCO".into(),
             provincia: "CUSCO".into(),
             distrito: "CUSCO".into(),
+            codigo_establecimiento: String::new(),
         }
     }
 

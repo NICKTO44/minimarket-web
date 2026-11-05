@@ -699,6 +699,69 @@ pub struct FacturacionDetalle {
     pub facturalibre_configurado: bool,
     /// Comprobantes emitidos directo, por estado.
     pub emitidos: Map<String, Value>,
+    /// Establecimiento anexo (migración 0062). None = el negocio aún no
+    /// tiene la migración.
+    pub establecimiento: Option<Establecimiento>,
+}
+
+/// Establecimiento anexo desde donde emite el negocio (Ficha RUC).
+#[derive(Serialize, Deserialize)]
+pub struct Establecimiento {
+    /// true = emite desde un anexo (código distinto de 0000).
+    pub activo: bool,
+    /// Código de 4 dígitos del anexo ("0000" si está apagado).
+    pub codigo: String,
+    /// Dirección del anexo para imprimir ("Sucursal: ...").
+    pub direccion: String,
+}
+
+async fn leer_establecimiento(conn: &libsql::Connection) -> Option<Establecimiento> {
+    let fila = texto(conn, "SELECT codigo_establecimiento, direccion_establecimiento FROM configuracion_tienda LIMIT 1").await?;
+    let codigo = crate::logica::sunat_directo::codigo_establecimiento(&no_vacio(fila.first()).unwrap_or_default());
+    Some(Establecimiento {
+        activo: codigo != "0000",
+        codigo,
+        direccion: no_vacio(fila.get(1)).unwrap_or_default(),
+    })
+}
+
+/// Valida el establecimiento anexo: (código, dirección) como se guardan.
+pub fn validar_establecimiento(datos: &Establecimiento) -> Result<(String, Option<String>), String> {
+    if !datos.activo {
+        // Apagado: vuelve al domicilio fiscal. La dirección se conserva por
+        // si se vuelve a encender.
+        let direccion = Some(datos.direccion.trim().to_string()).filter(|d| !d.is_empty());
+        return Ok(("0000".to_string(), direccion));
+    }
+    let codigo = datos.codigo.trim();
+    if codigo.len() != 4 || !codigo.chars().all(|c| c.is_ascii_digit()) {
+        return Err("El código del establecimiento debe tener 4 dígitos, como en la Ficha RUC (ej. 0001).".into());
+    }
+    if codigo == "0000" {
+        return Err("El 0000 es el domicilio fiscal: pon el código del anexo (ej. 0001) o apaga la opción.".into());
+    }
+    let direccion = datos.direccion.trim();
+    if direccion.is_empty() {
+        return Err("Falta la dirección del establecimiento anexo.".into());
+    }
+    Ok((codigo.to_string(), Some(direccion.to_string())))
+}
+
+/// Enciende o apaga el establecimiento anexo del negocio.
+pub async fn guardar_establecimiento(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Json(datos): Json<Establecimiento>,
+) -> Result<Json<Establecimiento>, Fallo> {
+    let (codigo, direccion) = validar_establecimiento(&datos).map_err(malo)?;
+    let conn = conexion_negocio(&state, id).await?;
+    conn.execute(
+        "UPDATE configuracion_tienda SET codigo_establecimiento = ?1, direccion_establecimiento = ?2",
+        libsql::params![codigo, direccion],
+    )
+    .await
+    .map_err(|_| malo("Este negocio aún no tiene la actualización del establecimiento anexo (migración 0062). Reinicia el backend."))?;
+    leer_establecimiento(&conn).await.map(Json).ok_or_else(|| malo("No se pudo leer lo guardado."))
 }
 
 pub async fn detalle_facturacion(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> Result<Json<FacturacionDetalle>, Fallo> {
@@ -773,6 +836,7 @@ pub async fn detalle_facturacion(State(state): State<Arc<AppState>>, Path(id): P
         lycet_configurado: servidor_lycet().is_some(),
         facturalibre_configurado,
         emitidos,
+        establecimiento: leer_establecimiento(&conn).await,
     }))
 }
 
@@ -908,5 +972,28 @@ mod pruebas {
         let panel = PanelClaims { panel: true, usuario: "yo".into(), exp: negocio.exp };
         let t_panel = encode(&Header::default(), &panel, &EncodingKey::from_secret(secreto)).unwrap();
         assert!(decode::<crate::models::auth::Claims>(&t_panel, &DecodingKey::from_secret(secreto), &Validation::default()).is_err());
+    }
+}
+
+#[cfg(test)]
+mod tests_establecimiento {
+    use super::{validar_establecimiento, Establecimiento};
+
+    fn e(activo: bool, codigo: &str, direccion: &str) -> Establecimiento {
+        Establecimiento { activo, codigo: codigo.into(), direccion: direccion.into() }
+    }
+
+    #[test]
+    fn validar() {
+        assert_eq!(
+            validar_establecimiento(&e(true, " 0001 ", " AV. MANCO CAPAC 439 ")).unwrap(),
+            ("0001".to_string(), Some("AV. MANCO CAPAC 439".to_string()))
+        );
+        // Apagado: vuelve a 0000 y guarda la dirección para después.
+        assert_eq!(validar_establecimiento(&e(false, "0001", "AV. X")).unwrap(), ("0000".to_string(), Some("AV. X".to_string())));
+        assert_eq!(validar_establecimiento(&e(false, "", "")).unwrap(), ("0000".to_string(), None));
+        assert!(validar_establecimiento(&e(true, "0000", "AV. X")).is_err());
+        assert!(validar_establecimiento(&e(true, "01", "AV. X")).is_err());
+        assert!(validar_establecimiento(&e(true, "0001", "  ")).is_err());
     }
 }

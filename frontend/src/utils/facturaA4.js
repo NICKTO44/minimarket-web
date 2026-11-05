@@ -20,6 +20,20 @@ import { construirCadenaQrSunat } from './qrSunat';
 import { formatoPrecio } from './medidas';
 import { comprobanteClasico } from './comprobanteClasico';
 import { esPapel58 } from './papelTicket';
+import { sucursalActual, sucursalDelDocumento } from './establecimiento';
+
+// Establecimiento anexo: "Sucursal: ..." antes de la dirección fiscal (y
+// esta con su rótulo). Sin sucursal, la dirección sale como siempre.
+function lineasDireccion(emisor, clase) {
+  const c = clase ? ` class="${clase}"` : '';
+  const sucursal = emisor.sucursal
+    ? `<p${c}><strong>Sucursal:</strong> ${escapar(emisor.sucursal)}</p>`
+    : '';
+  const fiscal = emisor.direccion
+    ? `<p${c}>${emisor.sucursal ? 'Dirección fiscal: ' : ''}${escapar(emisor.direccion)}</p>`
+    : '';
+  return sucursal + fiscal;
+}
 
 const COLOR_POR_DEFECTO = '#0f7b37'; // verde Monspeet, versión oscura (imprime bien)
 
@@ -83,7 +97,7 @@ export function iniciales(nombre) {
 
 /**
  * datos = {
- *   emisor: { nombreComercial, razonSocial, ruc, direccion, ubicacion?, telefono, email, logo, color },
+ *   emisor: { nombreComercial, razonSocial, ruc, direccion, ubicacion?, sucursal?, telefono, email, logo, color },
  *   comprobante: { tipo: 'FACTURA'|'BOLETA'|'NOTA_CREDITO', serie, numero, fechaEmision, horaEmision, hash },
  *   referencia: { documento: 'BM01-15', tipo: 'Boleta'|'Factura', motivo } | null (solo notas),
  *   cliente: { tipoDocumento: 'RUC'|'DNI'|..., numeroDocumento, nombre, direccion } | null,
@@ -341,7 +355,7 @@ export function htmlComprobanteA4(datos) {
       <div>
         <p class="nombre-comercial">${escapar(nombreComercial)}</p>
         ${mostrarRazon ? `<p class="razon">${escapar(emisor.razonSocial)}</p>` : ''}
-        ${emisor.direccion ? `<p class="linea">${escapar(emisor.direccion)}</p>` : ''}
+        ${lineasDireccion(emisor, 'linea')}
         ${emisor.ubicacion ? `<p class="linea">${escapar(emisor.ubicacion)}</p>` : ''}
         ${contacto ? `<p class="linea">${contacto}</p>` : ''}
       </div>
@@ -542,6 +556,8 @@ export async function datosA4DeDocumento(doc, extra = {}) {
       // dirección ya termina en LIMA no salen cuatro "LIMA" seguidos.
       direccion: dir.direccion || ubicacion,
       ubicacion: dir.direccion ? ubicacion : '',
+      // Emitido desde un establecimiento anexo (codLocal distinto de 0000).
+      sucursal: sucursalDelDocumento(doc),
       telefono: extra.telefono,
       email: extra.email,
       logo: extra.logo,
@@ -674,7 +690,7 @@ export function htmlComprobanteTicket(datos) {
     ${marca}
     <div class="nombre">${escapar(nombreComercial)}</div>
     ${mostrarRazon ? `<p class="razon">${escapar(emisor.razonSocial)}</p>` : ''}
-    ${emisor.direccion ? `<p>${escapar(emisor.direccion)}</p>` : ''}
+    ${lineasDireccion(emisor)}
     ${emisor.ubicacion ? `<p>${escapar(emisor.ubicacion)}</p>` : ''}
     ${emisor.telefono ? `<p>Tel. ${escapar(emisor.telefono)}</p>` : ''}
     <div class="tipo">
@@ -738,7 +754,7 @@ export function datosA4DeNotaVenta(ticket, emisor = {}) {
   const { venta = {}, items = [], cliente, fecha } = ticket;
   const [dia, hora] = String(fecha || '').split(/,?\s+(?=\d{1,2}:)/);
   return {
-    emisor,
+    emisor: { sucursal: sucursalActual(), ...emisor },
     comprobante: { tipo: 'NOTA_VENTA', numero: venta.folio || '', fechaEmision: dia || new Date().toLocaleDateString('es-PE'), horaEmision: hora || '' },
     cliente: cliente?.nombre_razon_social
       ? {

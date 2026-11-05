@@ -738,6 +738,10 @@ button.pnl-fila:hover {
   grid-column: span 2;
 }
 
+.pnl-formulario > .pnl-dos-tercios {
+  grid-column: span 4;
+}
+
 .pnl-campo {
   display: flex;
   flex-direction: column;

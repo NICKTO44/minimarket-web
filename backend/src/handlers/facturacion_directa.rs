@@ -79,7 +79,34 @@ pub async fn leer_emisor(conn: &libsql::Connection) -> Result<Emisor, Fallo> {
         departamento: texto(5),
         provincia: texto(6),
         distrito: texto(7),
+        codigo_establecimiento: codigo_de_establecimiento(conn).await,
     })
+}
+
+/// Sucursal del negocio para imprimir: (código, dirección) si emite desde
+/// un establecimiento anexo con dirección; None = domicilio fiscal o base
+/// sin la migración 0062.
+pub async fn sucursal_del_negocio(conn: &libsql::Connection) -> Option<(String, String)> {
+    let mut filas = conn
+        .query("SELECT codigo_establecimiento, direccion_establecimiento FROM configuracion_tienda LIMIT 1", ())
+        .await
+        .ok()?;
+    let f = filas.next().await.ok()??;
+    let codigo = sunat_directo::codigo_establecimiento(&f.get::<String>(0).unwrap_or_default());
+    let direccion = f.get::<String>(1).unwrap_or_default().trim().to_string();
+    (codigo != "0000" && !direccion.is_empty()).then_some((codigo, direccion))
+}
+
+/// Código del establecimiento anexo (migración 0062). Aparte y sin fallar:
+/// una base sin la columna emite como siempre, con "0000".
+pub async fn codigo_de_establecimiento(conn: &libsql::Connection) -> String {
+    let mut codigo = String::new();
+    if let Ok(mut filas) = conn.query("SELECT codigo_establecimiento FROM configuracion_tienda LIMIT 1", ()).await {
+        if let Ok(Some(f)) = filas.next().await {
+            codigo = f.get::<String>(0).unwrap_or_default();
+        }
+    }
+    sunat_directo::codigo_establecimiento(&codigo)
 }
 
 /// Comprobante directo de esta venta que ya fue aceptado o que quedó

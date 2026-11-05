@@ -76,7 +76,14 @@ export default function BoletaPublica({ identificador, comprobanteId }) {
     <div className="bp-layout">
       <div className="bp-ticket">
         <div className="bp-centro bp-nombre-tienda">{datos.nombre_tienda}</div>
-        {datos.direccion && <div className="bp-centro bp-dato">{datos.direccion}</div>}
+        {/* Establecimiento anexo: la sucursal antes de la dirección fiscal. */}
+        {datos.sucursal && <div className="bp-centro bp-dato">Sucursal: {datos.sucursal}</div>}
+        {datos.direccion && (
+          <div className="bp-centro bp-dato">
+            {datos.sucursal ? 'Dir. fiscal: ' : ''}
+            {datos.direccion}
+          </div>
+        )}
         {datos.telefono && <div className="bp-centro bp-dato">Tel: {datos.telefono}</div>}
         {datos.ruc_emisor && <div className="bp-centro bp-dato bp-ruc">RUC {datos.ruc_emisor}</div>}
 

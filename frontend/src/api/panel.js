@@ -87,6 +87,8 @@ export const panelApi = {
     f.append('gre_client_secret', greClave || '');
     return pedir(`/panel/negocios/${id}/facturacion/alta`, { metodo: 'POST', formulario: f });
   },
+  // Establecimiento anexo (Ficha RUC): { activo, codigo, direccion }.
+  guardarEstablecimiento: (id, datos) => pedir(`/panel/negocios/${id}/facturacion/establecimiento`, { metodo: 'PUT', cuerpo: datos }),
   cambiarModo: (id, modo) => pedir(`/panel/negocios/${id}/facturacion/modo`, { metodo: 'PUT', cuerpo: { modo } }),
   probar: (id) => pedir(`/panel/negocios/${id}/facturacion/probar`, { metodo: 'POST' }),
   // Usuarios del negocio y restablecer la contraseña de uno (el dueño que la olvidó).

@@ -11,6 +11,7 @@
 import QRCode from 'qrcode';
 import { aclarar, acentoImprimible, escapar, imprimirHtml, iniciales } from './facturaA4';
 import { fechaCorta } from './formato';
+import { sucursalActual } from './establecimiento';
 import { formatoCantidad } from './medidas';
 import { etiquetaUnidad } from './unidades';
 import { NOMBRE_DOCUMENTO, lugarDeGuia, motivoDeGuia, numeroConCeros } from './guiaTexto';
@@ -173,7 +174,8 @@ function htmlGuiaA4({ guia, datos, motivos, emisor = {}, ubigeos, qr }) {
       <div>
         <p class="nombre-comercial">${escapar(nombreComercial)}</p>
         ${mostrarRazon ? `<p class="razon">${escapar(emisor.razonSocial)}</p>` : ''}
-        ${emisor.direccion ? `<p class="linea">${escapar(emisor.direccion)}</p>` : ''}
+        ${sucursalActual() ? `<p class="linea"><strong>Sucursal:</strong> ${escapar(sucursalActual())}</p>` : ''}
+        ${emisor.direccion ? `<p class="linea">${sucursalActual() ? 'Dirección fiscal: ' : ''}${escapar(emisor.direccion)}</p>` : ''}
         ${contacto ? `<p class="linea">${contacto}</p>` : ''}
       </div>
     </div>

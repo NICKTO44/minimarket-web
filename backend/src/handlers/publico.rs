@@ -15,6 +15,8 @@ pub struct ItemPublico {
 pub struct ComprobantePublicoResponse {
     pub nombre_tienda: String,
     pub direccion: Option<String>,
+    /// Establecimiento anexo desde donde emite (migración 0062), si tiene.
+    pub sucursal: Option<String>,
     pub telefono: Option<String>,
     pub ruc_emisor: Option<String>,
     pub tipo: String,
@@ -171,9 +173,12 @@ pub async fn ver_comprobante_publico(
             None => (tienda.nombre_negocio.clone(), None, None, None),
         };
 
+    let sucursal = crate::handlers::facturacion_directa::sucursal_del_negocio(&conn).await.map(|(_, d)| d);
+
     Ok(Json(ComprobantePublicoResponse {
         nombre_tienda,
         direccion,
+        sucursal,
         telefono,
         ruc_emisor,
         tipo,

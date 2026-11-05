@@ -424,7 +424,7 @@ pub fn armar_guia_sunat(
                 "distrito": emisor.distrito.trim(),
                 "urbanizacion": "-",
                 "direccion": emisor.direccion.trim(),
-                "codLocal": "0000",
+                "codLocal": emisor.cod_local(),
             },
         },
         "destinatario": {

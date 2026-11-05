@@ -10,6 +10,7 @@ import QRCode from 'qrcode';
 import { desgloseDeComprobante, etiquetaTasa } from './igv';
 import { formatoCantidad, formatoPrecio, subtotalLinea } from './medidas';
 import { montoEnLetras } from './numeroALetras';
+import { sucursalActual } from './establecimiento';
 import { construirCadenaQrSunat } from './qrSunat';
 import { NOMBRE_DOCUMENTO, lugarDeGuia, motivoDeGuia, numeroConCeros } from './guiaTexto';
 import { fechaCorta } from './formato';
@@ -250,7 +251,9 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
 
   const l = crearLienzo();
   for (const linea of partir(String(nombreTienda || '').toUpperCase(), 12)) l.texto(linea, { tam: 12, negrita: true, ...centro });
-  if (direccion) for (const linea of partir(direccion, TAM)) l.texto(linea, centro);
+  // Establecimiento anexo: la sucursal antes de la dirección fiscal (igual que Recibo.jsx).
+  if (sucursalActual()) for (const linea of partir(`Sucursal: ${sucursalActual()}`, TAM)) l.texto(linea, centro);
+  if (direccion) for (const linea of partir(sucursalActual() ? `Dir. fiscal: ${direccion}` : direccion, TAM)) l.texto(linea, centro);
   if (telefono) l.texto(`Tel: ${telefono}`, centro);
   if (ruc) l.texto(`RUC ${ruc}`, { negrita: true, ...centro });
 
@@ -420,7 +423,9 @@ export async function pdfDeGuia({ guia, motivos, nombreTienda, direccion, telefo
 
   const l = crearLienzo();
   for (const linea of partir(String(nombreTienda || '').toUpperCase(), 12)) l.texto(linea, { tam: 12, negrita: true, ...centro });
-  if (direccion) for (const linea of partir(direccion, TAM)) l.texto(linea, centro);
+  // Establecimiento anexo: la sucursal antes de la dirección fiscal (igual que Recibo.jsx).
+  if (sucursalActual()) for (const linea of partir(`Sucursal: ${sucursalActual()}`, TAM)) l.texto(linea, centro);
+  if (direccion) for (const linea of partir(sucursalActual() ? `Dir. fiscal: ${direccion}` : direccion, TAM)) l.texto(linea, centro);
   if (telefono) l.texto(`Tel: ${telefono}`, centro);
   if (ruc) l.texto(`RUC ${ruc}`, { negrita: true, ...centro });
 

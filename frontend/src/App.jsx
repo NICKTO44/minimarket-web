@@ -48,6 +48,7 @@ import DireccionNegocio from './components/DireccionNegocio';
 import { irADireccion, leerDireccion } from './utils/direccion';
 import { usarAppDelNegocio } from './utils/appInstalable';
 import { usarComprobanteClasico } from './utils/comprobanteClasico';
+import { usarEstablecimiento } from './utils/establecimiento';
 import {
   conPermisosDeAdmin,
   esAlmacen,
@@ -519,6 +520,8 @@ function App() {
   // Módulo "Comprobante formato clásico": lo leen todas las impresiones
   // (utils/comprobanteClasico.js). Sin el módulo, todo se imprime como siempre.
   usarComprobanteClasico(negocio.modulos.includes(MODULO_COMPROBANTE_CLASICO));
+  // Establecimiento anexo: "Sucursal: ..." en las impresiones (utils/establecimiento.js).
+  usarEstablecimiento(configuracionTienda?.sucursal);
   const restaurante = negocio.modulos.includes(MODULO_MESAS);
   // Nombres de pantalla propios del rubro ("Carta" en vez de "Productos").
   // Dark kitchen (módulo DELIVERY): la pantalla de mesas pasa a ser el

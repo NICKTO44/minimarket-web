@@ -77,6 +77,7 @@ export default function PanelFacturacion({ negocio, onCambio }) {
 
       <Paso numero={1} titulo="Datos del emisor" hecho={datosCompletos} pendiente={detalle.falta}>
         <DatosEmisor negocio={negocio} datos={detalle.datos} onGuardado={alCambiar} />
+        <EstablecimientoAnexo negocio={negocio} actual={detalle.establecimiento} onGuardado={alCambiar} />
       </Paso>
 
       <Paso
@@ -181,6 +182,83 @@ function Modo({ detalle, negocio, listo, dadoDeAlta, onCambio }) {
         </button>
       </div>
     </div>
+  );
+}
+
+// Establecimiento anexo: el negocio vende desde un local registrado en su
+// Ficha RUC (código 0001, 0002...). Sus comprobantes salen con ese código y
+// en la impresión va "Sucursal: ..." antes de la dirección fiscal. Apagado
+// = domicilio fiscal (0000), como siempre.
+function EstablecimientoAnexo({ negocio, actual, onGuardado }) {
+  const [activo, setActivo] = useState(!!actual?.activo);
+  const [codigo, setCodigo] = useState(actual?.activo ? actual.codigo : '0001');
+  const [direccion, setDireccion] = useState(actual?.direccion || '');
+  const [estado, setEstado] = useState(null); // { tipo, texto }
+  const [guardando, setGuardando] = useState(false);
+
+  if (!actual) {
+    return (
+      <p className="pnl-aviso pnl-aviso-error">
+        Este negocio todavía no tiene la actualización 0062 (establecimiento anexo). Reinicia el backend para que se aplique.
+      </p>
+    );
+  }
+
+  const cambiado =
+    activo !== actual.activo || (activo && (codigo.trim() !== actual.codigo || direccion.trim() !== (actual.direccion || '').trim()));
+
+  const guardar = async (e) => {
+    e.preventDefault();
+    setGuardando(true);
+    setEstado(null);
+    try {
+      await panelApi.guardarEstablecimiento(negocio.id, { activo, codigo: codigo.trim(), direccion: direccion.trim() });
+      setEstado({ tipo: 'ok', texto: activo ? `Emite desde el establecimiento ${codigo.trim()}.` : 'Emite desde el domicilio fiscal (0000).' });
+      await onGuardado();
+    } catch (err) {
+      setEstado({ tipo: 'error', texto: err.message });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <form className="pnl-formulario" onSubmit={guardar}>
+      <label className="pnl-campo pnl-ancho">
+        <span>
+          <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} /> Emite desde un establecimiento anexo
+          (sucursal)
+        </span>
+        <small className="pnl-nota">
+          Solo si el local figura en la Ficha RUC, en "Establecimientos anexos". Sus facturas, boletas, notas de crédito y guías salen con
+          ese código, y al imprimir va "Sucursal: ..." antes de la dirección fiscal. Apagado = domicilio fiscal (0000), como siempre.
+        </small>
+      </label>
+      {activo && (
+        <>
+          <label className="pnl-campo pnl-tercio">
+            <span>Código del anexo</span>
+            <input
+              value={codigo}
+              maxLength={4}
+              inputMode="numeric"
+              placeholder="0001"
+              onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ''))}
+            />
+          </label>
+          <label className="pnl-campo pnl-dos-tercios">
+            <span>Dirección del anexo (como sale impresa)</span>
+            <input value={direccion} placeholder="AV. MANCO CAPAC 439 - WANCHAQ - CUSCO" onChange={(e) => setDireccion(e.target.value)} />
+          </label>
+        </>
+      )}
+      <div className="pnl-acciones pnl-ancho">
+        {estado && <span className={estado.tipo === 'ok' ? 'pnl-texto-verde' : 'pnl-error'}>{estado.texto}</span>}
+        <button type="submit" className="pnl-boton pnl-boton-principal" disabled={guardando || !cambiado}>
+          {guardando ? 'Guardando...' : cambiado ? 'Guardar establecimiento' : 'Sin cambios'}
+        </button>
+      </div>
+    </form>
   );
 }
 

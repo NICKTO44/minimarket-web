@@ -10,6 +10,7 @@
 import QRCode from 'qrcode';
 import { aclarar, acentoImprimible, iniciales } from './facturaA4';
 import { fechaCorta } from './formato';
+import { sucursalActual } from './establecimiento';
 import { formatoCantidad } from './medidas';
 import { etiquetaUnidad } from './unidades';
 import { NOMBRE_DOCUMENTO, lugarDeGuia, motivoDeGuia, numeroConCeros } from './guiaTexto';
@@ -133,7 +134,11 @@ export function armarPdfGuiaA4({ jsPDF, guia, motivos, emisor = {}, ubigeos, log
       alto += parrafo(emisor.razonSocial.toUpperCase(), xTextoNegocio, y + alto, anchoTextoNegocio, 8.6, { negrita: true, dibujar });
       alto += 0.6;
     }
-    if (emisor.direccion) alto += parrafo(emisor.direccion, xTextoNegocio, y + alto, anchoTextoNegocio, 8.6, { color: TENUE, dibujar });
+    // Establecimiento anexo: la sucursal antes de la dirección fiscal.
+    const sucursal = sucursalActual();
+    if (sucursal) alto += parrafo(`Sucursal: ${sucursal}`, xTextoNegocio, y + alto, anchoTextoNegocio, 8.6, { color: TENUE, dibujar });
+    if (emisor.direccion)
+      alto += parrafo(sucursal ? `Dirección fiscal: ${emisor.direccion}` : emisor.direccion, xTextoNegocio, y + alto, anchoTextoNegocio, 8.6, { color: TENUE, dibujar });
     const contacto = [emisor.telefono ? `Tel. ${emisor.telefono}` : '', emisor.email || ''].filter(Boolean).join('   ·   ');
     if (contacto) alto += parrafo(contacto, xTextoNegocio, y + alto, anchoTextoNegocio, 8.6, { color: TENUE, dibujar });
     return alto;

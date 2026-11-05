@@ -5,6 +5,7 @@ import { montoEnLetras } from '../utils/numeroALetras';
 import { construirCadenaQrSunat } from '../utils/qrSunat';
 import { nombreMetodo, pagoParaImprimir } from '../utils/metodoPago';
 import { comprobanteClasico, soloFecha } from '../utils/comprobanteClasico';
+import { sucursalActual } from '../utils/establecimiento';
 import { desgloseDeComprobante, etiquetaTasa } from '../utils/igv';
 import { formatoCantidad, formatoPrecio, subtotalLinea } from '../utils/medidas';
 
@@ -132,7 +133,14 @@ export default function Recibo({
       {razonSocial && razonSocial.trim() !== String(nombreTienda || '').trim() && (
         <div className="recibo-centro recibo-dato-tienda recibo-razon">{razonSocial}</div>
       )}
-      {direccion && <div className="recibo-centro recibo-dato-tienda">{direccion}</div>}
+      {/* Establecimiento anexo: la sucursal antes de la dirección fiscal. */}
+      {sucursalActual() && <div className="recibo-centro recibo-dato-tienda">Sucursal: {sucursalActual()}</div>}
+      {direccion && (
+        <div className="recibo-centro recibo-dato-tienda">
+          {sucursalActual() ? 'Dir. fiscal: ' : ''}
+          {direccion}
+        </div>
+      )}
       {telefono && <div className="recibo-centro recibo-dato-tienda">Tel: {telefono}</div>}
       {ruc && <div className="recibo-centro recibo-dato-tienda recibo-ruc">RUC {ruc}</div>}
 

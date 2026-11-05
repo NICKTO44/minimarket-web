@@ -27,6 +27,10 @@ pub struct ConfiguracionTienda {
     pub razon_social: Option<String>,
     /// 'SUNAT_DIRECTO' = emite directo a SUNAT; otro valor = FacturaLibre.
     pub facturacion_proveedor: Option<String>,
+    /// Establecimiento anexo (migración 0062): código y dirección para
+    /// imprimir "Sucursal: ...". None = emite desde el domicilio fiscal.
+    pub codigo_establecimiento: Option<String>,
+    pub sucursal: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
