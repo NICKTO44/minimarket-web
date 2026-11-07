@@ -25,6 +25,11 @@ pub struct MovimientoCajaRequest {
     pub monto: f64,
     pub motivo: String,
     pub usuario_id: i64,
+    /// Solo para RETIRO (migración 0063). None o "EFECTIVO_CAJA" = sale del
+    /// efectivo de la caja; YAPE, PLIN, TRANSFERENCIA, TARJETA u OTRO = queda
+    /// registrado en el turno sin tocar el efectivo esperado.
+    #[serde(default)]
+    pub metodo_pago: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

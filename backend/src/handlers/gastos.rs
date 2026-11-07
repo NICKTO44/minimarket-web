@@ -3,8 +3,11 @@
 //!
 //! - El administrador registra, consulta y anula gastos, y maneja las
 //!   categorías.
-//! - Un cajero solo puede registrar un gasto pagado con el efectivo de la
-//!   caja abierta (desde la pantalla Caja).
+//! - Desde la pantalla Caja, todos los que manejan caja (también el cajero)
+//!   registran un gasto con la caja abierta y eligen con qué se pagó. Si no
+//!   fue con el efectivo de la caja (Yape, transferencia...), queda en el
+//!   turno como registro (movimiento con metodo_pago, migración 0063) sin
+//!   tocar el efectivo esperado.
 //! - Un gasto con efectivo de caja crea su movimiento en movimientos_caja y
 //!   suma a cajas.gastos_total: el efectivo esperado al cerrar ya lo descuenta.
 //!   Si se anula con la caja todavía abierta, se devuelve al cuadre.
@@ -48,6 +51,19 @@ fn sin_migracion<E: std::fmt::Display>(e: E) -> Fallo {
 
 pub const METODOS: [&str; 7] = ["EFECTIVO_CAJA", "EFECTIVO", "YAPE", "PLIN", "TRANSFERENCIA", "TARJETA", "OTRO"];
 pub const COMPROBANTES: [&str; 5] = ["BOLETA", "FACTURA", "RECIBO", "TICKET", "OTRO"];
+
+/// Nombre para mostrar de una forma de pago.
+fn nombre_metodo(metodo: &str) -> &'static str {
+    match metodo {
+        "EFECTIVO_CAJA" => "efectivo de la caja",
+        "EFECTIVO" => "efectivo fuera de caja",
+        "YAPE" => "Yape",
+        "PLIN" => "Plin",
+        "TRANSFERENCIA" => "transferencia",
+        "TARJETA" => "tarjeta",
+        _ => "otra forma de pago",
+    }
+}
 
 fn redondear_2(valor: f64) -> f64 {
     (valor * 100.0).round() / 100.0
@@ -171,6 +187,10 @@ pub struct NuevoGasto {
     pub pagado_a: Option<String>,
     pub comprobante_tipo: Option<String>,
     pub comprobante_numero: Option<String>,
+    /// Registrado desde la pantalla Caja: siempre de hoy y queda en el turno
+    /// abierto, sea cual sea la forma de pago. Un cajero siempre registra así.
+    #[serde(default)]
+    pub desde_caja: bool,
 }
 
 /// Lo que se guarda, ya validado.
@@ -183,18 +203,21 @@ pub struct GastoValido {
     pub pagado_a: Option<String>,
     pub comprobante_tipo: Option<String>,
     pub comprobante_numero: Option<String>,
+    /// Va en el turno de la caja abierta (ver NuevoGasto::desde_caja).
+    pub desde_caja: bool,
 }
 
-/// Valida un gasto nuevo. `es_admin`: un cajero solo registra gastos con
-/// efectivo de caja. `hoy`: "AAAA-MM-DD" en Perú.
+/// Valida un gasto nuevo. `es_admin`: un cajero registra solo desde la Caja
+/// (de hoy, en el turno abierto), con cualquier forma de pago. `hoy`:
+/// "AAAA-MM-DD" en Perú.
 pub fn validar(datos: &NuevoGasto, es_admin: bool, hoy: &str) -> Result<GastoValido, String> {
     let metodo = datos.metodo_pago.trim().to_uppercase();
     if !METODOS.contains(&metodo.as_str()) {
         return Err("Forma de pago no válida.".to_string());
     }
-    if !es_admin && metodo != "EFECTIVO_CAJA" {
-        return Err("Solo el administrador registra gastos que no salen de la caja.".to_string());
-    }
+    // El efectivo de la caja siempre es de la caja; el cajero siempre desde
+    // la Caja (no anota gastos de otros días ni fuera del turno).
+    let desde_caja = datos.desde_caja || !es_admin || metodo == "EFECTIVO_CAJA";
     let descripcion = datos.descripcion.trim().to_string();
     if descripcion.is_empty() {
         return Err("Escribe en qué se gastó (por ejemplo: \"Recibo de luz de octubre\").".to_string());
@@ -208,9 +231,9 @@ pub fn validar(datos: &NuevoGasto, es_admin: bool, hoy: &str) -> Result<GastoVal
     if datos.monto > 1_000_000.0 {
         return Err("El monto es demasiado grande.".to_string());
     }
-    // El efectivo de la caja sale hoy; lo demás puede ser de otro día
-    // (un recibo que se pagó ayer), pero nunca futuro.
-    let fecha = if metodo == "EFECTIVO_CAJA" {
+    // Lo de la caja es de hoy; lo demás puede ser de otro día (un recibo que
+    // se pagó ayer), pero nunca futuro.
+    let fecha = if desde_caja {
         hoy.to_string()
     } else {
         match limpio(&datos.fecha) {
@@ -235,6 +258,7 @@ pub fn validar(datos: &NuevoGasto, es_admin: bool, hoy: &str) -> Result<GastoVal
         pagado_a: limpio(&datos.pagado_a),
         comprobante_tipo,
         comprobante_numero,
+        desde_caja,
     })
 }
 
@@ -270,19 +294,38 @@ pub async fn registrar(
     };
     drop(filas);
 
-    // Con efectivo de caja: la caja abierta, y su movimiento.
+    // Desde la Caja: la caja abierta y su movimiento. Con efectivo de la
+    // caja descuenta el efectivo esperado; con otra forma de pago queda solo
+    // como registro del turno (no toca el cuadre).
     let mut caja_id: Option<i64> = None;
     let mut movimiento_id: Option<i64> = None;
-    if gasto.metodo_pago == "EFECTIVO_CAJA" {
+    let mut caja_abierta: Option<i64> = None;
+    if gasto.desde_caja {
         let mut filas = conn
             .query("SELECT id FROM cajas WHERE estado = 'ABIERTA' ORDER BY id DESC LIMIT 1", ())
             .await
             .map_err(e500)?;
-        let id: i64 = match filas.next().await.map_err(e500)? {
-            Some(f) => f.get(0).map_err(e500)?,
-            None => return Err(malo("No hay una caja abierta. Abre la caja o elige otra forma de pago.")),
+        caja_abierta = match filas.next().await.map_err(e500)? {
+            Some(f) => Some(f.get(0).map_err(e500)?),
+            None if gasto.metodo_pago == "EFECTIVO_CAJA" => {
+                return Err(malo("No hay una caja abierta. Abre la caja o elige otra forma de pago."))
+            }
+            None if !es_admin => return Err(malo("No hay una caja abierta. Abre la caja para registrar el gasto.")),
+            // El administrador sin caja abierta: se registra igual, solo en Gastos.
+            None => None,
         };
-        drop(filas);
+    }
+    if let (Some(id), false) = (caja_abierta, gasto.metodo_pago == "EFECTIVO_CAJA") {
+        let motivo = format!("{}: {}", categoria, gasto.descripcion);
+        conn.execute(
+            "INSERT INTO movimientos_caja (caja_id, tipo, monto, motivo, usuario_id, metodo_pago) VALUES (?1, 'GASTO', ?2, ?3, ?4, ?5)",
+            libsql::params![id, gasto.monto, motivo, claims.sub, gasto.metodo_pago.clone()],
+        )
+        .await
+        .map_err(crate::handlers::cajas::sin_migracion_0063)?;
+        movimiento_id = Some(conn.last_insert_rowid());
+    }
+    if let (Some(id), true) = (caja_abierta, gasto.metodo_pago == "EFECTIVO_CAJA") {
         // No se puede sacar más efectivo del que hay en la caja.
         let disponible = crate::handlers::cajas::efectivo_en_caja(&conn, id).await?;
         crate::handlers::cajas::alcanza_efectivo(disponible, gasto.monto).map_err(malo)?;
@@ -326,6 +369,9 @@ pub async fn registrar(
         .await;
     if let Err(e) = insertado {
         // Si no se pudo guardar el gasto, la caja vuelve a como estaba.
+        if let (None, Some(mov)) = (caja_id, movimiento_id) {
+            let _ = conn.execute("DELETE FROM movimientos_caja WHERE id = ?1", libsql::params![mov]).await;
+        }
         if let (Some(caja), Some(mov)) = (caja_id, movimiento_id) {
             let _ = conn.execute("DELETE FROM movimientos_caja WHERE id = ?1", libsql::params![mov]).await;
             let _ = conn
@@ -341,6 +387,12 @@ pub async fn registrar(
 
     let mensaje = if caja_id.is_some() {
         format!("Gasto de S/ {:.2} registrado y descontado del efectivo de la caja.", gasto.monto)
+    } else if movimiento_id.is_some() {
+        format!(
+            "Gasto de S/ {:.2} registrado ({}). No descuenta el efectivo de la caja.",
+            gasto.monto,
+            nombre_metodo(&gasto.metodo_pago)
+        )
     } else {
         format!("Gasto de S/ {:.2} registrado.", gasto.monto)
     };
@@ -560,7 +612,10 @@ pub async fn anular(
     let mut filas = conn
         .query(
             "SELECT g.anulado, CAST(g.monto AS REAL), g.caja_id, g.movimiento_caja_id, c.estado
-             FROM gastos g LEFT JOIN cajas c ON c.id = g.caja_id WHERE g.id = ?1",
+             FROM gastos g
+             LEFT JOIN movimientos_caja m ON m.id = g.movimiento_caja_id
+             LEFT JOIN cajas c ON c.id = COALESCE(g.caja_id, m.caja_id)
+             WHERE g.id = ?1",
             libsql::params![id],
         )
         .await
@@ -603,6 +658,14 @@ pub async fn anular(
             "Gasto anulado. Como la caja sigue abierta, el monto vuelve al efectivo esperado."
         }
         (Some(_), _) => "Gasto anulado. Su caja ya se cerró: el cuadre de ese turno no cambia.",
+        // Pagado de otro modo desde la Caja: con el turno abierto se quita de
+        // su lista; no tocaba el efectivo, así que el cuadre no cambia.
+        (None, Some("ABIERTA")) => {
+            if let Some(mov) = movimiento_id {
+                conn.execute("DELETE FROM movimientos_caja WHERE id = ?1", libsql::params![mov]).await.map_err(e500)?;
+            }
+            "Gasto anulado."
+        }
         _ => "Gasto anulado.",
     };
     Ok(Json(serde_json::json!({ "ok": true, "mensaje": mensaje })))
@@ -622,6 +685,7 @@ mod pruebas {
             pagado_a: Some(" ".into()),
             comprobante_tipo: None,
             comprobante_numero: Some("E001-1".into()),
+            desde_caja: false,
         }
     }
 
@@ -644,11 +708,36 @@ mod pruebas {
     }
 
     #[test]
-    fn efectivo_de_caja_es_de_hoy_y_cajero_solo_ese() {
+    fn efectivo_de_caja_es_de_hoy_y_va_en_la_caja() {
         let hoy = "2026-10-09";
         let g = validar(&nuevo("EFECTIVO_CAJA", 10.0, Some("2026-09-01")), false, hoy).unwrap();
         assert_eq!(g.fecha, hoy);
-        assert!(validar(&nuevo("YAPE", 10.0, None), false, hoy).unwrap_err().contains("administrador"));
+        assert!(g.desde_caja);
+    }
+
+    #[test]
+    fn cajero_registra_con_cualquier_forma_de_pago_desde_la_caja() {
+        let hoy = "2026-10-09";
+        // El cajero paga al trabajador por Yape: se acepta, de hoy y en la caja.
+        let g = validar(&nuevo("YAPE", 50.0, Some("2026-09-01")), false, hoy).unwrap();
+        assert_eq!(g.metodo_pago, "YAPE");
+        assert_eq!(g.fecha, hoy);
+        assert!(g.desde_caja);
+    }
+
+    #[test]
+    fn admin_desde_caja_o_desde_gastos() {
+        let hoy = "2026-10-09";
+        // Desde Gastos: puede ser de otro día y no va al turno.
+        let g = validar(&nuevo("TRANSFERENCIA", 900.0, Some("2026-10-01")), true, hoy).unwrap();
+        assert_eq!(g.fecha, "2026-10-01");
+        assert!(!g.desde_caja);
+        // Desde la Caja: de hoy y en el turno.
+        let mut d = nuevo("PLIN", 20.0, Some("2026-10-01"));
+        d.desde_caja = true;
+        let g = validar(&d, true, hoy).unwrap();
+        assert_eq!(g.fecha, hoy);
+        assert!(g.desde_caja);
     }
 
     #[test]

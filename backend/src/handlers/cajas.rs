@@ -173,6 +173,39 @@ pub fn alcanza_efectivo(disponible: f64, monto: f64) -> Result<(), String> {
     Ok(())
 }
 
+/// Formas de pago de un movimiento de caja que NO salen del efectivo de la
+/// caja (migración 0063). Se registran en el turno, sin tocar el cuadre.
+pub const METODOS_FUERA_DE_CAJA: [&str; 6] = ["EFECTIVO", "YAPE", "PLIN", "TRANSFERENCIA", "TARJETA", "OTRO"];
+
+/// Forma de pago de un retiro: None = efectivo de la caja (como siempre);
+/// Some(metodo) = pagado de otro modo. Solo el retiro la elige.
+pub fn metodo_de_retiro(tipo: &str, metodo: Option<&str>) -> Result<Option<String>, String> {
+    let metodo = metodo.map(|m| m.trim().to_uppercase()).filter(|m| !m.is_empty() && m != "EFECTIVO_CAJA");
+    match metodo {
+        None => Ok(None),
+        Some(_) if tipo != "RETIRO" => Err("Solo el retiro puede tener otra forma de pago.".to_string()),
+        // Un retiro de "efectivo de otro lado" no es un retiro de esta caja.
+        Some(m) if m == "EFECTIVO" || !METODOS_FUERA_DE_CAJA.contains(&m.as_str()) => {
+            Err("Forma de pago no válida.".to_string())
+        }
+        Some(m) => Ok(Some(m)),
+    }
+}
+
+/// Error al guardar un movimiento con forma de pago: si la base aún no tiene
+/// la columna, se explica.
+pub fn sin_migracion_0063<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
+    let texto = e.to_string();
+    if texto.contains("metodo_pago") {
+        (
+            StatusCode::BAD_REQUEST,
+            "Este negocio todavía no tiene la forma de pago en la caja (migración 0063). Reinicia el backend para aplicarla.".to_string(),
+        )
+    } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, texto)
+    }
+}
+
 pub async fn registrar_movimiento(
     Extension(tenant): Extension<Arc<TenantDb>>,
     Extension(claims): Extension<Claims>,
@@ -196,6 +229,23 @@ pub async fn registrar_movimiento(
         return Err((StatusCode::BAD_REQUEST, "La caja no existe o ya está cerrada".into()));
     }
     drop(rows);
+
+    // Forma de pago (migración 0063): solo el retiro la elige; lo que no es
+    // efectivo de la caja no toca el cuadre.
+    let metodo = metodo_de_retiro(&payload.tipo, payload.metodo_pago.as_deref()).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    if let Some(metodo) = metodo {
+        conn.execute(
+            "INSERT INTO movimientos_caja (caja_id, tipo, monto, motivo, usuario_id, metodo_pago) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            libsql::params![payload.caja_id, payload.tipo.clone(), payload.monto, payload.motivo.clone(), claims.sub, metodo],
+        )
+        .await
+        .map_err(sin_migracion_0063)?;
+        return Ok(Json(CajaResponse {
+            success: true,
+            message: "Movimiento registrado".into(),
+            caja_id: Some(payload.caja_id),
+        }));
+    }
 
     if payload.tipo != "INGRESO" {
         let disponible = efectivo_en_caja(&conn, payload.caja_id).await?;
@@ -237,6 +287,9 @@ pub struct MovimientoCaja {
     pub usuario: String,
     /// Si es un gasto registrado en el módulo Gastos, su número.
     pub gasto_id: Option<i64>,
+    /// None = efectivo de la caja. Otra forma de pago (migración 0063): solo
+    /// registro del turno, no descuenta el efectivo esperado.
+    pub metodo_pago: Option<String>,
 }
 
 /// GET /cajas/movimientos — gastos, retiros e ingresos de la caja abierta,
@@ -251,23 +304,20 @@ pub async fn movimientos_caja_abierta(
     const DESDE: &str = "FROM movimientos_caja m
          JOIN cajas c ON c.id = m.caja_id AND c.estado = 'ABIERTA'
          LEFT JOIN usuarios u ON u.id = m.usuario_id";
-    // Con el número de gasto (migración 0022); sin ella, la consulta simple.
-    let mut filas = match conn
-        .query(
-            &format!(
-                "SELECT {}, (SELECT g.id FROM gastos g WHERE g.movimiento_caja_id = m.id) {} ORDER BY m.id DESC",
-                COLUMNAS, DESDE
-            ),
-            (),
-        )
-        .await
-    {
-        Ok(f) => f,
-        Err(_) => conn
-            .query(&format!("SELECT {}, NULL {} ORDER BY m.id DESC", COLUMNAS, DESDE), ())
+    // Con el número de gasto (migración 0022) y la forma de pago (0063); si
+    // la base aún no las tiene, la consulta más simple que funcione.
+    const GASTO: &str = "(SELECT g.id FROM gastos g WHERE g.movimiento_caja_id = m.id)";
+    let mut filas = None;
+    for extra in [format!("{}, m.metodo_pago", GASTO), format!("{}, NULL", GASTO), "NULL, NULL".to_string()] {
+        if let Ok(f) = conn
+            .query(&format!("SELECT {}, {} {} ORDER BY m.id DESC", COLUMNAS, extra, DESDE), ())
             .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
-    };
+        {
+            filas = Some(f);
+            break;
+        }
+    }
+    let mut filas = filas.ok_or((StatusCode::INTERNAL_SERVER_ERROR, "No se pudieron leer los movimientos de la caja.".to_string()))?;
     let mut lista = Vec::new();
     while let Some(f) = filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
         lista.push(MovimientoCaja {
@@ -278,6 +328,7 @@ pub async fn movimientos_caja_abierta(
             hora: f.get(4).unwrap_or_default(),
             usuario: f.get(5).unwrap_or_default(),
             gasto_id: f.get(6).unwrap_or(None),
+            metodo_pago: f.get(7).unwrap_or(None),
         });
     }
     Ok(Json(lista))
@@ -491,22 +542,19 @@ pub async fn detalle_caja(
     const MOV: &str = "m.id, m.tipo, CAST(m.monto AS REAL), m.motivo,
          COALESCE(strftime('%H:%M', m.fecha_hora, '-5 hours'), ''), COALESCE(u.nombre_completo, '')";
     const MOV_DESDE: &str = "FROM movimientos_caja m LEFT JOIN usuarios u ON u.id = m.usuario_id WHERE m.caja_id = ?1";
-    let mut filas = match conn
-        .query(
-            &format!(
-                "SELECT {}, (SELECT g.id FROM gastos g WHERE g.movimiento_caja_id = m.id) {} ORDER BY m.id",
-                MOV, MOV_DESDE
-            ),
-            libsql::params![id],
-        )
-        .await
-    {
-        Ok(f) => f,
-        Err(_) => conn
-            .query(&format!("SELECT {}, NULL {} ORDER BY m.id", MOV, MOV_DESDE), libsql::params![id])
+    // Con el número de gasto (0022) y la forma de pago (0063), si las tiene.
+    const GASTO: &str = "(SELECT g.id FROM gastos g WHERE g.movimiento_caja_id = m.id)";
+    let mut filas = None;
+    for extra in [format!("{}, m.metodo_pago", GASTO), format!("{}, NULL", GASTO), "NULL, NULL".to_string()] {
+        if let Ok(f) = conn
+            .query(&format!("SELECT {}, {} {} ORDER BY m.id", MOV, extra, MOV_DESDE), libsql::params![id])
             .await
-            .map_err(e500)?,
-    };
+        {
+            filas = Some(f);
+            break;
+        }
+    }
+    let mut filas = filas.ok_or_else(|| e500("No se pudieron leer los movimientos de la caja."))?;
     let mut movimientos = Vec::new();
     while let Some(m) = filas.next().await.map_err(e500)? {
         movimientos.push(MovimientoCaja {
@@ -517,6 +565,7 @@ pub async fn detalle_caja(
             hora: m.get(4).unwrap_or_default(),
             usuario: m.get(5).unwrap_or_default(),
             gasto_id: m.get(6).unwrap_or(None),
+            metodo_pago: m.get(7).unwrap_or(None),
         });
     }
 
@@ -537,7 +586,21 @@ pub async fn detalle_caja(
 
 #[cfg(test)]
 mod pruebas {
-    use super::alcanza_efectivo;
+    use super::{alcanza_efectivo, metodo_de_retiro};
+
+    #[test]
+    fn forma_de_pago_del_retiro() {
+        // Sin forma de pago o efectivo de la caja: como siempre.
+        assert_eq!(metodo_de_retiro("RETIRO", None), Ok(None));
+        assert_eq!(metodo_de_retiro("RETIRO", Some("efectivo_caja")), Ok(None));
+        assert_eq!(metodo_de_retiro("INGRESO", Some(" ")), Ok(None));
+        assert_eq!(metodo_de_retiro("RETIRO", Some("yape")), Ok(Some("YAPE".to_string())));
+        assert!(metodo_de_retiro("RETIRO", Some("CHEQUE")).is_err());
+        assert!(metodo_de_retiro("RETIRO", Some("EFECTIVO")).is_err());
+        // El ingreso y el gasto (este va por el módulo Gastos) no la eligen aquí.
+        assert!(metodo_de_retiro("INGRESO", Some("YAPE")).is_err());
+        assert!(metodo_de_retiro("GASTO", Some("YAPE")).is_err());
+    }
 
     #[test]
     fn no_se_saca_mas_efectivo_del_que_hay() {
