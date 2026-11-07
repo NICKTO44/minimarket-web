@@ -1,3 +1,4 @@
+import { hoyLima } from './formato';
 // Módulo VENTA_SIN_CONEXION: vender sin internet.
 //
 // Solo funciona en un negocio con el módulo encendido (App.jsx llama a
@@ -243,10 +244,21 @@ export async function copiaSinConexion(ruta) {
   }
   if (!rutaGuardable(ruta)) return undefined;
   const guardada = await leer('cache', claveCache(ruta));
-  if (guardada) return guardada.datos;
+  if (guardada) return ruta === '/productos' ? sinCartaDeOtroDia(guardada.datos) : guardada.datos;
   // Una placa que nunca se buscó: no hay datos del vehículo.
   if (ruta.startsWith('/vehiculos/placa/')) return null;
   return undefined;
+}
+
+/**
+ * Restaurante: la copia de productos se guardó, por ejemplo, anoche. Sus
+ * platos de la carta del día ya no valen hoy (12:00 a. m. en Perú): se
+ * quitan. El código de cada plato lleva su fecha: CARTA-AAAAMMDD-NNNNNN.
+ */
+function sinCartaDeOtroDia(productos) {
+  if (!Array.isArray(productos)) return productos;
+  const hoy = `CARTA-${hoyLima().replace(/-/g, '')}-`;
+  return productos.filter((p) => !p.carta_dia || String(p.codigo || '').startsWith(hoy));
 }
 
 /** Cambia la copia guardada de una lectura (p. ej. el stock tras vender). */
