@@ -11,6 +11,10 @@ export const METODOS_GASTO = [
   { valor: 'OTRO', etiqueta: 'Otro', corto: 'Otro' },
 ];
 
+// Formas de pago de un retiro de caja (sin "Efectivo fuera de caja": eso no
+// es un retiro de esta caja). Lo que no es EFECTIVO_CAJA no toca el cuadre.
+export const METODOS_RETIRO = METODOS_GASTO.filter((m) => m.valor !== 'EFECTIVO');
+
 export const COMPROBANTES_GASTO = [
   { valor: 'BOLETA', etiqueta: 'Boleta' },
   { valor: 'FACTURA', etiqueta: 'Factura' },

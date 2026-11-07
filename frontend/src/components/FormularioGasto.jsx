@@ -7,9 +7,10 @@ import { COMPROBANTES_GASTO, METODOS_GASTO } from '../utils/gastos';
 import './FormularioGasto.css';
 
 /**
- * Registrar un gasto del negocio. Lo usan la pantalla Gastos (todas las
- * formas de pago) y la Caja (soloCaja: sale del efectivo de la caja abierta,
- * con la fecha de hoy; así lo puede registrar también el cajero).
+ * Registrar un gasto del negocio. Lo usan la pantalla Gastos y la Caja
+ * (soloCaja: con la fecha de hoy y en el turno abierto; lo registra también
+ * el cajero). En los dos se elige con qué se pagó; solo el efectivo de la
+ * caja descuenta el efectivo esperado.
  */
 // sinConexion: módulo "Venta sin conexión". Sin internet, un gasto de caja
 // queda guardado en el equipo y se registra al volver la conexión.
@@ -74,10 +75,11 @@ export default function FormularioGasto({ soloCaja = false, sinConexion = false,
       descripcion: form.descripcion.trim(),
       monto,
       metodo_pago: form.metodo_pago,
-      fecha: deCaja ? null : form.fecha,
+      fecha: deCaja || soloCaja ? null : form.fecha,
       pagado_a: form.pagado_a.trim() || null,
       comprobante_tipo: form.comprobante_tipo || null,
       comprobante_numero: form.comprobante_tipo ? form.comprobante_numero.trim() || null : null,
+      desde_caja: soloCaja,
     };
     try {
       const r = await api.gastoRegistrar(datos);
@@ -104,7 +106,13 @@ export default function FormularioGasto({ soloCaja = false, sinConexion = false,
           </span>
           <div>
             <h2 id="fg-titulo">Registrar gasto</h2>
-            <p>{soloCaja ? 'Sale del efectivo de la caja abierta.' : 'Alquiler, servicios, sueldos, movilidad… (la mercadería va por Compras).'}</p>
+            <p>
+              {!soloCaja
+                ? 'Alquiler, servicios, sueldos, movilidad… (la mercadería va por Compras).'
+                : deCaja
+                  ? 'Sale del efectivo de la caja abierta.'
+                  : 'Queda en el turno de la caja, sin descontar el efectivo.'}
+            </p>
           </div>
           <button type="button" className="fg-cerrar" onClick={onCerrar} aria-label="Cerrar">
             <X size={18} />
@@ -158,18 +166,18 @@ export default function FormularioGasto({ soloCaja = false, sinConexion = false,
             </label>
           </div>
 
-          {!soloCaja && (
-            <div className="fg-fila">
-              <label className="fg-campo fg-ancho">
-                <span>¿Cómo se pagó?</span>
-                <select value={form.metodo_pago} onChange={(e) => poner('metodo_pago', e.target.value)}>
-                  {METODOS_GASTO.map((m) => (
-                    <option key={m.valor} value={m.valor}>
-                      {m.etiqueta}
-                    </option>
-                  ))}
-                </select>
-              </label>
+          <div className="fg-fila">
+            <label className="fg-campo fg-ancho">
+              <span>¿Cómo se pagó?</span>
+              <select value={form.metodo_pago} onChange={(e) => poner('metodo_pago', e.target.value)}>
+                {METODOS_GASTO.map((m) => (
+                  <option key={m.valor} value={m.valor}>
+                    {m.etiqueta}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {!soloCaja && (
               <label className="fg-campo">
                 <span>Fecha</span>
                 <input
@@ -180,14 +188,17 @@ export default function FormularioGasto({ soloCaja = false, sinConexion = false,
                   onChange={(e) => poner('fecha', e.target.value)}
                 />
               </label>
-            </div>
+            )}
+          </div>
+          {soloCaja && !deCaja && (
+            <p className="fg-nota">Se registra con la fecha de hoy y aparece en los movimientos del turno. No descuenta el efectivo de la caja.</p>
           )}
           {deCaja && enCaja !== undefined && (
             <p className={`fg-nota${faltaEfectivo && monto >= 0.01 ? ' fg-nota-error' : ''}`}>
               {disponible == null
                 ? 'No hay una caja abierta: elige otra forma de pago o abre la caja.'
                 : faltaEfectivo && monto >= 0.01
-                  ? `En la caja solo hay S/ ${disponible.toFixed(2)} en efectivo. Si lo pagaste con plata de otro lado o por Yape/Plin, ${soloCaja ? 'regístralo desde la pantalla Gastos' : 'elige esa forma de pago'}.`
+                  ? `En la caja solo hay S/ ${disponible.toFixed(2)} en efectivo. Si lo pagaste con plata de otro lado o por Yape/Plin, elige esa forma de pago.`
                   : `En la caja hay S/ ${disponible.toFixed(2)} en efectivo. Se descuenta del efectivo esperado al cerrar; su fecha es la de hoy.`}
             </p>
           )}

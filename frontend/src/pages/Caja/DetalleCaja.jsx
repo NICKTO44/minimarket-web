@@ -3,6 +3,7 @@ import { Printer, Wallet, X } from 'lucide-react';
 import { api } from '../../api/api';
 import { ventasDeCajaPorMetodo } from '../../utils/metodoPago';
 import { fechaHoraLima, textoDiferencia } from '../../utils/formato';
+import { etiquetaMetodo } from '../../utils/gastos';
 import '../../components/FormularioGasto.css';
 import './Caja.css';
 
@@ -143,6 +144,7 @@ export default function DetalleCaja({ cajaId, onCerrar }) {
                           {m.hora}
                           {m.usuario ? ` · ${m.usuario}` : ''}
                           {m.gasto_id ? ` · Gasto N.° ${m.gasto_id}` : ''}
+                          {m.metodo_pago ? ` · ${etiquetaMetodo(m.metodo_pago)} (no descuenta el efectivo)` : ''}
                         </small>
                       </span>
                       <strong>

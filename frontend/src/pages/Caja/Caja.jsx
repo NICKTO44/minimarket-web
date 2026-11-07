@@ -4,6 +4,7 @@ import { api, esSinConexion } from '../../api/api';
 import { cajaProvisional, encolar, programarSincronizacion } from '../../utils/sinConexion';
 import { ventasDeCajaPorMetodo } from '../../utils/metodoPago';
 import { fechaHoraLima, textoDiferencia } from '../../utils/formato';
+import { etiquetaMetodo } from '../../utils/gastos';
 import FormularioGasto from '../../components/FormularioGasto';
 import MovimientoCaja from '../../components/MovimientoCaja';
 import './Caja.css';
@@ -348,6 +349,7 @@ export default function Caja({ usuario, sinConexion = false }) {
                     {m.hora}
                     {m.usuario ? ` · ${m.usuario}` : ''}
                     {m.gasto_id ? ` · Gasto N.° ${m.gasto_id}` : ''}
+                    {m.metodo_pago ? ` · ${etiquetaMetodo(m.metodo_pago)} (no descuenta el efectivo)` : ''}
                   </small>
                 </span>
                 <strong>
@@ -409,7 +411,15 @@ export default function Caja({ usuario, sinConexion = false }) {
           usuario={usuario}
           disponible={efectivoEsperado}
           onCerrar={() => setVentana(null)}
-          onGuardado={() => movimientoGuardado(ventana === 'RETIRO' ? 'Retiro registrado.' : 'Ingreso registrado.')}
+          onGuardado={(deCaja) =>
+            movimientoGuardado(
+              ventana === 'INGRESO'
+                ? 'Ingreso registrado.'
+                : deCaja
+                  ? 'Retiro registrado.'
+                  : 'Retiro registrado. No descuenta el efectivo de la caja.'
+            )
+          }
         />
       )}
     </div>

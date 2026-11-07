@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ArrowDownToLine, ArrowUpFromLine, X } from 'lucide-react';
 import { api } from '../api/api';
+import { METODOS_RETIRO } from '../utils/gastos';
 import './FormularioGasto.css';
 
 const TIPOS = {
   RETIRO: {
     titulo: 'Retiro de efectivo',
-    ayuda: 'Plata que se saca de la caja y no es un gasto (por ejemplo, el dueño se lleva lo vendido). Si pagaste algo (pasaje, publicidad, compras menores), regístralo como Gasto: un retiro no cuenta en el reporte de gastos.',
+    ayuda: 'Plata que se saca y no es un gasto (por ejemplo, el dueño se lleva lo vendido). Si pagaste algo (sueldo, pasaje, publicidad), regístralo como Gasto: un retiro no cuenta en el reporte de gastos.',
     ejemplo: 'Ej. Retiro del dueño a medio día',
     icono: ArrowUpFromLine,
   },
@@ -22,6 +23,10 @@ const TIPOS = {
 export default function MovimientoCaja({ tipo, cajaId, usuario, disponible, onGuardado, onCerrar }) {
   const [monto, setMonto] = useState('');
   const [motivo, setMotivo] = useState('');
+  // Solo el retiro elige con qué se hizo; lo que no es efectivo de la caja
+  // queda en el turno sin descontar el efectivo esperado.
+  const [metodo, setMetodo] = useState('EFECTIVO_CAJA');
+  const deCaja = metodo === 'EFECTIVO_CAJA';
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
   const t = TIPOS[tipo];
@@ -29,7 +34,7 @@ export default function MovimientoCaja({ tipo, cajaId, usuario, disponible, onGu
   const valor = Number(String(monto).replace(',', '.'));
   // Un retiro no puede sacar más efectivo del que hay en la caja.
   const hay = Math.max(0, Math.round((disponible ?? 0) * 100) / 100);
-  const excede = tipo === 'RETIRO' && valor > hay + 0.005;
+  const excede = tipo === 'RETIRO' && deCaja && valor > hay + 0.005;
 
   useEffect(() => {
     const alTeclear = (e) => e.key === 'Escape' && onCerrar();
@@ -43,8 +48,15 @@ export default function MovimientoCaja({ tipo, cajaId, usuario, disponible, onGu
     setGuardando(true);
     setError('');
     try {
-      await api.cajaMovimiento({ caja_id: cajaId, tipo, monto: Math.round(valor * 100) / 100, motivo: motivo.trim(), usuario_id: usuario.id });
-      onGuardado();
+      await api.cajaMovimiento({
+        caja_id: cajaId,
+        tipo,
+        monto: Math.round(valor * 100) / 100,
+        motivo: motivo.trim(),
+        usuario_id: usuario.id,
+        metodo_pago: tipo === 'RETIRO' && !deCaja ? metodo : null,
+      });
+      onGuardado(deCaja);
     } catch (err) {
       setError(err.message);
       setGuardando(false);
@@ -78,8 +90,24 @@ export default function MovimientoCaja({ tipo, cajaId, usuario, disponible, onGu
             </label>
           </div>
           {tipo === 'RETIRO' && (
+            <label className="fg-campo">
+              <span>¿Cómo se retiró?</span>
+              <select value={metodo} onChange={(e) => setMetodo(e.target.value)}>
+                {METODOS_RETIRO.map((m) => (
+                  <option key={m.valor} value={m.valor}>
+                    {m.etiqueta}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {tipo === 'RETIRO' && (
             <p className={`fg-nota${excede ? ' fg-nota-error' : ''}`}>
-              {excede ? `No alcanza: en la caja solo hay S/ ${hay.toFixed(2)} en efectivo.` : `En la caja hay S/ ${hay.toFixed(2)} en efectivo.`}
+              {!deCaja
+                ? 'Queda en los movimientos del turno. No descuenta el efectivo de la caja.'
+                : excede
+                  ? `No alcanza: en la caja solo hay S/ ${hay.toFixed(2)} en efectivo.`
+                  : `En la caja hay S/ ${hay.toFixed(2)} en efectivo.`}
             </p>
           )}
           {error && <p className="fg-error">{error}</p>}
