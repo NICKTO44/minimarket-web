@@ -280,25 +280,43 @@ async fn descontar_stock_fefo(conn: &libsql::Connection, venta_id: i64, pedidos:
 
 /// Datos reales de los productos al momento de vender, todos en una sola
 /// consulta: id -> (stock, lleva_vencimiento, nombre, unidad, controla_stock, precio).
+/// Además, la fecha de los platos de la carta del día (migración 0009):
+/// id -> carta_fecha, solo de los que la tienen.
 /// Si la migración 0007 todavía no llegó a esta base (columna controla_stock
 /// inexistente), se asume que controlan stock, como siempre -- así una
 /// venta nunca falla por eso.
 async fn datos_productos_para_venta(
     conn: &libsql::Connection,
     ids: &[i64],
-) -> Result<std::collections::HashMap<i64, (f64, bool, Option<String>, Option<String>, bool, f64)>, String> {
+) -> Result<
+    (std::collections::HashMap<i64, (f64, bool, Option<String>, Option<String>, bool, f64)>, std::collections::HashMap<i64, String>),
+    String,
+> {
     let mut datos = std::collections::HashMap::new();
+    let mut carta = std::collections::HashMap::new();
     if ids.is_empty() {
-        return Ok(datos);
+        return Ok((datos, carta));
     }
     // Los ids son enteros: se escriben directo en la lista.
     let lista = ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
-    let consulta = conn
+    // La misma consulta de siempre; con carta_fecha al final si la base la
+    // tiene (no suma viajes a la base).
+    let consulta = match conn
         .query(
-            &format!("SELECT id, stock, lleva_vencimiento, nombre, unidad_medida, CAST(precio AS REAL), controla_stock FROM productos WHERE id IN ({})", lista),
+            &format!("SELECT id, stock, lleva_vencimiento, nombre, unidad_medida, CAST(precio AS REAL), controla_stock, carta_fecha FROM productos WHERE id IN ({})", lista),
             (),
         )
-        .await;
+        .await
+    {
+        Ok(rows) => Ok(rows),
+        Err(_) => {
+            conn.query(
+                &format!("SELECT id, stock, lleva_vencimiento, nombre, unidad_medida, CAST(precio AS REAL), controla_stock, NULL FROM productos WHERE id IN ({})", lista),
+                (),
+            )
+            .await
+        }
+    };
     let (mut rows, con_columna) = match consulta {
         Ok(rows) => (rows, true),
         Err(_) => (
@@ -312,6 +330,11 @@ async fn datos_productos_para_venta(
         ),
     };
     while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+        if con_columna {
+            if let Ok(fecha) = row.get::<String>(7) {
+                carta.insert(row.get::<i64>(0).unwrap_or_default(), fecha);
+            }
+        }
         datos.insert(
             row.get::<i64>(0).unwrap_or_default(),
             (
@@ -324,7 +347,7 @@ async fn datos_productos_para_venta(
             ),
         );
     }
-    Ok(datos)
+    Ok((datos, carta))
 }
 
 pub async fn procesar_venta(
@@ -638,9 +661,25 @@ pub async fn procesar_venta(
     }
     let orden_cobro =
         crate::handlers::ordenes::preparar_cobro(&conn, modulos.as_deref(), payload.orden_servicio_id).await?;
-    let mut leidos = datos_productos_para_venta(&conn, &ids)
+    let (mut leidos, fechas_carta) = datos_productos_para_venta(&conn, &ids)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    // Carta del día: un plato de otro día ya no se vende (una pantalla que
+    // quedó abierta desde ayer todavía lo muestra). El cobro de un pedido de
+    // mesa o delivery no se revisa: sus platos se pidieron cuando valían
+    // (una mesa que se abrió antes de medianoche se cobra igual). Una venta
+    // hecha sin internet se revisa con el día en que se hizo.
+    if payload.pedido_id.is_none() {
+        let dia = match &payload.sin_conexion {
+            Some(s) => s.fecha_hora.chars().take(10).collect::<String>(),
+            None => crate::handlers::carta::hoy_lima(),
+        };
+        if let Some(nombre) = crate::handlers::carta::plato_de_otro_dia(&fechas_carta, &dia, |id| {
+            leidos.get(&id).and_then(|d| d.2.clone())
+        }) {
+            return Err((StatusCode::CONFLICT, crate::handlers::carta::mensaje_plato_de_otro_dia(&nombre)));
+        }
+    }
 
     // Precio de cada línea: el del producto, salvo con el módulo "Cambiar
     // precio al vender" o al cobrar un pedido de mesa (sus precios los puso

@@ -447,6 +447,7 @@ async fn main() {
         .route("/pedidos/:id/enviar", post(handlers::mesas::enviar_a_preparar))
         .route("/pedidos/:id/mover", post(handlers::mesas::mover_pedido))
         .route("/pedidos/:id/anular", post(handlers::mesas::anular_pedido))
+        .route("/pedidos/:id/descartar-vacio", post(handlers::mesas::descartar_vacio))
         // Dark kitchen: pedidos por WhatsApp / delivery (módulo DELIVERY, encima de los pedidos).
         .route("/delivery", get(handlers::delivery::tablero))
         .route("/delivery", post(handlers::delivery::crear))

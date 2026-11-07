@@ -572,16 +572,18 @@ pub async fn insertar_items(
     let consulta_productos = |agotado: &str| {
         format!(
             "SELECT p.id, p.nombre, CAST(p.precio AS REAL), p.activo,
-                    g.id, g.nombre, g.obligatorio, g.multiple, {}
+                    g.id, g.nombre, g.obligatorio, g.multiple, {}, {}
              FROM productos p
              LEFT JOIN producto_grupos_modificador pg ON pg.producto_id = p.id
              LEFT JOIN grupos_modificadores g ON g.id = pg.grupo_id AND g.activo = 1
              WHERE p.id IN ({})
              ORDER BY p.id, g.orden, g.id",
             agotado,
+            if agotado == "0" { "NULL" } else { "p.carta_fecha" },
             marcadores(1, ids_productos.len())
         )
     };
+    // Con agotado llega también carta_fecha (las dos son de la migración 0009).
     let mut filas = match conn
         .query(&consulta_productos("COALESCE(p.agotado, 0)"), libsql::params_from_iter(ids_productos.clone()))
         .await
@@ -595,10 +597,15 @@ pub async fn insertar_items(
     // producto_id -> (nombre, precio, activo, grupos[(id, nombre, obligatorio, multiple)])
     let mut productos: HashMap<i64, (String, f64, bool, Vec<(i64, String, bool, bool)>)> = HashMap::new();
     let mut agotados: std::collections::HashSet<i64> = std::collections::HashSet::new();
+    // Platos de la carta del día: id -> su fecha.
+    let mut fechas_carta: HashMap<i64, String> = HashMap::new();
     while let Some(f) = filas.next().await.map_err(e500)? {
         let id: i64 = f.get(0).unwrap_or_default();
         if f.get::<i64>(8).unwrap_or(0) == 1 {
             agotados.insert(id);
+        }
+        if let Ok(fecha) = f.get::<String>(9) {
+            fechas_carta.insert(id, fecha);
         }
         let entrada = productos.entry(id).or_insert_with(|| {
             (f.get(1).unwrap_or_default(), f.get(2).unwrap_or(0.0), f.get::<i64>(3).unwrap_or(0) == 1, Vec::new())
@@ -636,6 +643,14 @@ pub async fn insertar_items(
                 (f.get(1).unwrap_or_default(), f.get(2).unwrap_or_default(), f.get(3).unwrap_or(0.0)),
             );
         }
+    }
+
+    // Un plato de la carta de otro día ya no se pide (una pantalla que quedó
+    // abierta desde ayer todavía lo muestra).
+    if let Some(nombre) = crate::handlers::carta::plato_de_otro_dia(&fechas_carta, &crate::handlers::carta::hoy_lima(), |id| {
+        productos.get(&id).map(|p| p.0.clone())
+    }) {
+        return Err(error(StatusCode::CONFLICT, crate::handlers::carta::mensaje_plato_de_otro_dia(&nombre)));
     }
 
     // Validar TODO antes de insertar, para no dejar el pedido a medias.
@@ -893,6 +908,30 @@ pub async fn mover_pedido(
     .await
     .map_err(|_| error(StatusCode::CONFLICT, "Esa mesa se acaba de ocupar. Elige otra."))?;
     Ok(Json(detalle_pedido(&conn, pedido_id).await?))
+}
+
+/// POST /pedidos/:id/descartar-vacio — al salir de una mesa (o para llevar)
+/// sin haber pedido nada, el pedido se borra y la mesa vuelve a estar libre.
+/// Solo si sigue abierto y no tiene NINGUNA línea (ni anulada): todo lo que
+/// tenga algo se queda como está. Los pedidos delivery no se tocan.
+pub async fn descartar_vacio(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Path(pedido_id): Path<i64>,
+) -> Resultado<Respuesta> {
+    let conn = tenant.0.connect().map_err(e500)?;
+    exigir_modulo(&conn).await?;
+    let borrados = conn
+        .execute(
+            "DELETE FROM pedidos WHERE id = ?1 AND estado = 'ABIERTO' AND tipo IN ('MESA', 'LLEVAR')
+               AND NOT EXISTS (SELECT 1 FROM pedido_items WHERE pedido_id = ?1)",
+            libsql::params![pedido_id],
+        )
+        .await
+        .map_err(e500)?;
+    Ok(Json(Respuesta {
+        success: true,
+        message: if borrados > 0 { "Mesa libre.".to_string() } else { "El pedido sigue abierto.".to_string() },
+    }))
 }
 
 /// Anula el pedido completo (el cliente se fue sin consumir, error, etc.).

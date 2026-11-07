@@ -273,6 +273,7 @@ pub async fn agregar_producto(
     }
 
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    crate::handlers::carta::revisar_categoria_fija(&conn, payload.categoria_id, None).await?;
 
     // Código repetido: mensaje claro en vez del error técnico de la base.
     // Si pertenece a un producto desactivado, lo correcto es reactivarlo
@@ -364,15 +365,17 @@ pub async fn actualizar_producto(
     // y el frontend no reenvía la imagen existente si el usuario no eligió
     // una nueva).
     let mut r_actual = conn.query(
-        "SELECT stock, imagen_url FROM productos WHERE id = ?1",
+        "SELECT stock, imagen_url, categoria_id FROM productos WHERE id = ?1",
         libsql::params![id],
     ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let (stock_actual, imagen_actual): (f64, Option<String>) =
+    let (stock_actual, imagen_actual, categoria_actual): (f64, Option<String>, Option<i64>) =
         match r_actual.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
-            Some(row) => (row.get(0).unwrap_or(0.0), row.get(1).ok()),
-            None => (0.0, None),
+            Some(row) => (row.get(0).unwrap_or(0.0), row.get(1).ok(), row.get(2).ok()),
+            None => (0.0, None, None),
         };
+    drop(r_actual);
+    crate::handlers::carta::revisar_categoria_fija(&conn, payload.categoria_id, categoria_actual).await?;
 
     let stock_a_guardar = if lleva_vencimiento {
         stock_actual

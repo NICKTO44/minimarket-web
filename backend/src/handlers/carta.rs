@@ -36,6 +36,55 @@ pub fn hoy_lima() -> String {
     (Utc::now() - Duration::hours(5)).format("%Y-%m-%d").to_string()
 }
 
+/// Primer plato de la carta del día que no es de `dia` ("AAAA-MM-DD"), con
+/// su nombre. `fechas`: id -> carta_fecha (solo los platos de la carta).
+/// Los productos de la carta fija no tienen fecha y nunca caen aquí.
+pub fn plato_de_otro_dia(
+    fechas: &std::collections::HashMap<i64, String>,
+    dia: &str,
+    nombre: impl Fn(i64) -> Option<String>,
+) -> Option<String> {
+    let mut ids: Vec<&i64> = fechas.iter().filter(|(_, f)| f.as_str() != dia).map(|(id, _)| id).collect();
+    ids.sort();
+    ids.first().map(|id| nombre(**id).unwrap_or_else(|| "Un plato".to_string()))
+}
+
+/// Un producto de la carta fija no puede ir en la categoría interna "Carta
+/// del día" (la crea agregar_plato): saldría como pestaña repetida en Mesas
+/// y parecería un plato del día. `antes`: su categoría actual, si se está
+/// editando (un producto que ya estaba ahí se puede seguir editando).
+pub async fn revisar_categoria_fija(
+    conn: &libsql::Connection,
+    categoria_id: i64,
+    antes: Option<i64>,
+) -> Result<(), (StatusCode, String)> {
+    if antes == Some(categoria_id) {
+        return Ok(());
+    }
+    let Ok(mut filas) = conn
+        .query("SELECT nombre FROM categorias WHERE id = ?1", libsql::params![categoria_id])
+        .await
+    else {
+        return Ok(());
+    };
+    if let Ok(Some(f)) = filas.next().await {
+        if f.get::<String>(0).ok().as_deref() == Some(CATEGORIA_CARTA) {
+            return Err(error(
+                StatusCode::BAD_REQUEST,
+                "\"Carta del día\" es solo para los platos de la pantalla Carta de hoy. Elige otra categoría.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub fn mensaje_plato_de_otro_dia(nombre: &str) -> String {
+    format!(
+        "\"{}\" era de la carta de un día anterior y ya no se vende. La carta se actualizó: vuelve a cargar la pantalla.",
+        nombre
+    )
+}
+
 async fn exigir_modulo(conn: &libsql::Connection) -> Result<(), (StatusCode, String)> {
     if modo_restaurante(conn).await {
         Ok(())
