@@ -9,6 +9,7 @@ import '../Inventario/Inventario.css';
 import './Proveedores.css';
 import { CargarPedido, ExportarPedido, PreciosNuevos, ProductosNuevos, SubioCosto } from './PedidoExcel';
 import { codigosNuevos, faltaEnNuevo, filasDePrecios, subidasConCambio } from '../../utils/pedidoProveedor';
+import { sinCategoriaCarta } from '../../utils/categoriaCarta';
 
 
 const MOTIVOS = [
@@ -113,7 +114,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
         setProveedores(p);
         setCompras(c);
         setProductos(prod);
-        setCategorias(cats);
+        setCategorias(sinCategoriaCarta(cats, prod));
         setDevoluciones(devs);
       })
       .catch((e) => setMensaje({ tipo: 'error', texto: e.message }))

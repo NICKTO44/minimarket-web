@@ -16,6 +16,7 @@ import { formatoCantidad, formatoPrecio } from '../../utils/medidas';
 import { abreviaturaUnidad } from '../../utils/unidades';
 import '../../components/PantallaModulo.css';
 import './Catalogo.css';
+import { sinCategoriaCarta } from '../../utils/categoriaCarta';
 
 // Módulo "Catálogo" (CATALOGO): los productos del inventario en tarjetas con
 // foto, para que los vendedores revisen rápido. Solo se mira: no se abre,
@@ -139,7 +140,7 @@ export default function Catalogo({ fichaRepuesto, compatibilidad, tresPrecios })
     const primera = setTimeout(leerProductos, 0);
     api
       .categorias()
-      .then((c) => setCategorias(Array.isArray(c) ? c : []))
+      .then((c) => setCategorias(sinCategoriaCarta(c)))
       .catch(() => {});
     if (fichaRepuesto) api.repuestosFichas().then((l) => setRepuestos(mapaPorProducto(l))).catch(() => {});
     if (compatibilidad) api.compatibilidades().then((l) => setCompatibilidades(mapaCompatibilidades(l))).catch(() => {});

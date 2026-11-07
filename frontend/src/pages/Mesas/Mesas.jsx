@@ -134,7 +134,8 @@ export default function Mesas({ usuario, nombreTienda, onCobrar, abrirPedido, on
           <h1>Mesas</h1>
           <p className="mesas-subtitulo">
             {ocupadas} de {mesas.length} ocupadas
-            {sinMesa.length > 0 && ` · ${sinMesa.length} para llevar`}
+            {sinMesa.some((p) => p.tipo === 'LLEVAR') && ` · ${sinMesa.filter((p) => p.tipo === 'LLEVAR').length} para llevar`}
+            {sinMesa.some((p) => p.tipo === 'DELIVERY') && ` · ${sinMesa.filter((p) => p.tipo === 'DELIVERY').length} delivery`}
           </p>
         </div>
         <div className="mesas-header-acciones">

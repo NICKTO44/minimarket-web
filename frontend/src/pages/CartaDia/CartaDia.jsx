@@ -23,14 +23,14 @@ function precioValido(texto) {
  * al salir del campo (o con Enter). Se vuelve a montar si cambia en el
  * servidor (ver key en CartaDia), así siempre parte de lo guardado.
  */
-function FilaPlato({ plato, ocupado, onGuardar, onAgotado, onQuitar }) {
+function FilaPlato({ plato, ocupado, onGuardar, onAgotado, onQuitar, onAviso }) {
   const [nombre, setNombre] = useState(plato.nombre);
   const [precio, setPrecio] = useState(plato.precio.toFixed(2));
   const [confirmarQuitar, setConfirmarQuitar] = useState(false);
 
   useEffect(() => {
     if (!confirmarQuitar) return undefined;
-    const t = setTimeout(() => setConfirmarQuitar(false), 3000);
+    const t = setTimeout(() => setConfirmarQuitar(false), 5000);
     return () => clearTimeout(t);
   }, [confirmarQuitar]);
 
@@ -38,9 +38,10 @@ function FilaPlato({ plato, ocupado, onGuardar, onAgotado, onQuitar }) {
     const limpio = nombre.trim().replace(/\s+/g, ' ');
     const p = precioValido(precio);
     if (!limpio || p === null) {
-      // Lo escrito no sirve: vuelve a lo guardado.
+      // Lo escrito no sirve: vuelve a lo guardado, y se dice por qué.
       setNombre(plato.nombre);
       setPrecio(plato.precio.toFixed(2));
+      onAviso?.(!limpio ? 'El plato necesita un nombre: se dejó el que tenía.' : 'Escribe un precio mayor a 0: se dejó el que tenía.');
       return;
     }
     if (limpio === plato.nombre && p === plato.precio) return;
@@ -160,6 +161,7 @@ export default function CartaDia() {
     const nombre = nuevoNombre.trim().replace(/\s+/g, ' ');
     const precio = precioValido(nuevoPrecio);
     if (!nombre) {
+      setError('Escribe el nombre del plato.');
       nombreNuevoRef.current?.focus();
       return;
     }
@@ -215,6 +217,7 @@ export default function CartaDia() {
                   plato={p}
                   ocupado={ocupado}
                   onGuardar={(id, cambios) => ejecutar(() => api.cartaActualizar(id, cambios))}
+                  onAviso={setError}
                   onAgotado={(id, agotado) => ejecutar(() => api.cartaActualizar(id, { agotado }))}
                   onQuitar={(id) => ejecutar(() => api.cartaQuitar(id))}
                 />

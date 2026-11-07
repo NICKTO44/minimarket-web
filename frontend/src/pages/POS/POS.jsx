@@ -69,6 +69,7 @@ import {
   textoGarantia,
 } from '../../utils/repuestos';
 import RecetaVenta, { RECETA_VACIA, recetaParaEnviar } from '../../components/RecetaVenta';
+import { useAlCambiarDeDia } from '../../utils/cambioDeDia';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -612,6 +613,10 @@ export default function POS({
           cfg.facturacion_proveedor === 'SUNAT_DIRECTO' ||
           !!(cfg.facturalibre_token?.trim() && cfg.facturalibre_ruta?.trim());
         setFacturacionConfigurada(listo);
+        // Sin facturación electrónica configurada, la Boleta no se puede
+        // emitir: el POS empieza en Nota de venta (antes había que cambiarla
+        // en cada venta). Con facturación, todo sigue igual (Boleta).
+        if (!listo) setTipoComprobante((t) => (t === 'BOLETA' ? 'NINGUNO' : t));
         setCfgEmisor(cfg);
       })
       .catch(() => {
@@ -660,6 +665,11 @@ export default function POS({
   useEffect(() => {
     api.productos().then(setProductos).catch((e) => setMensaje({ tipo: 'error', texto: e.message }));
   }, []);
+  // Restaurante: a las 12:00 a. m. la carta del día de ayer deja de venderse.
+  // Si la pantalla quedó abierta, se vuelve a leer la lista de productos.
+  useAlCambiarDeDia(() => {
+    api.productos().then(setProductos).catch(() => {});
+  });
 
   useEffect(() => {
     const texto = busquedaCliente.trim();
@@ -1877,7 +1887,7 @@ export default function POS({
       setCliente(null);
       setMostrarBusquedaCliente(false);
       setBusquedaCliente('');
-      setTipoComprobante('BOLETA');
+      setTipoComprobante(facturacionConfigurada ? 'BOLETA' : 'NINGUNO');
       setConDetraccion(true);
       setTelefonoWhatsapp('');
       setTelefonoGuardado(false);
@@ -3160,7 +3170,13 @@ export default function POS({
             >
               {ultimaVentaParaImprimir.comprobantePendiente
                 ? `Emitiendo comprobante · ${ultimaVentaParaImprimir.venta.folio}`
-                : `Imprimir última boleta · ${ultimaVentaParaImprimir.venta.folio}`}
+                : `Imprimir última ${
+                    (ultimaVentaParaImprimir.comprobante?.tipo || ultimaVentaParaImprimir.tipoComprobante) === 'FACTURA'
+                      ? 'factura'
+                      : (ultimaVentaParaImprimir.comprobante?.tipo || ultimaVentaParaImprimir.tipoComprobante) === 'BOLETA'
+                        ? 'boleta'
+                        : 'nota de venta'
+                  } · ${ultimaVentaParaImprimir.venta.folio}`}
             </button>
           )}
           {/* Última venta con factura o boleta aceptada: ticket de 80 mm o A4. */}

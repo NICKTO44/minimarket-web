@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { sinCategoriaCarta } from '../../utils/categoriaCarta';
 import { api, API_URL } from '../../api/api';
 import './Inventario.css';
 import EscanerCodigoBarras from '../../components/EscanerCodigoBarras';
@@ -260,7 +261,7 @@ export default function Inventario({
         // respaldos de las prendas escritas en una orden de lavado son de uso
         // interno (otro negocio no los tiene).
         setProductos(p.filter((x) => !x.carta_dia && !esRespaldoLavanderia(x)));
-        setCategorias(c);
+        setCategorias(sinCategoriaCarta(c, p));
       })
       .catch((e) => setMensaje({ tipo: 'error', texto: e.message }))
       .finally(() => setCargando(false));
@@ -525,7 +526,7 @@ export default function Inventario({
     try {
       const nueva = await api.categoriaCrear({ nombre: nombreNuevaCategoria.trim() });
       const categoriasActualizadas = await api.categorias();
-      setCategorias(categoriasActualizadas);
+      setCategorias(sinCategoriaCarta(categoriasActualizadas, productos));
       cambiarCampo('categoria_id', String(nueva.id));
       setMostrarNuevaCategoria(false);
       setNombreNuevaCategoria('');

@@ -71,7 +71,7 @@ export default function MovimientoCaja({ tipo, cajaId, usuario, disponible, onGu
             <Icono size={18} />
           </span>
           <div>
-            <h2 id="mc-titulo">{t.titulo}</h2>
+            <h2 id="mc-titulo">{tipo === 'RETIRO' && !deCaja ? 'Retiro' : t.titulo}</h2>
             <p>{t.ayuda}</p>
           </div>
           <button type="button" className="fg-cerrar" onClick={onCerrar} aria-label="Cerrar">

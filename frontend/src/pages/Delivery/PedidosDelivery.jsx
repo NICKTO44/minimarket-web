@@ -35,6 +35,7 @@ import { esRespaldoLavanderia } from '../../utils/textosEncargos';
 import '../../components/PantallaModulo.css';
 import '../Mesas/Mesas.css';
 import './PedidosDelivery.css';
+import { useAlCambiarDeDia } from '../../utils/cambioDeDia';
 
 // Módulo DELIVERY (dark kitchen): pedidos por WhatsApp sobre los pedidos del
 // restaurante. Cliente, platos y envío se registran en un solo formulario;
@@ -639,6 +640,13 @@ function FormularioDelivery({ pedido, onCerrar, onGuardado }) {
       })
       .catch(() => {});
   }, []);
+  // A las 12:00 a. m. la carta del día de ayer deja de venderse.
+  useAlCambiarDeDia(() => {
+    api
+      .productos()
+      .then((p) => setProductos((p || []).filter((x) => !esRespaldoLavanderia(x) && x.activo !== false && x.activo !== 0)))
+      .catch(() => {});
+  });
 
   const gruposPorProducto = useMemo(() => {
     const mapa = new Map();

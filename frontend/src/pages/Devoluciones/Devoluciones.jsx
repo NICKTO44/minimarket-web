@@ -62,7 +62,17 @@ export default function Devoluciones({ usuario, cambios = false, onIniciarCambio
   };
 
   const cambiarItem = (idx, campo, valor) => {
-    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [campo]: valor } : it)));
+    setItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== idx) return it;
+        if (campo !== 'cantidad_a_devolver') return { ...it, [campo]: valor };
+        // Sin ceros a la izquierda ("05") y nunca más de lo vendido.
+        let v = String(valor).replace(/^0+(?=\d)/, '');
+        if (v !== '' && Number(v) > it.cantidad_original) v = String(it.cantidad_original);
+        if (v !== '' && Number(v) < 0) v = '0';
+        return { ...it, cantidad_a_devolver: v };
+      })
+    );
   };
 
   const totalADevolver = items.reduce(

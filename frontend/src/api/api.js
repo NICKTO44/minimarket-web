@@ -154,9 +154,16 @@ export const esSinConexion = (e) => !!e?.sinConexion;
 // Cómo se sube una operación hecha sin internet.
 registrarSubida((op) => request('/sin-conexion/operaciones', { method: 'POST', body: JSON.stringify(op) }));
 
+// Sin conexión con el servidor, fetch falla con "Failed to fetch" (en
+// inglés, sin explicación): en el login y el registro se dice en claro.
+const fetchSinSesion = (url, opciones) =>
+  fetch(url, opciones).catch(() => {
+    throw new Error('No hay conexión con el servidor. Revisa tu internet e inténtalo de nuevo.');
+  });
+
 export const api = {
   login: async (usuario, password, tienda) => {
-    const res = await fetch(`${API_URL}/login`, {
+    const res = await fetchSinSesion(`${API_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usuario, password, tienda: tienda || null }),
@@ -171,14 +178,14 @@ export const api = {
   // Login con la dirección del negocio (monspeet.pages.dev/verane): nombre,
   // logo y color. Acepta la dirección o el identificador. null si no existe.
   negocioPublico: async (direccion) => {
-    const res = await fetch(`${API_URL}/publico/negocio/${encodeURIComponent(direccion)}`);
+    const res = await fetchSinSesion(`${API_URL}/publico/negocio/${encodeURIComponent(direccion)}`);
     if (res.status === 404) return null;
     const data = await leerRespuesta(res);
     if (!res.ok) throw new Error(typeof data === 'string' ? data : 'No se pudo consultar el negocio');
     return data;
   },
   identificarUsuario: async (usuario) => {
-    const res = await fetch(`${API_URL}/login/identificar`, {
+    const res = await fetchSinSesion(`${API_URL}/login/identificar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usuario }),
@@ -191,7 +198,7 @@ export const api = {
     return data;
   },
   registro: async ({ nombre_negocio, nombre_completo, usuario, password, ruc, modo_negocio, rubro }) => {
-    const res = await fetch(`${API_URL}/registro`, {
+    const res = await fetchSinSesion(`${API_URL}/registro`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -433,6 +440,8 @@ export const api = {
     request(`/pedidos/${id}/items/${itemId}/quitar`, { method: 'POST', body: JSON.stringify({ motivo: motivo || null }) }),
   pedidoEnviar: (id) => request(`/pedidos/${id}/enviar`, { method: 'POST' }),
   pedidoMover: (id, mesa_id) => request(`/pedidos/${id}/mover`, { method: 'POST', body: JSON.stringify({ mesa_id }) }),
+  // Sale de una mesa sin pedir nada: el pedido vacío se borra y la mesa queda libre.
+  pedidoDescartarVacio: (id) => request(`/pedidos/${id}/descartar-vacio`, { method: 'POST' }),
   pedidoAnular: (id, motivo) => request(`/pedidos/${id}/anular`, { method: 'POST', body: JSON.stringify({ motivo: motivo || null }) }),
   // Barra / cocina: lo que está en preparación o listo sin entregar.
   preparacion: () => request('/preparacion'),

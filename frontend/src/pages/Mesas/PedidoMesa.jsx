@@ -50,6 +50,8 @@ const CATEGORIA_CARTA = 'Carta del día';
 export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onVolver, onCobrar, onIrACarta }) {
   const mesero = esMesero(usuario);
   const [productos, setProductos] = useState([]);
+  // Mientras llega la carta no se dice "No hay productos con ese nombre".
+  const [productosCargados, setProductosCargados] = useState(false);
   const [grupos, setGrupos] = useState([]);
   // null mientras carga; true si el negocio ya usó alguna vez la carta del día.
   const [usaCarta, setUsaCarta] = useState(null);
@@ -88,6 +90,7 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
         // El costo de envío de Pedidos delivery no es un plato de la carta.
         setProductos(p.filter((x) => !esRespaldoLavanderia(x)));
         setGrupos(g);
+        setProductosCargados(true);
       })
       .catch((e) => setError(e.message));
     // Solo para el aviso "Aún no hay carta de hoy" (si nunca la usan, no sale).
@@ -141,9 +144,17 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
 
   // La carta del día va primero (categoría y productos); luego lo de siempre.
   const categorias = useMemo(() => {
-    const set = new Set(productos.filter((p) => !p.carta_dia).map((p) => p.categoria_nombre).filter(Boolean));
+    // Un producto fijo que quedó en la categoría "Carta del día" va dentro de
+    // esa misma pestaña (antes salía una pestaña repetida).
+    const set = new Set(
+      productos
+        .filter((p) => !p.carta_dia && p.categoria_nombre !== CATEGORIA_CARTA)
+        .map((p) => p.categoria_nombre)
+        .filter(Boolean)
+    );
     const resto = [...set].sort((a, b) => a.localeCompare(b));
-    return productos.some((p) => p.carta_dia) ? [CATEGORIA_CARTA, ...resto] : resto;
+    const hayCarta = productos.some((p) => p.carta_dia || p.categoria_nombre === CATEGORIA_CARTA);
+    return hayCarta ? [CATEGORIA_CARTA, ...resto] : resto;
   }, [productos]);
 
   const hayCartaHoy = productos.some((p) => p.carta_dia);
@@ -151,7 +162,10 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
   const productosVisibles = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     const enCategoria = (p) =>
-      categoria === TODAS || (categoria === CATEGORIA_CARTA ? p.carta_dia : !p.carta_dia && p.categoria_nombre === categoria);
+      categoria === TODAS ||
+      (categoria === CATEGORIA_CARTA
+        ? p.carta_dia || p.categoria_nombre === CATEGORIA_CARTA
+        : !p.carta_dia && p.categoria_nombre === categoria);
     return productos
       .filter((p) => enCategoria(p) && (!q || p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q)))
       .sort((a, b) => Number(!!b.carta_dia) - Number(!!a.carta_dia));
@@ -287,11 +301,20 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
     });
   };
 
+  // Un doble clic no manda dos veces (el segundo daba "No hay productos
+  // nuevos para enviar").
+  const enviando = useRef(false);
   const enviar = async () => {
-    const comanda = await ejecutar(() => api.pedidoEnviar(pedidoId), 'Enviado a preparar');
-    if (!comanda) return;
-    setTicket({ tipo: 'COMANDA', pedido: comanda.pedido, items: comanda.items, clave: ++numeroTicket.current });
-    cargar().catch(() => {});
+    if (enviando.current) return;
+    enviando.current = true;
+    try {
+      const comanda = await ejecutar(() => api.pedidoEnviar(pedidoId), 'Enviado a preparar');
+      if (!comanda) return;
+      setTicket({ tipo: 'COMANDA', pedido: comanda.pedido, items: comanda.items, clave: ++numeroTicket.current });
+      await cargar().catch(() => {});
+    } finally {
+      enviando.current = false;
+    }
   };
 
   const entregar = async (lineas) => {
@@ -334,10 +357,22 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
     }
   };
 
-  // Antes de salir se termina de guardar lo que falte.
+  // Antes de salir se termina de guardar lo que falte. Si no se pidió nada,
+  // la mesa vuelve a quedar libre (el servidor solo borra un pedido vacío).
   const volver = () => {
-    sincronizar().finally(onVolver);
+    sincronizar()
+      .then(() => api.pedidoDescartarVacio(pedidoId))
+      .catch(() => {})
+      .finally(onVolver);
   };
+  // Si se sale de la pantalla por el menú (sin "Volver"), lo mismo, unos
+  // segundos después para que termine de guardarse lo último que se tocó.
+  useEffect(
+    () => () => {
+      setTimeout(() => api.pedidoDescartarVacio(pedidoId).catch(() => {}), 3000);
+    },
+    [pedidoId]
+  );
 
   const cobrar = async () => {
     if (activos.length === 0) return;
@@ -549,7 +584,9 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
               </button>
             );
           })}
-          {productosVisibles.length === 0 && <p className="mesas-vacio">No hay productos con ese nombre.</p>}
+          {productosVisibles.length === 0 && (
+            <p className="mesas-vacio">{productosCargados ? 'No hay productos con ese nombre.' : 'Cargando la carta…'}</p>
+          )}
         </div>
       </div>
 
