@@ -172,6 +172,8 @@ export default function Inventario({
   // códigos alternos, ubicación, garantía) y vehículos compatibles.
   fichaRepuesto = false,
   compatibilidad = false,
+  // Módulo Catálogo: una foto 2 por producto (en el Catálogo se pasa con puntitos).
+  catalogo = false,
 }) {
   const conOpcionesVenta = presentaciones || precioMayor;
   const preciosVenta = useFormPreciosVenta(tresPrecios);
@@ -223,6 +225,11 @@ export default function Inventario({
 
   const [imagenArchivo, setImagenArchivo] = useState(null);
   const [imagenPreview, setImagenPreview] = useState(null);
+  // Foto 2 (módulo Catálogo): producto_id -> url, y lo elegido en el formulario.
+  const [fotos2, setFotos2] = useState(() => new Map());
+  const [imagen2Archivo, setImagen2Archivo] = useState(null);
+  const [imagen2Preview, setImagen2Preview] = useState(null);
+  const [quitarFoto2, setQuitarFoto2] = useState(false);
 
   const [loteInicialCantidad, setLoteInicialCantidad] = useState('');
   const [loteInicialFecha, setLoteInicialFecha] = useState('');
@@ -278,6 +285,12 @@ export default function Inventario({
       api
         .medicamentosFichas()
         .then((lista) => setFichas(mapaFichas(lista)))
+        .catch(() => {});
+    }
+    if (catalogo) {
+      api
+        .productoFotosExtra()
+        .then((lista) => setFotos2(new Map(lista.filter((f) => f.orden === 2).map((f) => [f.producto_id, f.url]))))
         .catch(() => {});
     }
     if (fichaRepuesto) {
@@ -414,6 +427,9 @@ export default function Inventario({
     setLotesProducto([]);
     setImagenArchivo(null);
     setImagenPreview(null);
+    setImagen2Archivo(null);
+    setImagen2Preview(null);
+    setQuitarFoto2(false);
     setMensaje(null);
     setMostrarNuevaCategoria(false);
     setNombreNuevaCategoria('');
@@ -442,6 +458,9 @@ export default function Inventario({
     setLoteInicialNumero('');
     setImagenArchivo(null);
     setImagenPreview(p.imagen_url ? `${API_URL}${p.imagen_url}?t=${Date.now()}` : null);
+    setImagen2Archivo(null);
+    setImagen2Preview(fotos2.get(p.id) ? `${API_URL}${fotos2.get(p.id)}` : null);
+    setQuitarFoto2(false);
     setMensaje(null);
     setMostrarNuevaCategoria(false);
     setNombreNuevaCategoria('');
@@ -515,6 +534,9 @@ export default function Inventario({
     setVentasLote(null);
     setImagenArchivo(null);
     setImagenPreview(null);
+    setImagen2Archivo(null);
+    setImagen2Preview(null);
+    setQuitarFoto2(false);
     setMostrarNuevaCategoria(false);
     setNombreNuevaCategoria('');
   };
@@ -552,6 +574,26 @@ export default function Inventario({
     }
     setImagenArchivo(archivo);
     setImagenPreview(URL.createObjectURL(archivo));
+  };
+
+  const manejarSeleccionImagen2 = (e) => {
+    const archivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!archivo) return;
+    if (!archivo.type.startsWith('image/')) {
+      setMensaje({ tipo: 'error', texto: 'El archivo debe ser una imagen.' });
+      return;
+    }
+    setImagen2Archivo(archivo);
+    setImagen2Preview(URL.createObjectURL(archivo));
+    setQuitarFoto2(false);
+  };
+
+  const quitarImagen2 = () => {
+    setImagen2Archivo(null);
+    setImagen2Preview(null);
+    // Solo hay algo que borrar en el servidor si el producto ya tenía foto 2.
+    setQuitarFoto2(Boolean(editandoId && fotos2.has(editandoId)));
   };
 
   const agregarLoteAProductoExistente = async () => {
@@ -855,6 +897,24 @@ export default function Inventario({
           setMensaje({
             tipo: 'error',
             texto: `Producto guardado, pero la foto no se pudo subir (${e.message}). Toca Guardar para intentarlo de nuevo.`,
+          });
+          cargarTodo();
+          return;
+        }
+      }
+
+      // Foto 2 (módulo Catálogo): subir la nueva o quitar la que tenía.
+      if (catalogo && idParaImagen && (imagen2Archivo || quitarFoto2)) {
+        try {
+          if (imagen2Archivo) await api.productoSubirFoto2(idParaImagen, await comprimirImagen(imagen2Archivo));
+          else await api.productoQuitarFoto2(idParaImagen);
+        } catch (e) {
+          // Lo demás ya se guardó: "Guardar" de nuevo solo reintenta la foto 2.
+          setEditandoId(idParaImagen);
+          setImagenArchivo(null);
+          setMensaje({
+            tipo: 'error',
+            texto: `Producto guardado, pero la foto 2 no se pudo ${imagen2Archivo ? 'subir' : 'quitar'} (${e.message}). Toca Guardar para intentarlo de nuevo.`,
           });
           cargarTodo();
           return;
@@ -1248,6 +1308,8 @@ export default function Inventario({
       {cargandoImagenes && (
         <CargarImagenes
           productos={productos}
+          conFoto2={catalogo}
+          fotos2={fotos2}
           onCerrar={() => setCargandoImagenes(false)}
           onTerminado={(r) => {
             setCargandoImagenes(false);
@@ -1351,6 +1413,28 @@ export default function Inventario({
               </div>
               <p className="inv-imagen-nota">Se optimiza automáticamente al guardar (máx. 800px, comprimida).</p>
             </div>
+
+            {catalogo && (
+              <div className="inv-campo inv-campo-imagen">
+                <label>Foto 2 (opcional, se ve en el Catálogo)</label>
+                <div className="inv-imagen-selector">
+                  {imagen2Preview ? (
+                    <img src={imagen2Preview} alt="Vista previa de la foto 2" className="inv-imagen-preview" />
+                  ) : (
+                    <div className="inv-imagen-preview inv-imagen-preview-vacia">📦</div>
+                  )}
+                  <label className="inv-boton-subir-imagen">
+                    {imagen2Preview ? 'Cambiar foto 2' : 'Elegir foto 2'}
+                    <input type="file" accept="image/*" onChange={manejarSeleccionImagen2} hidden />
+                  </label>
+                  {imagen2Preview && (
+                    <button type="button" className="inv-boton-subir-imagen" onClick={quitarImagen2}>
+                      Quitar foto 2
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="inv-form-grid">
               <div className="inv-campo">

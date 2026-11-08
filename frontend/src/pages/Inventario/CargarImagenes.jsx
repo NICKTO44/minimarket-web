@@ -19,7 +19,14 @@ function codigosDe(nombreArchivo) {
   return [...new Set([base, primero].map((c) => c.toLowerCase()).filter(Boolean))];
 }
 
-export default function CargarImagenes({ productos, onCerrar, onTerminado }) {
+/** Con el módulo Catálogo: "7753749007955_2.jpg" es la foto 2 de ese código. */
+function codigosFoto2(nombreArchivo) {
+  const base = nombreArchivo.replace(/\.[^.]+$/, '').trim();
+  const m = base.match(/^(.+?)_2$/);
+  return m ? codigosDe(m[1]) : [];
+}
+
+export default function CargarImagenes({ productos, onCerrar, onTerminado, conFoto2 = false, fotos2 = new Map() }) {
   const [emparejados, setEmparejados] = useState(null);
   const [sinProducto, setSinProducto] = useState([]);
   const [reemplazar, setReemplazar] = useState(false);
@@ -45,14 +52,23 @@ export default function CargarImagenes({ productos, onCerrar, onTerminado }) {
     const sin = [];
     const usados = new Set();
     for (const archivo of archivos) {
-      const producto = codigosDe(archivo.name)
-        .map((c) => porCodigo.get(c))
-        .find(Boolean);
+      // Si el nombre completo es un código, es su foto 1 (como siempre). Si no
+      // y termina en _2 (con el módulo Catálogo), es la foto 2 de ese código.
+      const base = archivo.name.replace(/\.[^.]+$/, '').trim().toLowerCase();
+      const delCodigo = (lista) => lista.map((c) => porCodigo.get(c)).find(Boolean);
+      let cual = 1;
+      let producto = porCodigo.get(base);
+      if (!producto && conFoto2) {
+        producto = delCodigo(codigosFoto2(archivo.name));
+        if (producto) cual = 2;
+      }
+      if (!producto) producto = delCodigo(codigosDe(archivo.name));
+      const clave = `${producto?.id}-${cual}`;
       if (!producto) sin.push(archivo.name);
-      else if (usados.has(producto.id)) sin.push(`${archivo.name} (otra foto del mismo producto)`);
+      else if (usados.has(clave)) sin.push(`${archivo.name} (otra foto ${cual} del mismo producto)`);
       else {
-        usados.add(producto.id);
-        ok.push({ archivo, producto });
+        usados.add(clave);
+        ok.push({ archivo, producto, cual });
       }
     }
     setEmparejados(ok);
@@ -61,18 +77,21 @@ export default function CargarImagenes({ productos, onCerrar, onTerminado }) {
     setErrores([]);
   };
 
-  const aSubir = (emparejados || []).filter((e) => reemplazar || !e.producto.imagen_url);
-  const conFoto = (emparejados || []).filter((e) => e.producto.imagen_url).length;
+  const yaTiene = (e) => (e.cual === 2 ? fotos2.has(e.producto.id) : Boolean(e.producto.imagen_url));
+  const aSubir = (emparejados || []).filter((e) => reemplazar || !yaTiene(e));
+  const conFoto = (emparejados || []).filter(yaTiene).length;
 
   const subir = async () => {
     setSubiendo(true);
     detener.current = false;
     const fallas = [];
     let n = 0;
-    for (const { archivo, producto } of aSubir) {
+    for (const { archivo, producto, cual } of aSubir) {
       if (detener.current) break;
       try {
-        await api.productoSubirImagen(producto.id, await comprimirImagen(archivo));
+        const comprimida = await comprimirImagen(archivo);
+        if (cual === 2) await api.productoSubirFoto2(producto.id, comprimida);
+        else await api.productoSubirImagen(producto.id, comprimida);
       } catch (e) {
         fallas.push(`${producto.nombre}: ${e.message}`);
       }
@@ -95,6 +114,12 @@ export default function CargarImagenes({ productos, onCerrar, onTerminado }) {
             <p className="imp-nota">
               Elige todas las fotos de una vez. Cada una debe llamarse como el <strong>código del producto</strong> (por ejemplo{' '}
               <code>7753749007955.jpg</code>). Se achican solas para que no pesen.
+              {conFoto2 && (
+                <>
+                  {' '}
+                  Para la <strong>foto 2</strong> agrega <code>_2</code> al final: <code>7753749007955_2.jpg</code>.
+                </>
+              )}
             </p>
             <label className="imp-zona">
               <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(e) => elegir(e.target.files)} />

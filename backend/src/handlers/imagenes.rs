@@ -6,6 +6,7 @@ use crate::tenants::TenantDb;
 use crate::models::producto::ProductoResponse;
 use crate::models::configuracion::AccionResponse;
 use crate::logica::imagen::{self, Salida};
+use crate::handlers::rubros::{exigir_modulo, MODULO_CATALOGO};
 
 const ANCHO_MAXIMO: u32 = 800;
 const CALIDAD_JPEG: u8 = 80;
@@ -193,6 +194,135 @@ pub async fn crear_miniaturas_faltantes(base: &std::path::Path) -> usize {
     creadas
 }
 
+// ===== Foto 2 del producto (módulo CATALOGO, migración 0066) =====
+//
+// La foto 1 sigue siendo productos.imagen_url (subir_imagen_producto, sin
+// cambios). La foto 2 vive en la tabla producto_imagenes (orden = 2) y en
+// uploads/productos/{tienda}/{id}_2.jpg, con su miniatura {id}_2_m.jpg
+// (crear_miniaturas_faltantes también la cubre). En el Catálogo se pasa de
+// una a otra con puntitos.
+
+const NOMBRE_MODULO_CATALOGO: &str = "Catálogo";
+
+#[derive(serde::Serialize)]
+pub struct FotoExtra {
+    pub producto_id: i64,
+    pub orden: i64,
+    pub url: String,
+}
+
+fn e500<E: ToString>(e: E) -> (StatusCode, String) {
+    (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+}
+
+/// Lee los bytes del campo `campo` del formulario.
+async fn leer_campo(multipart: &mut Multipart, campo: &str) -> Result<Option<Vec<u8>>, (StatusCode, String)> {
+    let mut bytes = None;
+    while let Some(field) = multipart.next_field().await.map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))? {
+        if field.name() == Some(campo) {
+            bytes = Some(field.bytes().await.map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?.to_vec());
+        }
+    }
+    Ok(bytes)
+}
+
+/// GET /productos/fotos-extra — las fotos 2 de los productos que tienen una.
+/// Sin la migración 0066 todavía: lista vacía (nada se rompe).
+pub async fn listar_fotos_extra(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+) -> Result<Json<Vec<FotoExtra>>, (StatusCode, String)> {
+    let conn = tenant.0.connect().map_err(e500)?;
+    exigir_modulo(&conn, MODULO_CATALOGO, NOMBRE_MODULO_CATALOGO).await?;
+    let mut lista = Vec::new();
+    let Ok(mut filas) = conn
+        .query(
+            "SELECT pi.producto_id, pi.orden, pi.url FROM producto_imagenes pi
+             JOIN productos p ON p.id = pi.producto_id
+             ORDER BY pi.producto_id, pi.orden",
+            (),
+        )
+        .await
+    else {
+        return Ok(Json(lista));
+    };
+    while let Ok(Some(f)) = filas.next().await {
+        if let (Ok(producto_id), Ok(orden), Ok(url)) = (f.get::<i64>(0), f.get::<i64>(1), f.get::<String>(2)) {
+            lista.push(FotoExtra { producto_id, orden, url });
+        }
+    }
+    Ok(Json(lista))
+}
+
+/// POST /productos/:id/foto-2 — sube (o reemplaza) la foto 2. Mismo
+/// procesamiento que la foto 1: se achica a 800 px, con miniatura.
+pub async fn subir_foto_2(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<i64>,
+    mut multipart: Multipart,
+) -> Result<Json<AccionResponse>, (StatusCode, String)> {
+    let conn = tenant.0.connect().map_err(e500)?;
+    exigir_modulo(&conn, MODULO_CATALOGO, NOMBRE_MODULO_CATALOGO).await?;
+
+    let bytes = leer_campo(&mut multipart, "imagen")
+        .await?
+        .ok_or((StatusCode::BAD_REQUEST, "No se recibió ninguna imagen".to_string()))?;
+    if bytes.len() > 10 * 1024 * 1024 {
+        return Err((StatusCode::BAD_REQUEST, "La imagen no puede pesar más de 10MB".into()));
+    }
+
+    let mut filas = conn.query("SELECT 1 FROM productos WHERE id = ?1", libsql::params![id]).await.map_err(e500)?;
+    if filas.next().await.map_err(e500)?.is_none() {
+        return Err((StatusCode::NOT_FOUND, "Ese producto no existe.".to_string()));
+    }
+    drop(filas);
+
+    let jpeg = imagen::procesar(bytes, ANCHO_MAXIMO, Salida::Jpeg(CALIDAD_JPEG))
+        .await
+        .map_err(|e| (e.status(), e.mensaje()))?;
+    let carpeta = format!("uploads/productos/{}", claims.tienda_id);
+    let ruta = format!("{}/{}_2.jpg", carpeta, id);
+    let miniatura = imagen::procesar(jpeg.clone(), LADO_MINIATURA, Salida::Jpeg(CALIDAD_MINIATURA)).await.ok();
+    guardar(&carpeta, &ruta, jpeg).await?;
+    if let (Some(m), Some(ruta_m)) = (miniatura, ruta_miniatura(&ruta)) {
+        let _ = guardar(&carpeta, &ruta_m, m).await;
+    }
+
+    // ?v= para que el navegador no siga mostrando la foto 2 anterior.
+    let version = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let url_publica = format!("/uploads/productos/{}/{}_2.jpg?v={}", claims.tienda_id, id, version);
+    conn.execute(
+        "INSERT INTO producto_imagenes (producto_id, orden, url, fecha_actualizacion)
+         VALUES (?1, 2, ?2, datetime('now','localtime'))
+         ON CONFLICT(producto_id, orden) DO UPDATE SET url = excluded.url, fecha_actualizacion = excluded.fecha_actualizacion",
+        libsql::params![id, url_publica],
+    )
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo guardar la foto 2: {}", e)))?;
+
+    Ok(Json(AccionResponse { success: true, message: "Foto 2 guardada".into() }))
+}
+
+/// DELETE /productos/:id/foto-2 — quita la foto 2 (la foto 1 no se toca).
+pub async fn quitar_foto_2(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<i64>,
+) -> Result<Json<AccionResponse>, (StatusCode, String)> {
+    let conn = tenant.0.connect().map_err(e500)?;
+    exigir_modulo(&conn, MODULO_CATALOGO, NOMBRE_MODULO_CATALOGO).await?;
+    conn.execute("DELETE FROM producto_imagenes WHERE producto_id = ?1 AND orden = 2", libsql::params![id])
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No se pudo quitar la foto 2: {}", e)))?;
+    let carpeta = format!("uploads/productos/{}", claims.tienda_id);
+    let _ = tokio::fs::remove_file(format!("{}/{}_2.jpg", carpeta, id)).await;
+    let _ = tokio::fs::remove_file(format!("{}/{}_2_m.jpg", carpeta, id)).await;
+    Ok(Json(AccionResponse { success: true, message: "Foto 2 quitada".into() }))
+}
+
 #[cfg(test)]
 mod tests_miniatura {
     use super::ruta_miniatura;
@@ -203,5 +333,6 @@ mod tests_miniatura {
         assert_eq!(ruta_miniatura("uploads/productos/7/15_m.jpg"), None);
         assert_eq!(ruta_miniatura("uploads/productos/7/15.jpg.subiendo"), None);
         assert_eq!(ruta_miniatura("uploads/tienda/7/logo.png"), None);
+        assert_eq!(ruta_miniatura("uploads/productos/7/15_2.jpg").as_deref(), Some("uploads/productos/7/15_2_m.jpg"));
     }
 }

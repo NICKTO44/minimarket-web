@@ -573,6 +573,10 @@ export const api = {
   comprobanteAnular: (id, data) => request(`/comprobantes/${id}/anular`, { method: 'POST', body: JSON.stringify(data) }),
   comprobanteAnulacionConsultar: (id) => request(`/comprobantes/${id}/anulacion/consultar`, { method: 'POST' }),
   productoSubirImagen: (id, archivo) => subirImagen(`/productos/${id}/imagen`, 'imagen', archivo, 'Error al subir la imagen'),
+  // Foto 2 del producto (solo con el módulo Catálogo).
+  productoFotosExtra: () => request('/productos/fotos-extra'),
+  productoSubirFoto2: (id, archivo) => subirImagen(`/productos/${id}/foto-2`, 'imagen', archivo, 'Error al subir la foto 2'),
+  productoQuitarFoto2: (id) => request(`/productos/${id}/foto-2`, { method: 'DELETE' }),
 };
 
 // Sube una imagen (producto, logo, foto de encargo). Si el servidor la

@@ -747,6 +747,7 @@ function App() {
             fichaLibro={negocio.modulos.includes(MODULO_FICHA_LIBRO)}
             equivalentes={negocio.modulos.includes(MODULO_EQUIVALENTES)}
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS)}
+            catalogo={negocio.modulos.includes(MODULO_CATALOGO)}
             verSinPrecio={productosSinPrecio}
             onSinPrecioVisto={() => setProductosSinPrecio(false)}
           />

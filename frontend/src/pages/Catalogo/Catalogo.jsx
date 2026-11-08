@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Images, PackageX, Search, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Images, PackageX, Search, X } from 'lucide-react';
 import { api, API_URL } from '../../api/api';
 import { textoPlano } from '../../utils/medicamentos';
 import {
@@ -31,32 +31,62 @@ function urlMiniatura(url) {
   return String(url).replace(/\.jpg(\?.*)?$/i, '_m.jpg$1');
 }
 
-function Foto({ producto }) {
+function Imagen({ url, alt, onClick }) {
   // 0 = miniatura, 1 = foto grande (si aún no hay miniatura), 2 = sin foto.
   const [intento, setIntento] = useState(0);
-  if (!producto.imagen_url || intento === 2) {
+  if (intento === 2) return <Images size={34} strokeWidth={1.4} className="cat-sin-imagen" aria-hidden="true" />;
+  const src = `${API_URL}${intento === 0 ? urlMiniatura(url) : url}`;
+  return <img src={src} alt={alt} loading="lazy" decoding="async" onClick={onClick} onError={() => setIntento((i) => i + 1)} />;
+}
+
+function Foto({ producto, foto2 }) {
+  // Foto 1 (la de siempre) y, si tiene, la foto 2: se pasa con las flechas
+  // o tocando la foto. Al llegar a la última vuelve a la primera.
+  const fotos = [producto.imagen_url, foto2].filter(Boolean);
+  const [cual, setCual] = useState(0);
+  if (fotos.length === 0) {
     return (
       <div className="cat-foto cat-foto-vacia" aria-hidden="true">
         <Images size={34} strokeWidth={1.4} />
       </div>
     );
   }
-  const src = `${API_URL}${intento === 0 ? urlMiniatura(producto.imagen_url) : producto.imagen_url}`;
+  const actual = Math.min(cual, fotos.length - 1);
+  const varias = fotos.length > 1;
+  const mover = (paso) => setCual((actual + paso + fotos.length) % fotos.length);
   return (
-    <div className="cat-foto">
-      <img src={src} alt={producto.nombre} loading="lazy" decoding="async" onError={() => setIntento((i) => i + 1)} />
+    <div className={`cat-foto${varias ? ' cat-foto-varias' : ''}`}>
+      <Imagen
+        key={fotos[actual]}
+        url={fotos[actual]}
+        alt={varias ? `${producto.nombre} (foto ${actual + 1})` : producto.nombre}
+        onClick={varias ? () => mover(1) : undefined}
+      />
+      {varias && (
+        <>
+          <button type="button" className="cat-flecha cat-flecha-izq" aria-label="Foto anterior" onClick={() => mover(-1)}>
+            <ChevronLeft size={18} strokeWidth={2.4} />
+          </button>
+          <button type="button" className="cat-flecha cat-flecha-der" aria-label="Foto siguiente" onClick={() => mover(1)}>
+            <ChevronRight size={18} strokeWidth={2.4} />
+          </button>
+          <span className="cat-contador">
+            {actual + 1}/{fotos.length}
+          </span>
+        </>
+      )}
     </div>
   );
 }
 
-function Tarjeta({ p, ficha, compat, precios }) {
+function Tarjeta({ p, ficha, compat, precios, foto2 }) {
   const sinStock = p.controla_stock !== false && Number(p.stock) <= 0;
   // Aplicación: la que viene en el producto (Excel de repuestos) o, si no,
   // los vehículos de su compatibilidad.
   const aplicacion = p.descripcion?.trim() || (compat || []).map(textoCompatibilidad).join(' / ');
   return (
     <article className={`cat-tarjeta${sinStock ? ' cat-agotado' : ''}`}>
-      <Foto producto={p} />
+      <Foto producto={p} foto2={foto2} />
       <div className="cat-cuerpo">
         {ficha?.marca && <p className="cat-marca">{ficha.marca}</p>}
         <p className="cat-nombre">
@@ -112,6 +142,8 @@ export default function Catalogo({ fichaRepuesto, compatibilidad, tresPrecios })
   const [repuestos, setRepuestos] = useState(() => new Map());
   const [compatibilidades, setCompatibilidades] = useState(() => new Map());
   const { mapa: preciosExtra } = usePreciosVenta(tresPrecios);
+  // producto_id -> url de su foto 2 (el Catálogo solo se ve con su módulo).
+  const [fotos2, setFotos2] = useState(() => new Map());
   const [error, setError] = useState('');
 
   const [busqueda, setBusqueda] = useState('');
@@ -141,6 +173,10 @@ export default function Catalogo({ fichaRepuesto, compatibilidad, tresPrecios })
     api
       .categorias()
       .then((c) => setCategorias(sinCategoriaCarta(c)))
+      .catch(() => {});
+    api
+      .productoFotosExtra()
+      .then((l) => setFotos2(new Map(l.filter((f) => f.orden === 2).map((f) => [f.producto_id, f.url]))))
       .catch(() => {});
     if (fichaRepuesto) api.repuestosFichas().then((l) => setRepuestos(mapaPorProducto(l))).catch(() => {});
     if (compatibilidad) api.compatibilidades().then((l) => setCompatibilidades(mapaCompatibilidades(l))).catch(() => {});
@@ -282,6 +318,7 @@ export default function Catalogo({ fichaRepuesto, compatibilidad, tresPrecios })
               ficha={repuestos.get(p.id)}
               compat={compatibilidades.get(p.id)}
               precios={tresPrecios ? preciosExtra.get(p.id) : null}
+              foto2={fotos2.get(p.id)}
             />
           ))}
         </div>

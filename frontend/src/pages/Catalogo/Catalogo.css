@@ -116,6 +116,61 @@
   background: #f8f9fb;
 }
 
+/* Foto 2 (módulo Catálogo): flechas para pasar de una foto a otra. */
+.cat-foto-varias {
+  position: relative;
+}
+
+.cat-foto-varias img {
+  cursor: pointer;
+}
+
+.cat-sin-imagen {
+  color: #c4c8d0;
+}
+
+.cat-flecha {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: #374151;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.cat-flecha:hover {
+  color: var(--color-primario, #16a34a);
+}
+
+.cat-flecha-izq {
+  left: 6px;
+}
+
+.cat-flecha-der {
+  right: 6px;
+}
+
+.cat-contador {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.6);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .cat-cuerpo {
   display: flex;
   flex: 1;

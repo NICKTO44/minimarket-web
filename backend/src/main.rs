@@ -336,6 +336,14 @@ async fn main() {
             "/productos/:id/imagen",
             post(handlers::imagenes::subir_imagen_producto).layer(DefaultBodyLimit::max(12 * 1024 * 1024)),
         )
+        // Foto 2 del producto, solo con el módulo Catálogo (handlers/imagenes.rs).
+        .route("/productos/fotos-extra", get(handlers::imagenes::listar_fotos_extra))
+        .route(
+            "/productos/:id/foto-2",
+            post(handlers::imagenes::subir_foto_2)
+                .delete(handlers::imagenes::quitar_foto_2)
+                .layer(DefaultBodyLimit::max(12 * 1024 * 1024)),
+        )
         .route("/categorias", get(handlers::productos::obtener_categorias))
         .route("/categorias", post(handlers::productos::crear_categoria))
         .route("/categorias/:id/igv", axum::routing::put(handlers::igv::cambiar_igv_categoria))
