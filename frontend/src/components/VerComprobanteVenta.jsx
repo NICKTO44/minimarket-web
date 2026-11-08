@@ -55,6 +55,7 @@ export default function VerComprobanteVenta({ venta, onCerrar }) {
         datos.cliente ||
         (comp.cliente_nombre ? { nombre_razon_social: comp.cliente_nombre, numero_documento: comp.cliente_documento || null } : null),
       nombreTienda: cfg?.nombre_tienda || '',
+      razonSocial: cfg?.razon_social || null,
       direccion: cfg?.direccion || '',
       telefono: cfg?.telefono || '',
       ruc: cfg?.ruc || comp.ruc_emisor || '',

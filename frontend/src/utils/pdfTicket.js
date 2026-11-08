@@ -230,11 +230,12 @@ const soles = (monto) => `S/.${Number(monto).toFixed(2)}`;
  * (texto ya listo para mostrar).
  * Devuelve { bytes, nombre } con el archivo y un nombre sugerido.
  */
-export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, direccion, telefono, ruc, cajero, etiquetaCajero = 'Cajero', fecha, vendedor = null, logoImagen = null }) {
+export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, razonSocial = null, direccion, telefono, ruc, cajero, etiquetaCajero = 'Cajero', fecha, vendedor = null, logoImagen = null }) {
   // Formato clásico (igual que Recibo.jsx): sin hora, "Vendedor" y teléfono del cliente.
   const clasico = comprobanteClasico();
   const esComprobante = !!comprobante;
-  const numeroDocumento = comprobante ? `${comprobante.serie}-${String(comprobante.numero).padStart(6, '0')}` : null;
+  // Correlativo de 8 dígitos, igual que el ticket impreso (Recibo.jsx).
+  const numeroDocumento = comprobante ? `${comprobante.serie}-${String(comprobante.numero).padStart(8, '0')}` : null;
   const encabezado = comprobante
     ? comprobante.tipo === 'FACTURA'
       ? 'FACTURA ELECTRÓNICA'
@@ -259,6 +260,10 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
     l.imagen(logo, logo.ancho * escala, logo.alto * escala);
   }
   for (const linea of partir(String(nombreTienda || '').toUpperCase(), 12)) l.texto(linea, { tam: 12, negrita: true, ...centro });
+  // Razón social (la pide SUNAT cuando es distinta del nombre comercial; igual que Recibo.jsx).
+  if (razonSocial && razonSocial.trim() !== String(nombreTienda || '').trim()) {
+    for (const linea of partir(razonSocial.trim(), TAM)) l.texto(linea, centro);
+  }
   // Establecimiento anexo: la sucursal antes de la dirección fiscal (igual que Recibo.jsx).
   if (sucursalActual()) for (const linea of partir(`Sucursal: ${sucursalActual()}`, TAM)) l.texto(linea, centro);
   if (direccion) for (const linea of partir(sucursalActual() ? `Dir. fiscal: ${direccion}` : direccion, TAM)) l.texto(linea, centro);
@@ -355,9 +360,11 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
     });
     l.qr(QRCode.create(cadena, { errorCorrectionLevel: 'M' }).modules, 96);
   }
-  if (esFactura && !noAceptado) {
+  // Igual que el ticket impreso: también en la boleta.
+  if (esComprobante && !noAceptado) {
     l.espacio(2);
-    for (const linea of partir('Representación impresa de la FACTURA ELECTRÓNICA.', 7)) {
+    const representacion = `Representación impresa de la ${esFactura ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'}.`;
+    for (const linea of partir(representacion, 7)) {
       l.texto(linea, { tam: 7, ...centro });
     }
   }

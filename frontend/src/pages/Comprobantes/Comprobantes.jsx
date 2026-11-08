@@ -453,6 +453,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         datos.cliente ||
         (comp.cliente_nombre ? { nombre_razon_social: comp.cliente_nombre, numero_documento: comp.cliente_documento || null } : null),
       nombreTienda,
+      razonSocial: cfgEmisor?.razon_social,
       direccion,
       telefono,
       ruc,
