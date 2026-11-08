@@ -321,6 +321,137 @@ pub async fn costos(Extension(tenant): Extension<Arc<TenantDb>>) -> Resultado<Ve
 }
 
 // ---------------------------------------------------------------------
+// Dinero invertido en mercadería
+// ---------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct ProductoInvertido {
+    pub producto_id: i64,
+    pub nombre: String,
+    pub categoria: String,
+    pub unidad: String,
+    /// Stock que se puede vender (con vencimiento: solo lo vigente).
+    pub stock: f64,
+    /// Costo de una unidad: el promedio o, si no hay, el precio de compra.
+    pub costo_unitario: f64,
+    pub invertido: f64,
+    pub precio: f64,
+    pub valor_venta: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CategoriaInvertida {
+    pub categoria: String,
+    pub productos: i64,
+    pub unidades: f64,
+    pub invertido: f64,
+    pub valor_venta: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct InventarioInvertido {
+    /// Suma de stock × costo de los productos con stock.
+    pub invertido: f64,
+    /// Suma de stock × precio de venta.
+    pub valor_venta: f64,
+    /// valor_venta − invertido.
+    pub ganancia_por_realizar: f64,
+    pub unidades: f64,
+    pub productos_con_stock: i64,
+    /// Productos con stock y sin precio de compra (no se cuentan).
+    pub sin_precio: i64,
+    /// De mayor a menor invertido.
+    pub categorias: Vec<CategoriaInvertida>,
+    /// De mayor a menor invertido.
+    pub productos: Vec<ProductoInvertido>,
+}
+
+/// GET /ganancias/inventario — cuánto dinero tiene el negocio en
+/// mercadería ahora mismo (stock × costo), a precio de venta y la
+/// diferencia. Solo el administrador, con el módulo encendido. Cuenta los
+/// productos activos que controlan stock y tienen stock (los vencidos no;
+/// las presentaciones no se suman aparte: su stock ya está en las
+/// unidades; los platos de la carta del día no llevan stock).
+pub async fn inventario(Extension(tenant): Extension<Arc<TenantDb>>, Extension(claims): Extension<Claims>) -> Resultado<InventarioInvertido> {
+    exigir_admin(&claims)?;
+    let conn = tenant.0.connect().map_err(e500)?;
+    exigir_modulo(&conn).await?;
+    let mut filas = conn
+        .query(
+            "SELECT p.id, p.nombre, COALESCE(c.nombre, 'Sin categoría'), COALESCE(p.unidad_medida, 'UNIDAD'),
+                    CASE WHEN p.lleva_vencimiento = 1 THEN CAST(COALESCE((
+                        SELECT SUM(l.cantidad) FROM lotes_producto l
+                        WHERE l.producto_id = p.id AND l.activo = 1 AND l.cantidad > 0
+                          AND date(l.fecha_vencimiento) >= date('now', '-5 hours')
+                    ), 0) AS REAL) ELSE CAST(p.stock AS REAL) END,
+                    CAST(CASE WHEN p.costo_promedio > 0 THEN p.costo_promedio WHEN p.precio_compra > 0 THEN p.precio_compra END AS REAL),
+                    CAST(p.precio AS REAL)
+             FROM productos p LEFT JOIN categorias c ON c.id = p.categoria_id
+             WHERE p.activo = 1 AND COALESCE(p.controla_stock, 1) = 1 AND p.carta_fecha IS NULL",
+            (),
+        )
+        .await
+        .map_err(actualizando)?;
+    let mut productos = Vec::new();
+    let mut sin_precio = 0;
+    while let Some(f) = filas.next().await.map_err(e500)? {
+        let stock: f64 = f.get(4).unwrap_or(0.0);
+        if stock <= 0.0 {
+            continue;
+        }
+        let Some(costo) = f.get::<f64>(5).ok().filter(|c| *c > 0.0) else {
+            sin_precio += 1;
+            continue;
+        };
+        let precio: f64 = f.get(6).unwrap_or(0.0);
+        productos.push(ProductoInvertido {
+            producto_id: f.get(0).unwrap_or_default(),
+            nombre: f.get(1).unwrap_or_default(),
+            categoria: f.get(2).unwrap_or_default(),
+            unidad: f.get(3).unwrap_or_default(),
+            stock,
+            costo_unitario: costo,
+            invertido: redondear_2(stock * costo),
+            precio,
+            valor_venta: redondear_2(stock * precio),
+        });
+    }
+    productos.sort_by(|a, b| b.invertido.total_cmp(&a.invertido).then_with(|| a.nombre.cmp(&b.nombre)));
+    let mut por_categoria: HashMap<String, CategoriaInvertida> = HashMap::new();
+    for p in &productos {
+        let c = por_categoria.entry(p.categoria.clone()).or_insert_with(|| CategoriaInvertida {
+            categoria: p.categoria.clone(),
+            productos: 0,
+            unidades: 0.0,
+            invertido: 0.0,
+            valor_venta: 0.0,
+        });
+        c.productos += 1;
+        c.unidades += p.stock;
+        c.invertido += p.invertido;
+        c.valor_venta += p.valor_venta;
+    }
+    let mut categorias: Vec<CategoriaInvertida> = por_categoria.into_values().collect();
+    for c in categorias.iter_mut() {
+        c.invertido = redondear_2(c.invertido);
+        c.valor_venta = redondear_2(c.valor_venta);
+    }
+    categorias.sort_by(|a, b| b.invertido.total_cmp(&a.invertido).then_with(|| a.categoria.cmp(&b.categoria)));
+    let invertido = redondear_2(productos.iter().map(|p| p.invertido).sum());
+    let valor_venta = redondear_2(productos.iter().map(|p| p.valor_venta).sum());
+    Ok(Json(InventarioInvertido {
+        invertido,
+        valor_venta,
+        ganancia_por_realizar: redondear_2(valor_venta - invertido),
+        unidades: productos.iter().map(|p| p.stock).sum(),
+        productos_con_stock: productos.len() as i64,
+        sin_precio,
+        categorias,
+        productos,
+    }))
+}
+
+// ---------------------------------------------------------------------
 // Reporte
 // ---------------------------------------------------------------------
 

@@ -390,6 +390,7 @@ async fn main() {
         .route("/reportes/estadisticas", get(handlers::reportes::estadisticas_completas))
         .route("/reportes/ganancias", get(handlers::ganancias::reporte))
         .route("/ganancias/costos", get(handlers::ganancias::costos))
+        .route("/ganancias/inventario", get(handlers::ganancias::inventario))
         // Restaurante: margen por plato (módulo COSTEO).
         .route("/costeo/config", get(handlers::costeo::obtener_config).put(handlers::costeo::guardar_config))
         .route("/costeo/carta", get(handlers::costeo::carta))
