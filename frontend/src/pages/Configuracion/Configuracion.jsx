@@ -478,54 +478,21 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
           </div>
 
           <div className="cfg-separador-seccion"></div>
-          <h3 className="cfg-subtitulo-seccion">Facturación electrónica — FacturaLibre</h3>
+          <h3 className="cfg-subtitulo-seccion">Facturación electrónica</h3>
           <p className="cfg-nota-moneda">
-            Boleta y Factura se emiten a través de FacturaLibre.org. Consigue tu Token y URL en el panel de
-            tu cuenta y pégalos aquí. Sin estos datos, el POS no podrá emitir Boleta ni Factura (Nota simple
-            sigue funcionando siempre, ya que no necesita comprobante tributario).
+            Tus boletas y facturas se emiten directo a SUNAT con tu RUC y tu certificado. Monspeet deja lista
+            esta configuración (certificado, usuario SOL y series); si necesitas cambiar algo, escríbenos. La
+            Nota simple funciona siempre, porque no necesita comprobante tributario.
           </p>
-
-          <div className="cfg-campo">
-            <label>Token de FacturaLibre</label>
-            <input
-              type="password"
-              value={formConfig.facturalibre_token || ''}
-              onChange={(e) => setFormConfig({ ...formConfig, facturalibre_token: e.target.value })}
-              placeholder="Token de tu cuenta de FacturaLibre"
-            />
-          </div>
-
-          <div className="cfg-campo">
-            <label>URL / Ruta de FacturaLibre</label>
-            <input
-              value={formConfig.facturalibre_ruta || ''}
-              onChange={(e) => setFormConfig({ ...formConfig, facturalibre_ruta: e.target.value })}
-              placeholder="https://..."
-            />
-          </div>
-
-          <div className="cfg-campo-fila">
-            <div className="cfg-campo">
-              <label>Serie de Boleta</label>
-              <input
-                value={formConfig.serie_boleta || ''}
-                onChange={(e) => setFormConfig({ ...formConfig, serie_boleta: e.target.value })}
-                placeholder="B001"
-              />
-            </div>
-            <div className="cfg-campo">
-              <label>Serie de Factura</label>
-              <input
-                value={formConfig.serie_factura || ''}
-                onChange={(e) => setFormConfig({ ...formConfig, serie_factura: e.target.value })}
-                placeholder="F001"
-              />
-            </div>
-          </div>
-          <p className="cfg-nota-moneda">
-            Deben coincidir exactamente con las series activas en tu cuenta de FacturaLibre. Si las dejas
-            vacías, el sistema usa B001/F001 por defecto.
-          </p>
+          {(formConfig.serie_boleta || formConfig.serie_factura) && (
+            <p className="cfg-nota-moneda">
+              Series: boletas <strong>{formConfig.serie_boleta || '—'}</strong> · facturas{' '}
+              <strong>{formConfig.serie_factura || '—'}</strong>
+            </p>
+          )}
+          {/* FacturaLibre ya no se usa (08-nov-2026): sus campos (token, URL y
+              series) se quitaron de esta pantalla. El backend los conserva para
+              los comprobantes antiguos. */}
 
           <div className="cfg-campo">
             <label>Código de producto SUNAT (genérico)</label>

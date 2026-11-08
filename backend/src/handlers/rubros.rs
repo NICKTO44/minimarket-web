@@ -108,6 +108,10 @@ pub const MODULO_COMPROBANTE_CLASICO: &str = "COMPROBANTE_CLASICO";
 /// Solo cambia lo impreso. Apagado, el ticket sale como siempre (sin logo).
 /// Sirve para cualquier rubro.
 pub const MODULO_LOGO_TICKET: &str = "LOGO_TICKET";
+/// Impresión directa: al cobrar se imprime solo, sin preguntar el formato
+/// (boleta y nota de venta en ticket de 80/58 mm, factura en hoja A4). Solo
+/// es del frontend. Sirve para cualquier rubro.
+pub const MODULO_IMPRESION_DIRECTA: &str = "IMPRESION_DIRECTA";
 /// Catálogo de productos en tarjetas con foto, solo para mirar (sin
 /// vender ni editar), para que los vendedores revisen rápido. Solo es una
 /// pantalla del frontend: lee lo mismo que Productos. Sirve para cualquier
@@ -197,6 +201,7 @@ const MODULOS: &[&str] = &[
     MODULO_VENTA_SIN_CONEXION,
     MODULO_COMPROBANTE_CLASICO,
     MODULO_LOGO_TICKET,
+    MODULO_IMPRESION_DIRECTA,
     MODULO_CATALOGO,
     MODULO_VEHICULOS,
     MODULO_ORDENES_SERVICIO,

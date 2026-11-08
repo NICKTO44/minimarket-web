@@ -87,6 +87,7 @@ import {
   MODULO_VENTA_SIN_CONEXION,
   MODULO_COMPROBANTE_CLASICO,
   MODULO_LOGO_TICKET,
+  MODULO_IMPRESION_DIRECTA,
   MODULO_CATALOGO,
   MODULO_VEHICULOS,
   MODULO_ORDENES_SERVICIO,
@@ -693,6 +694,7 @@ function App() {
               compatibilidad={negocio.modulos.includes(MODULO_COMPATIBILIDAD)}
               tresPrecios={negocio.modulos.includes(MODULO_TRES_PRECIOS)}
               ventaTabla={negocio.modulos.includes(MODULO_VENTA_TABLA)}
+              impresionDirecta={negocio.modulos.includes(MODULO_IMPRESION_DIRECTA)}
               fichaLibro={negocio.modulos.includes(MODULO_FICHA_LIBRO)}
               equivalentes={negocio.modulos.includes(MODULO_EQUIVALENTES)}
               fueraInventario={negocio.modulos.includes(MODULO_VENTA_FUERA_INVENTARIO)}

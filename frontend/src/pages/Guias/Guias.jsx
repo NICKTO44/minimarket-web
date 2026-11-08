@@ -409,7 +409,7 @@ export default function Guias({ esAdmin, nombreTienda, direccion, telefono, ruc 
       {mensaje && <p className={`pm-mensaje pm-mensaje-${mensaje.tipo}`}>{mensaje.texto}</p>}
       {config && !config.facturacion_lista && (
         <p className="pm-mensaje pm-mensaje-aviso">
-          Para emitir guías primero configura FacturaLibre (Token y URL) en Configuración → Datos del negocio.
+          Para emitir guías primero hay que activar la facturación electrónica de tu negocio (directo a SUNAT). Escríbenos y la dejamos lista.
         </p>
       )}
       {faltaLocal && (

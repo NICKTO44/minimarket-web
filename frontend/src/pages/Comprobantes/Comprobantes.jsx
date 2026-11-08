@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { api, API_URL } from '../../api/api';
-import { datosA4DeDocumento, datosA4DeNotaVenta, imprimirComprobanteA4 } from '../../utils/facturaA4';
+import { datosA4DeDocumento, datosA4DeNotaVenta, htmlComprobanteA4, imprimirComprobanteA4 } from '../../utils/facturaA4';
+import VistaComprobanteHtml from '../../components/VistaComprobanteHtml';
 import Recibo from '../../components/Recibo';
 import FormularioNotaCredito from '../../components/FormularioNotaCredito';
 import FormularioAnulacion from '../../components/FormularioAnulacion';
@@ -48,6 +49,9 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
 
   // --- Visor de PDF embebido (reemplaza al iframe) ---
   const [pdfVisible, setPdfVisible] = useState(null);
+  // "Ver" de una factura en hoja A4 propia: { html, titulo }.
+  const [vistaA4, setVistaA4] = useState(null);
+  const cerrarVistaA4 = useCallback(() => setVistaA4(null), []);
   const [enviandoWhatsapp, setEnviandoWhatsapp] = useState(null);
   const [telefonoWhatsapp, setTelefonoWhatsapp] = useState('');
   const [pdfPaginas, setPdfPaginas] = useState([]);
@@ -316,19 +320,23 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
 
   // Nuestro A4, armado con el documento que se envió a SUNAT.
   // papel: 'A4' o 'A5' (media hoja, módulo "Venta en tabla").
+  // Datos de esa hoja (los usan Imprimir y Ver).
+  const datosA4Propio = async (comp) => {
+    const documento = await api.comprobanteDocumento(comp.id);
+    return datosA4DeDocumento(documento, {
+      hash: comp.hash,
+      pago: await pagoDeVenta(comp.folio_venta),
+      telefono: cfgEmisor?.telefono || telefono,
+      email: cfgEmisor?.email,
+      logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,
+      color: cfgEmisor?.color_acento,
+      ...(codigoEnA4 ? { columnasRepuesto: true, codigos: await codigosDeVenta(comp.folio_venta) } : {}),
+      ...(await datosClasicos(comp.folio_venta)),
+    });
+  };
   const imprimirA4Propio = async (comp, papel = 'A4') => {
     try {
-      const documento = await api.comprobanteDocumento(comp.id);
-      const datos = await datosA4DeDocumento(documento, {
-        hash: comp.hash,
-        pago: await pagoDeVenta(comp.folio_venta),
-        telefono: cfgEmisor?.telefono || telefono,
-        email: cfgEmisor?.email,
-        logo: cfgEmisor?.logo_path ? `${API_URL}${cfgEmisor.logo_path}` : null,
-        color: cfgEmisor?.color_acento,
-        ...(codigoEnA4 ? { columnasRepuesto: true, codigos: await codigosDeVenta(comp.folio_venta) } : {}),
-        ...(await datosClasicos(comp.folio_venta)),
-      });
+      const datos = await datosA4Propio(comp);
       imprimirComprobanteA4(datos, { papel });
     } catch (e) {
       setMensaje({ tipo: 'error', texto: `No se pudo preparar la hoja A4: ${e.message}` });
@@ -369,13 +377,38 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   };
   const notaConA4 = (comp) => codigoEnA4 && comp.tipo === 'NINGUNO';
 
+  // PDF oficial de un comprobante antiguo de FacturaLibre. FacturaLibre ya
+  // no se usa (08-nov-2026) y a veces ya no lo entrega: entonces null, y se
+  // usa nuestro ticket en su lugar.
+  const pdfDeFacturaLibre = async (comp) => {
+    try {
+      const respuesta = await fetch(api.comprobantePdfUrl(comp.id));
+      return respuesta.ok ? await respuesta.blob() : null;
+    } catch {
+      return null;
+    }
+  };
+  // Muestra un PDF (Blob) en el visor de esta pantalla.
+  const mostrarPdf = (contenido, nombre) => {
+    const archivo = new File([contenido], nombre, { type: 'application/pdf' });
+    const url = URL.createObjectURL(archivo);
+    setPdfArchivo({ archivo, url });
+    setPdfVisible(url);
+  };
+
   // El PDF oficial en A4, incrustado en el modal (renderizado con pdf.js).
-  const verA4 = (comp) =>
-    notaConA4(comp)
-      ? imprimirNotaA4(comp)
-      : comp.enlace_pdf
-        ? setPdfVisible(api.comprobantePdfUrl(comp.id))
-        : imprimirA4Propio(comp);
+  // Si FacturaLibre ya no lo entrega, sale nuestro ticket.
+  const verA4 = async (comp) => {
+    if (notaConA4(comp)) return imprimirNotaA4(comp);
+    if (!comp.enlace_pdf) return imprimirA4Propio(comp);
+    const pdf = await pdfDeFacturaLibre(comp);
+    if (pdf) {
+      mostrarPdf(pdf, `Factura-${comp.serie}-${String(comp.numero).padStart(6, '0')}.pdf`);
+    } else {
+      setMensaje({ tipo: 'aviso', texto: 'El PDF de FacturaLibre ya no está disponible: se imprime el ticket.' });
+      imprimirTicket(comp);
+    }
+  };
 
   const reimprimir = (evento, comp) => {
     setMensaje(null);
@@ -407,6 +440,56 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     imprimirTicket(comp);
   };
 
+  // PDF de nuestro ticket de 80 mm (lo usan Descargar y Ver).
+  const pdfDelTicket = async (comp) => {
+    const datos = await datosDelTicket(comp, { conCodigos: codigoEnA4 });
+    return pdfDeVenta({
+      ...datos,
+      // La fila ya trae al cliente: va en el PDF aunque la venta no lo detalle.
+      cliente:
+        datos.cliente ||
+        (comp.cliente_nombre ? { nombre_razon_social: comp.cliente_nombre, numero_documento: comp.cliente_documento || null } : null),
+      nombreTienda,
+      direccion,
+      telefono,
+      ruc,
+      cajero: usuario?.nombre || '',
+      etiquetaCajero: etiquetaRol(usuario),
+      logoImagen: await logoParaPdf(logoNegocio),
+    });
+  };
+
+  // "Ver": abre el comprobante en pantalla, sin imprimir ni descargar.
+  // La factura en hoja A4 (el PDF de FacturaLibre o nuestra hoja); la
+  // boleta, la nota de venta y lo demás, en ticket de 80 mm.
+  const verComprobante = async (comp) => {
+    if (exportando) return;
+    setMensaje(null);
+    setExportando(claveFila(comp));
+    try {
+      if (comp.tipo === 'FACTURA' && facturaConA4(comp)) {
+        if (comp.enlace_pdf) {
+          // Factura antigua de FacturaLibre: su PDF, o nuestro ticket si ya no carga.
+          const pdf = await pdfDeFacturaLibre(comp);
+          if (pdf) {
+            mostrarPdf(pdf, `Factura-${comp.serie}-${String(comp.numero).padStart(6, '0')}.pdf`);
+            return;
+          }
+        } else {
+          const datos = await datosA4Propio(comp);
+          setVistaA4({ html: htmlComprobanteA4({ ...datos, papel: 'A4' }), titulo: `Factura ${comp.serie}-${String(comp.numero).padStart(6, '0')}` });
+          return;
+        }
+      }
+      const { bytes, nombre } = await pdfDelTicket(comp);
+      mostrarPdf(bytes, nombre);
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: `No se pudo abrir el comprobante: ${e.message}` });
+    } finally {
+      setExportando(null);
+    }
+  };
+
   // Descarga el comprobante como archivo PDF: el mismo documento que sale
   // con "Imprimir". La factura aceptada baja su PDF oficial de FacturaLibre;
   // la boleta y la nota simple, nuestro ticket.
@@ -417,26 +500,14 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     setExportando(claveFila(comp));
     try {
       if (facturaConA4(comp) && comp.enlace_pdf && !enTicket) {
-        const respuesta = await fetch(api.comprobantePdfUrl(comp.id));
-        if (!respuesta.ok) throw new Error('No se pudo descargar el PDF de la factura. Intenta de nuevo en un momento.');
-        entregarPdf(await respuesta.blob(), `Factura-${comp.serie}-${String(comp.numero).padStart(6, '0')}.pdf`);
-        return;
+        // Factura antigua de FacturaLibre: si su PDF ya no carga, baja nuestro ticket.
+        const pdf = await pdfDeFacturaLibre(comp);
+        if (pdf) {
+          entregarPdf(pdf, `Factura-${comp.serie}-${String(comp.numero).padStart(6, '0')}.pdf`);
+          return;
+        }
       }
-      const datos = await datosDelTicket(comp, { conCodigos: codigoEnA4 });
-      const { bytes, nombre } = pdfDeVenta({
-        ...datos,
-        // La fila ya trae al cliente: va en el PDF aunque la venta no lo detalle.
-        cliente:
-          datos.cliente ||
-          (comp.cliente_nombre ? { nombre_razon_social: comp.cliente_nombre, numero_documento: comp.cliente_documento || null } : null),
-        nombreTienda,
-        direccion,
-        telefono,
-        ruc,
-        cajero: usuario?.nombre || '',
-        etiquetaCajero: etiquetaRol(usuario),
-        logoImagen: await logoParaPdf(logoNegocio),
-      });
+      const { bytes, nombre } = await pdfDelTicket(comp);
       entregarPdf(bytes, nombre);
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message });
@@ -707,6 +778,14 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                   <td>{fechaHoraLima(c.fecha_emision)}</td>
                   <td>
                     <button
+                      className="comp-boton-imprimir comp-boton-ver"
+                      onClick={() => verComprobante(c)}
+                      disabled={exportando === claveFila(c)}
+                      aria-label={`Ver ${c.tipo === 'NINGUNO' ? `la venta ${c.folio_venta}` : `${nombreTipo(c)} ${c.serie}-${c.numero}`}`}
+                    >
+                      👁 Ver
+                    </button>
+                    <button
                       className="comp-boton-imprimir"
                       onClick={(e) => reimprimir(e, c)}
                       aria-haspopup={facturaConA4(c) ? 'menu' : undefined}
@@ -895,6 +974,8 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
           </div>
         </div>
       )}
+
+      {vistaA4 && <VistaComprobanteHtml html={vistaA4.html} titulo={vistaA4.titulo} onCerrar={cerrarVistaA4} />}
 
       {ventaParaImprimir && (
         <Recibo

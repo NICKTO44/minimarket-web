@@ -50,6 +50,8 @@ export const MODULO_VENTA_SIN_CONEXION = 'VENTA_SIN_CONEXION';
 export const MODULO_COMPROBANTE_CLASICO = 'COMPROBANTE_CLASICO';
 // Logo del negocio arriba del ticket de 80/58 mm (boleta, factura y nota de venta).
 export const MODULO_LOGO_TICKET = 'LOGO_TICKET';
+// Al cobrar se imprime solo: boleta y nota de venta en ticket, factura en A4.
+export const MODULO_IMPRESION_DIRECTA = 'IMPRESION_DIRECTA';
 // Catálogo: los productos en tarjetas con foto, solo para mirar (vendedores).
 export const MODULO_CATALOGO = 'CATALOGO';
 // Lubricentro: vehículos de los clientes, placa y kilometraje en la venta.
@@ -94,7 +96,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_CATALOGO];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -131,7 +133,7 @@ export const MODULOS = [
   {
     valor: MODULO_GUIAS,
     label: 'Guías de remisión',
-    descripcion: 'Emite la guía de remisión electrónica para trasladar lo vendido (requiere FacturaLibre configurado).',
+    descripcion: 'Emite la guía de remisión electrónica para trasladar lo vendido (requiere la facturación electrónica activa).',
   },
   {
     valor: MODULO_VARIANTES,
@@ -240,6 +242,12 @@ export const MODULOS = [
     label: 'Comprobante formato clásico',
     descripcion:
       'Cambia cómo se imprimen tus boletas, facturas y notas (hoja A4, A5 y ticket): los datos del cliente van en un recuadro (R.U.C. o DNI, señores, vendedor, dirección y teléfono), sin la hora, y el pago solo con su medio ("Efectivo", "Yape / Plin"), sin montos. Lo que se envía a SUNAT no cambia.',
+  },
+  {
+    valor: MODULO_IMPRESION_DIRECTA,
+    label: 'Impresión directa',
+    descripcion:
+      'Al cobrar, el comprobante se imprime solo, sin preguntar el formato: la boleta y la nota de venta en ticket de 80 mm (o 58 mm) y la factura en hoja A4. Si SUNAT todavía no responde, la factura sale en ticket para no hacer esperar al cliente. No aplica si tu negocio imprime también en hoja A5 (Venta en tabla): ahí siempre se pregunta el formato.',
   },
   {
     valor: MODULO_LOGO_TICKET,

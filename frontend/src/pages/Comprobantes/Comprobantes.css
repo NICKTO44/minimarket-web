@@ -459,6 +459,14 @@
   background: #0f7b37;
 }
 /* Descargar el comprobante como PDF */
+.comp-boton-ver {
+  margin-right: 6px;
+}
+.comp-boton-ver:disabled {
+  color: #9ca3af;
+  cursor: wait;
+}
+
 .comp-boton-pdf {
   margin-left: 6px;
 }

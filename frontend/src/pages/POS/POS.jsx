@@ -342,6 +342,9 @@ export default function POS({
   // Módulo "Venta en tabla" (Lubricentro): buscador con lista y la venta
   // como tabla en vez de tarjetas. Apagado, el punto de venta es el de siempre.
   ventaTabla = false,
+  // Módulo "Impresión directa": al cobrar se imprime solo, sin preguntar el
+  // formato (boleta y nota de venta en ticket, factura en A4).
+  impresionDirecta = false,
   // Librería: buscar por autor, editorial o serie y filtrar por editorial.
   fichaLibro = false,
   // Repuestos: equivalentes elegidos por el dueño. Salen debajo de cada
@@ -587,6 +590,8 @@ export default function POS({
   const [avisoStock, setAvisoStock] = useState(null);
   const ultimaRecarga = useRef(0);
   const [ultimaVentaParaImprimir, setUltimaVentaParaImprimir] = useState(null);
+  // Impresión directa: folio de la venta que falta imprimir sola (o null).
+  const imprimirAlCobrar = useRef(null);
   const [mostrarModalVenta, setMostrarModalVenta] = useState(false);
   const [telefonoWhatsapp, setTelefonoWhatsapp] = useState('');
   // Venta sin conexión: el número del cliente quedó guardado con la venta.
@@ -1744,7 +1749,7 @@ export default function POS({
     if (tipoComprobante !== 'NINGUNO' && !facturacionConfigurada) {
       setMensaje({
         tipo: 'error',
-        texto: 'Falta configurar el Token y la URL de FacturaLibre en Configuración antes de emitir Boleta o Factura. Cambia a "Nota simple" para continuar con esta venta, o completa la configuración primero.',
+        texto: 'Este negocio todavía no tiene activada la facturación electrónica, así que no puede emitir Boleta ni Factura. Cambia a "Nota simple" para continuar con esta venta.',
       });
       return; // no se crea la venta -- el carrito queda intacto
     }
@@ -1955,6 +1960,9 @@ export default function POS({
       // El pedido quedó cobrado y su mesa libre.
       if (cobrandoPedido) onPedidoCobrado?.();
 
+      // Impresión directa: esta venta se imprime sola apenas esté lista.
+      // Con hoja A5 ("Venta en tabla") nunca: ahí siempre se pregunta el formato.
+      imprimirAlCobrar.current = impresionDirecta && !ventaTabla ? resultado.folio : null;
       setUltimaVentaParaImprimir(datosVenta);
       setMostrarModalVenta(true);
       setCarritoAbierto(false);
@@ -2103,6 +2111,23 @@ export default function POS({
       imprimirTicket();
     }
   };
+
+  // Módulo "Impresión directa": la venta recién cobrada se imprime sola,
+  // sin preguntar el formato. Nota de venta: ticket enseguida. Boleta:
+  // ticket apenas llega su número de SUNAT (lleva el QR). Factura: hoja A4 si
+  // SUNAT ya la aceptó; si no, ticket. Si el comprobante falló no se imprime
+  // nada (ya sale el aviso del error). Una sola vez por venta. Si el negocio
+  // imprime también en hoja A5 ("Venta en tabla"), no aplica: siempre pregunta.
+  useEffect(() => {
+    const v = ultimaVentaParaImprimir;
+    if (!v || imprimirAlCobrar.current !== v.venta.folio || v.comprobantePendiente) return;
+    imprimirAlCobrar.current = null;
+    if (v.errorComprobante) return;
+    const esFactura = (v.comprobante?.tipo || v.tipoComprobante) === 'FACTURA';
+    // Un momento para que el ticket (y su logo) quede dibujado.
+    setTimeout(() => imprimirComprobante(esFactura && facturaConA4 ? 'A4' : 'TICKET'), 300);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ultimaVentaParaImprimir]);
 
   // Renderiza cada página del PDF como imagen dentro del modal — igual
   // que en Comprobantes.jsx. No depende del visor nativo del navegador,

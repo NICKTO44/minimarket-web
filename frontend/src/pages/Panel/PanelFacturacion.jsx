@@ -155,7 +155,7 @@ function Modo({ detalle, negocio, listo, dadoDeAlta, onCambio }) {
           {directo
             ? `Directo a SUNAT por tu Lycet${detalle.alta?.ambiente === 'BETA' ? ' · ambiente BETA (pruebas, sin valor legal)' : detalle.alta?.ambiente === 'PRODUCCION' ? ' · producción' : ''}.`
             : detalle.modo === 'FACTURALIBRE'
-              ? 'Por FacturaLibre (con su token y ruta).'
+              ? 'Todavía emite por FacturaLibre, que ya no se usa: pásalo a emisión directa.'
               : 'Todavía no puede emitir boletas ni facturas.'}
         </p>
         {emitidos.length > 0 && (
@@ -165,22 +165,18 @@ function Modo({ detalle, negocio, listo, dadoDeAlta, onCambio }) {
         )}
         {aviso && <p className="pnl-error">{aviso}</p>}
       </div>
-      <div className="pnl-segmentos" role="radiogroup" aria-label="Modo de emisión">
-        <button type="button" role="radio" aria-checked={!directo} className={!directo ? 'activo' : ''} disabled={ocupado} onClick={() => cambiar('FACTURALIBRE')}>
-          FacturaLibre
-        </button>
+      {/* FacturaLibre ya no se usa (08-nov-2026): solo queda la emisión directa. */}
+      {!directo && (
         <button
           type="button"
-          role="radio"
-          aria-checked={directo}
-          className={directo ? 'activo pnl-seg-activo' : ''}
-          disabled={ocupado || (!directo && !listo)}
+          className="pnl-boton pnl-boton-principal"
+          disabled={ocupado || !listo}
           title={!listo ? 'Primero completa los datos del emisor' : undefined}
           onClick={() => cambiar('DIRECTO')}
         >
-          Directo a SUNAT
+          Activar emisión directa a SUNAT
         </button>
-      </div>
+      )}
     </div>
   );
 }
