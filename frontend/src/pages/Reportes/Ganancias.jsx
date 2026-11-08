@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/api';
 import { hoyLima } from '../../utils/formato';
+import InventarioInvertido from './InventarioInvertido';
 import './Ganancias.css';
 
 // Reporte de ganancias (módulo GANANCIAS, solo administrador).
@@ -279,6 +280,8 @@ export default function Ganancias({ onVerSinPrecio }) {
           )}
         </ul>
       )}
+
+      <InventarioInvertido onVerSinPrecio={onVerSinPrecio} />
 
       <div className="rep-seccion">
         <div className="gan-cabecera">

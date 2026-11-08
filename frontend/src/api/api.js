@@ -525,6 +525,8 @@ export const api = {
   reportesGanancias: (mes) => request(`/reportes/ganancias${mes ? `?mes=${mes}` : ''}`),
   // Costo promedio de cada producto: [{ producto_id, costo_promedio }]
   gananciasCostos: () => request('/ganancias/costos'),
+  // Dinero invertido en mercadería ahora mismo (stock × costo).
+  gananciasInventario: () => request('/ganancias/inventario'),
   // Tecnología: órdenes de reparación (módulo REPARACIONES). Adelantos,
   // cancelar y foto usan las rutas de encargos (son encargos por dentro).
   reparaciones: (estado = 'ACTIVOS', buscar = '') =>
