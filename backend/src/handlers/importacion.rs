@@ -78,8 +78,11 @@ pub struct Importacion {
     /// true = solo decir cómo quedaría (vista previa); no guarda nada.
     #[serde(default)]
     pub solo_revisar: bool,
-    /// Qué hacer con los códigos que ya existen: "SALTAR" (por defecto) o
-    /// "ACTUALIZAR" (su precio y, si el archivo lo trae, su stock o sus lotes).
+    /// Qué hacer con los códigos que ya existen: "SALTAR" (por defecto),
+    /// "ACTUALIZAR" (su precio y, si el archivo lo trae, su stock o sus lotes)
+    /// o "ACTUALIZAR_TODO" (lo mismo, más nombre, descripción, categoría,
+    /// unidad y stock mínimo: lo que traiga el archivo; una celda vacía o una
+    /// columna que no se eligió no borra lo que el producto ya tenía).
     pub existentes: Option<String>,
     /// Categoría para las filas que no traen una.
     pub categoria_defecto: Option<String>,
@@ -268,6 +271,68 @@ pub fn fecha_de_archivo(texto: &str) -> Option<NaiveDate> {
 
 fn dia_mes_anio(fecha: &str) -> String {
     NaiveDate::parse_from_str(fecha, "%Y-%m-%d").map(|f| f.format("%d/%m/%Y").to_string()).unwrap_or_else(|_| fecha.to_string())
+}
+
+/// "Actualizar todo": lo que el archivo trae de un producto que ya existe,
+/// además de precio y stock. `None` = no vino, se deja como estaba.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CambiosTexto {
+    pub id: i64,
+    pub nombre: String,
+    pub descripcion: Option<String>,
+    pub categoria_id: Option<i64>,
+    pub unidad: Option<String>,
+    pub stock_minimo: Option<f64>,
+}
+
+/// Un solo UPDATE para una tanda: cada columna con `CASE id WHEN ? THEN ?
+/// ... ELSE columna END`, así lo que no vino queda igual. Los ids son
+/// números del propio sistema; los textos van como parámetros.
+pub fn sql_actualizar_textos(tanda: &[CambiosTexto]) -> (String, Vec<libsql::Value>) {
+    let mut valores: Vec<libsql::Value> = Vec::new();
+    let mut columnas: Vec<String> = Vec::new();
+    let mut columna = |nombre: &str, pares: Vec<(i64, libsql::Value)>, valores: &mut Vec<libsql::Value>| {
+        if pares.is_empty() {
+            return;
+        }
+        let mut casos = String::new();
+        for (id, valor) in pares {
+            valores.push(libsql::Value::Integer(id));
+            valores.push(valor);
+            casos.push_str(&format!(" WHEN ?{} THEN ?{}", valores.len() - 1, valores.len()));
+        }
+        columnas.push(format!("{0} = CASE id{1} ELSE {0} END", nombre, casos));
+    };
+    columna("nombre", tanda.iter().map(|c| (c.id, libsql::Value::Text(c.nombre.clone()))).collect(), &mut valores);
+    columna(
+        "descripcion",
+        tanda.iter().filter_map(|c| c.descripcion.clone().map(|d| (c.id, libsql::Value::Text(d)))).collect(),
+        &mut valores,
+    );
+    columna(
+        "categoria_id",
+        tanda.iter().filter_map(|c| c.categoria_id.map(|id| (c.id, libsql::Value::Integer(id)))).collect(),
+        &mut valores,
+    );
+    columna(
+        "unidad_medida",
+        tanda.iter().filter_map(|c| c.unidad.clone().map(|u| (c.id, libsql::Value::Text(u)))).collect(),
+        &mut valores,
+    );
+    columna(
+        "stock_minimo",
+        tanda.iter().filter_map(|c| c.stock_minimo.map(|m| (c.id, libsql::Value::Real(m)))).collect(),
+        &mut valores,
+    );
+    let ids = tanda.iter().map(|c| c.id.to_string()).collect::<Vec<_>>().join(",");
+    (
+        format!(
+            "UPDATE productos SET {}, fecha_actualizacion = datetime('now','localtime') WHERE id IN ({})",
+            columnas.join(", "),
+            ids
+        ),
+        valores,
+    )
 }
 
 /// Revisa todas las filas sin tocar la base.
@@ -653,9 +718,10 @@ pub async fn importar_productos(
             MAXIMO_FILAS
         )));
     }
-    let actualizar = match payload.existentes.as_deref().unwrap_or("SALTAR") {
-        "SALTAR" => false,
-        "ACTUALIZAR" => true,
+    let (actualizar, actualizar_todo) = match payload.existentes.as_deref().unwrap_or("SALTAR") {
+        "SALTAR" => (false, false),
+        "ACTUALIZAR" => (true, false),
+        "ACTUALIZAR_TODO" => (true, true),
         _ => return Err(malo("Opción no válida para los productos que ya existen.")),
     };
     let categoria_defecto = payload.categoria_defecto.as_deref().map(limpio).filter(|c| !c.is_empty()).unwrap_or_else(|| "General".to_string());
@@ -768,8 +834,18 @@ pub async fn importar_productos(
             _ => false,
         })
         .collect();
+    // "Actualizar todo": cada fila existente con su fila del archivo (revisar
+    // devuelve una revisada por fila, en el mismo orden).
+    let a_actualizar_todo: Vec<(&Revisada, &FilaImportada)> = if actualizar_todo {
+        revisadas.iter().zip(payload.filas.iter()).filter(|(r, _)| r.estado == "EXISTE" && r.padre.is_none()).collect()
+    } else {
+        Vec::new()
+    };
+    // Categorías que el archivo pide de verdad (no la de por defecto).
+    let pide_categoria = |f: &FilaImportada| f.categoria.as_deref().is_some_and(|c| !c.trim().is_empty());
     let mut categorias_nuevas: Vec<String> = Vec::new();
-    for r in nuevos.iter().filter(|r| r.categoria_nueva) {
+    let categorias_de_actualizar = a_actualizar_todo.iter().filter(|(r, f)| r.categoria_nueva && pide_categoria(f)).map(|(r, _)| *r);
+    for r in nuevos.iter().copied().filter(|r| r.categoria_nueva).chain(categorias_de_actualizar) {
         if !categorias_nuevas.iter().any(|c| clave(c) == clave(&r.categoria)) {
             categorias_nuevas.push(r.categoria.clone());
         }
@@ -826,6 +902,8 @@ pub async fn importar_productos(
         }
         let a_reactivar: Vec<i64> = nuevos
             .iter()
+            .copied()
+            .chain(a_actualizar_todo.iter().filter(|(_, f)| pide_categoria(f)).map(|(r, _)| *r))
             .filter_map(|r| categorias_db.get(&clave(&r.categoria)))
             .filter(|c| !c.2)
             .map(|c| c.0)
@@ -901,6 +979,35 @@ pub async fn importar_productos(
             }
             if !sentencias.is_empty() {
                 tx.execute_batch(&sentencias).await.map_err(|e| format!("no se pudieron actualizar los productos: {}", e))?;
+            }
+        }
+
+        // 3b. "Actualizar todo": nombre, descripción, categoría, unidad y stock
+        //     mínimo de los que ya existían, solo lo que trae el archivo. Con
+        //     parámetros (los nombres pueden traer comillas) y por tandas.
+        if !a_actualizar_todo.is_empty() {
+            let mut cambios: Vec<CambiosTexto> = Vec::with_capacity(a_actualizar_todo.len());
+            for (r, f) in &a_actualizar_todo {
+                let Some(e) = r.existente else { continue };
+                let categoria_id = if pide_categoria(f) {
+                    Some(*id_categoria.get(&clave(&r.categoria)).ok_or_else(|| format!("no se encontró la categoría \"{}\"", r.categoria))?)
+                } else {
+                    None
+                };
+                cambios.push(CambiosTexto {
+                    id: e.id,
+                    nombre: r.nombre.clone(),
+                    descripcion: r.descripcion.clone(),
+                    categoria_id,
+                    unidad: f.unidad.as_ref().map(|_| r.unidad.clone()),
+                    stock_minimo: f.stock_minimo.map(|_| r.stock_minimo),
+                });
+            }
+            for tanda in cambios.chunks(FILAS_POR_TANDA) {
+                let (sql, valores) = sql_actualizar_textos(tanda);
+                tx.execute(&sql, libsql::params_from_iter(valores))
+                    .await
+                    .map_err(|e| format!("no se pudieron actualizar los nombres y datos de los productos: {}", e))?;
             }
         }
 

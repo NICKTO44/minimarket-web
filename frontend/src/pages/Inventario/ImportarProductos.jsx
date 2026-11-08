@@ -155,7 +155,7 @@ export default function ImportarProductos({
     }
   };
 
-  const aImportar = revision ? revision.listos + (existentes === 'ACTUALIZAR' ? revision.existentes : 0) : 0;
+  const aImportar = revision ? revision.listos + (existentes !== 'SALTAR' ? revision.existentes : 0) : 0;
 
   const importar = async () => {
     if (ocupado || aImportar === 0) return;
@@ -522,8 +522,15 @@ export default function ImportarProductos({
                 <select value={existentes} onChange={(e) => setExistentes(e.target.value)}>
                   <option value="SALTAR">No tocarlos (saltar)</option>
                   <option value="ACTUALIZAR">{hayLotes ? 'Actualizar su precio, stock y lotes' : 'Actualizar su precio y stock'}</option>
+                  <option value="ACTUALIZAR_TODO">Actualizar todo lo que trae el Excel (nombre, descripción, categoría…)</option>
                 </select>
               </label>
+            )}
+            {revision.existentes > 0 && existentes === 'ACTUALIZAR_TODO' && (
+              <p className="imp-nota">
+                Se cambia el nombre, la descripción, la categoría, la unidad, el stock mínimo, el precio y el stock con lo que trae el
+                Excel. Una celda vacía no borra lo que el producto ya tiene. Los comprobantes ya emitidos no cambian.
+              </p>
             )}
 
             {error && <p className="inv-mensaje inv-mensaje-error">{error}</p>}
@@ -543,7 +550,7 @@ export default function ImportarProductos({
                   ? 'Importando…'
                   : aImportar === 0
                     ? 'No hay nada que importar'
-                    : existentes === 'ACTUALIZAR' && revision.existentes > 0
+                    : existentes !== 'SALTAR' && revision.existentes > 0
                       ? `Importar ${revision.listos.toLocaleString('es-PE')} y actualizar ${revision.existentes.toLocaleString('es-PE')}`
                       : `Importar ${plural(revision.listos, 'producto', 'productos')}`}
               </button>
