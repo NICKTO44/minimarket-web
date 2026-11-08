@@ -357,6 +357,9 @@ function App() {
   // nombre del negocio que inició sesión ("Bodega Juan · Monspeet POS"),
   // para que cada cliente vea su propio negocio en el navegador.
   const nombreNegocioTitulo = configuracionTienda?.nombre_tienda || tiendaRecordada?.nombre_negocio;
+  // En los comprobantes, el domicilio fiscal completo (con departamento,
+  // provincia y distrito de la emisión directa) si el negocio lo tiene.
+  const direccionFiscal = configuracionTienda?.direccion_completa || configuracionTienda?.direccion;
   useEffect(() => {
     document.title = logueado && nombreNegocioTitulo ? `${nombreNegocioTitulo} · Monspeet POS` : 'Monspeet POS';
   }, [logueado, nombreNegocioTitulo]);
@@ -674,7 +677,7 @@ function App() {
             <POS
               usuario={usuarioActual}
               nombreTienda={nombreTienda}
-              direccion={configuracionTienda?.direccion}
+              direccion={direccionFiscal}
               telefono={configuracionTienda?.telefono}
               ruc={configuracionTienda?.ruc}
               identificadorNegocio={tiendaRecordada?.identificador}
@@ -779,7 +782,7 @@ function App() {
         {pantallaVisible === 'COTIZACIONES' && (
           <Cotizaciones
             nombreTienda={nombreTienda}
-            direccion={configuracionTienda?.direccion}
+            direccion={direccionFiscal}
             telefono={configuracionTienda?.telefono}
             ruc={configuracionTienda?.ruc}
             onCargarEnVenta={(cotizacion) => {
@@ -797,7 +800,7 @@ function App() {
             esAdmin={conPermisosDeAdmin(usuarioActual)}
             conPaquetes={negocio.modulos.includes(MODULO_PAQUETES)}
             nombreTienda={nombreTienda}
-            direccion={configuracionTienda?.direccion}
+            direccion={direccionFiscal}
             telefono={configuracionTienda?.telefono}
             onCobrar={(orden) => {
               setPedidoACobrar(null);
@@ -816,7 +819,7 @@ function App() {
           <Encargos
             etiquetas={etiquetas}
             nombreTienda={nombreTienda}
-            direccion={configuracionTienda?.direccion}
+            direccion={direccionFiscal}
             telefono={configuracionTienda?.telefono}
             onEntregar={(encargo) => {
               setPedidoACobrar(null);
@@ -830,7 +833,7 @@ function App() {
         {pantallaVisible === 'REPARACIONES' && (
           <Reparaciones
             nombreTienda={nombreTienda}
-            direccion={configuracionTienda?.direccion}
+            direccion={direccionFiscal}
             telefono={configuracionTienda?.telefono}
             onEntregar={(orden) => {
               setPedidoACobrar(null);
@@ -845,7 +848,7 @@ function App() {
           <Creditos
             cierreMes={!!etiquetas.cierreMes}
             nombreTienda={nombreTienda}
-            direccion={configuracionTienda?.direccion}
+            direccion={direccionFiscal}
             telefono={configuracionTienda?.telefono}
             ruc={configuracionTienda?.ruc}
           />
@@ -854,7 +857,7 @@ function App() {
           <Guias
             esAdmin={conPermisosDeAdmin(usuarioActual)}
             nombreTienda={nombreTienda}
-            direccion={configuracionTienda?.direccion}
+            direccion={direccionFiscal}
             telefono={configuracionTienda?.telefono}
             ruc={configuracionTienda?.ruc}
           />
@@ -863,7 +866,7 @@ function App() {
           <Comprobantes
             usuario={usuarioActual}
             nombreTienda={nombreTienda}
-            direccion={configuracionTienda?.direccion}
+            direccion={direccionFiscal}
             telefono={configuracionTienda?.telefono}
             ruc={configuracionTienda?.ruc}
             identificadorNegocio={tiendaRecordada?.identificador}

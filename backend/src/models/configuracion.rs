@@ -31,6 +31,42 @@ pub struct ConfiguracionTienda {
     /// imprimir "Sucursal: ...". None = emite desde el domicilio fiscal.
     pub codigo_establecimiento: Option<String>,
     pub sucursal: Option<String>,
+    /// Domicilio fiscal completo para imprimir en los comprobantes:
+    /// "AV. ... URB. EL TREBOL - LIMA - HUARAL - HUARAL" (la calle más el
+    /// departamento, provincia y distrito de la emisión directa). None si
+    /// el negocio no tiene esos datos: se imprime `direccion` como siempre.
+    pub direccion_completa: Option<String>,
+}
+
+/// La dirección con "DEPARTAMENTO - PROVINCIA - DISTRITO" (como la Ficha
+/// RUC). None si falta alguno de los tres o si la dirección ya los trae.
+pub fn direccion_completa(direccion: &str, departamento: &str, provincia: &str, distrito: &str) -> Option<String> {
+    let (direccion, dep, prov, dist) = (direccion.trim(), departamento.trim(), provincia.trim(), distrito.trim());
+    if direccion.is_empty() || dep.is_empty() || prov.is_empty() || dist.is_empty() {
+        return None;
+    }
+    let mayus = direccion.to_uppercase();
+    if mayus.contains(&dep.to_uppercase()) && mayus.contains(&dist.to_uppercase()) {
+        return None;
+    }
+    Some(format!("{} - {} - {} - {}", direccion, dep.to_uppercase(), prov.to_uppercase(), dist.to_uppercase()))
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::direccion_completa;
+
+    #[test]
+    fn domicilio_fiscal_completo() {
+        assert_eq!(
+            direccion_completa("AV. LOS ALAMOS NRO. 120 URB. EL TREBOL", "LIMA", "HUARAL", "HUARAL").as_deref(),
+            Some("AV. LOS ALAMOS NRO. 120 URB. EL TREBOL - LIMA - HUARAL - HUARAL")
+        );
+        // Ya escrita completa, o sin los datos de la emisión: como siempre.
+        assert_eq!(direccion_completa("JR. X 1 - LIMA - HUARAL - HUARAL", "LIMA", "HUARAL", "HUARAL"), None);
+        assert_eq!(direccion_completa("JR. X 1", "", "", ""), None);
+        assert_eq!(direccion_completa("", "LIMA", "HUARAL", "HUARAL"), None);
+    }
 }
 
 #[derive(Debug, Deserialize)]

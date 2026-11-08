@@ -51,6 +51,7 @@ pub async fn obtener_configuracion(
             facturacion_proveedor: None,
             codigo_establecimiento: None,
             sucursal: None,
+            direccion_completa: None,
             };
             // Datos de la emisión directa (migración 0020). Aparte y sin
             // fallar: una base sin esas columnas devuelve lo de siempre.
@@ -61,6 +62,22 @@ pub async fn obtener_configuracion(
                 if let Ok(Some(f)) = filas.next().await {
                     config.razon_social = f.get::<String>(0).ok().filter(|s| !s.trim().is_empty());
                     config.facturacion_proveedor = f.get::<String>(1).ok();
+                }
+            }
+            // Domicilio fiscal completo (departamento, provincia y distrito de
+            // la emisión directa) para los comprobantes impresos, sin fallar.
+            if let Ok(mut filas) = conn
+                .query("SELECT departamento, provincia, distrito FROM configuracion_tienda LIMIT 1", ())
+                .await
+            {
+                if let Ok(Some(f)) = filas.next().await {
+                    let t = |i: i32| f.get::<String>(i).unwrap_or_default();
+                    config.direccion_completa = crate::models::configuracion::direccion_completa(
+                        config.direccion.as_deref().unwrap_or(""),
+                        &t(0),
+                        &t(1),
+                        &t(2),
+                    );
                 }
             }
             // Establecimiento anexo (migración 0062), también sin fallar.
