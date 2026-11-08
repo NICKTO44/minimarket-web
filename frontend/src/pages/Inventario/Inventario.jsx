@@ -11,6 +11,7 @@ import CategoriasIgv from './CategoriasIgv';
 import FormularioModelo, { ConvertirEnModelo } from './FormularioModelo';
 import ImportarProductos from './ImportarProductos';
 import ImportarPresentaciones from './ImportarPresentaciones';
+import CargarImagenes from './CargarImagenes';
 import { TIPO_XLSX, escribirXlsx } from '../../utils/hojas';
 import { descargarArchivo } from '../../utils/pdfTicket';
 import { fechaCorta, hoyLima } from '../../utils/formato';
@@ -254,6 +255,8 @@ export default function Inventario({
   const [importando, setImportando] = useState(false);
   // Módulo PRESENTACIONES: cargar six packs, cajas... desde un Excel.
   const [importandoPresentaciones, setImportandoPresentaciones] = useState(false);
+  // Cargar muchas fotos de una vez (nombradas con el código del producto).
+  const [cargandoImagenes, setCargandoImagenes] = useState(false);
   const [modelosAbiertos, setModelosAbiertos] = useState(() => new Set());
 
   const cargarTodo = () => {
@@ -1013,6 +1016,16 @@ export default function Inventario({
                   ⬆ Presentaciones
                 </button>
               )}
+              <button
+                className="inv-boton-categorias"
+                onClick={() => {
+                  setMensaje(null);
+                  setCargandoImagenes(true);
+                }}
+                disabled={productos.length === 0}
+              >
+                ⬆ Fotos
+              </button>
               <button className="inv-boton-categorias" onClick={fichaRepuesto ? exportarRepuestos : exportarProductos} disabled={productos.length === 0}>
                 ⬇ Exportar
               </button>
@@ -1230,6 +1243,23 @@ export default function Inventario({
             </tbody>
           </table>
         </div>
+      )}
+
+      {cargandoImagenes && (
+        <CargarImagenes
+          productos={productos}
+          onCerrar={() => setCargandoImagenes(false)}
+          onTerminado={(r) => {
+            setCargandoImagenes(false);
+            setMensaje({
+              tipo: r.errores > 0 ? 'error' : 'exito',
+              texto: `Fotos: ${r.subidas} subida${r.subidas === 1 ? '' : 's'}${r.errores > 0 ? `, ${r.errores} con error` : ''}${
+                r.detenido ? ' (se detuvo antes de terminar)' : ''
+              }.`,
+            });
+            cargarTodo();
+          }}
+        />
       )}
 
       {importandoPresentaciones && (
