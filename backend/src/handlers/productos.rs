@@ -295,6 +295,26 @@ pub async fn agregar_producto(
         };
         return Err((StatusCode::CONFLICT, mensaje));
     }
+    drop(r_codigo);
+    // Presentaciones (migración 0064): el código tampoco puede ser el de un
+    // six pack o una caja (al escanearlo no se sabría qué agregar).
+    if let Ok(mut r) = conn
+        .query(
+            "SELECT p.nombre, pp.nombre FROM producto_presentaciones pp JOIN productos p ON p.id = pp.producto_id
+             WHERE pp.activo = 1 AND p.activo = 1 AND lower(pp.codigo_barras) = lower(?1) LIMIT 1",
+            libsql::params![payload.codigo.clone()],
+        )
+        .await
+    {
+        if let Ok(Some(f)) = r.next().await {
+            let producto: String = f.get(0).unwrap_or_default();
+            let pres: String = f.get(1).unwrap_or_default();
+            return Err((
+                StatusCode::CONFLICT,
+                format!("El código {} ya es de \"{}\" de {}.", payload.codigo, pres, producto),
+            ));
+        }
+    }
 
     // Reporte de ganancias encendido: el precio de compra es obligatorio.
     let con_ganancias = ganancias::activo(&conn).await;

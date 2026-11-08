@@ -237,6 +237,7 @@ async fn main() {
         .route("/productos/stock-bajo", get(handlers::productos::productos_stock_bajo))
         // Presentaciones (rollo, caja...) y precio por mayor (handlers/presentaciones.rs).
         .route("/productos/opciones-venta", get(handlers::presentaciones::todas))
+        .route("/productos/presentaciones/importar", post(handlers::presentaciones::importar))
         .route("/medicamentos/fichas", get(handlers::medicamentos::todas))
         .route("/recetas", get(handlers::recetas::libro))
         // Lubricentro / Repuestos (handlers/repuestos.rs).

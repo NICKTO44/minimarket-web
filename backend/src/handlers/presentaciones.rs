@@ -44,6 +44,10 @@ pub struct Presentacion {
     pub factor: f64,
     /// Precio de la presentación entera.
     pub precio: f64,
+    /// Código de barras propio (el del six pack o la caja), opcional
+    /// (migración 0064). Al escanearlo entra esta presentación.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codigo_barras: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -97,6 +101,7 @@ pub fn validar(mut opciones: OpcionesVenta) -> Result<OpcionesVenta, String> {
         return Err(format!("Máximo {} precios por mayor por producto.", MAX_ESCALAS));
     }
     let mut nombres: Vec<String> = Vec::new();
+    let mut codigos: Vec<String> = Vec::new();
     for p in opciones.presentaciones.iter_mut() {
         p.nombre = p.nombre.split_whitespace().collect::<Vec<_>>().join(" ");
         if p.nombre.is_empty() {
@@ -120,6 +125,16 @@ pub fn validar(mut opciones: OpcionesVenta) -> Result<OpcionesVenta, String> {
         p.precio = (p.precio * 100.0).round() / 100.0;
         p.id = None;
         p.producto_id = None;
+        p.codigo_barras = p.codigo_barras.as_deref().map(str::trim).filter(|c| !c.is_empty()).map(str::to_string);
+        if let Some(c) = &p.codigo_barras {
+            if c.chars().count() > 40 || c.chars().any(char::is_whitespace) {
+                return Err(format!("\"{}\": el código de barras no es válido (sin espacios, máximo 40).", p.nombre));
+            }
+            if codigos.contains(&c.to_lowercase()) {
+                return Err(format!("El código de barras {} está repetido en dos presentaciones.", c));
+            }
+            codigos.push(c.to_lowercase());
+        }
     }
     let mut desdes: Vec<f64> = Vec::new();
     for m in opciones.precios_mayor.iter_mut() {
@@ -148,18 +163,20 @@ async fn leer(conn: &libsql::Connection, solo_producto: Option<i64>) -> Opciones
     let producto = solo_producto.unwrap_or(0);
     let params = || libsql::params![producto];
     // Sin la migración 0030 estas consultas fallan: listas vacías, como antes.
-    if let Ok(mut filas) = conn
-        .query(
-            &format!(
-                "SELECT pp.id, pp.producto_id, pp.nombre, CAST(pp.factor AS REAL), CAST(pp.precio AS REAL)
-                 FROM producto_presentaciones pp JOIN productos p ON p.id = pp.producto_id
-                 WHERE pp.activo = 1 AND p.activo = 1 {} ORDER BY pp.producto_id, pp.orden, pp.id",
-                filtro
-            ),
-            params(),
+    // Con el código de barras (migración 0064); sin ella, como antes.
+    let consulta = |codigo: &str| {
+        format!(
+            "SELECT pp.id, pp.producto_id, pp.nombre, CAST(pp.factor AS REAL), CAST(pp.precio AS REAL), {}
+             FROM producto_presentaciones pp JOIN productos p ON p.id = pp.producto_id
+             WHERE pp.activo = 1 AND p.activo = 1 {} ORDER BY pp.producto_id, pp.orden, pp.id",
+            codigo, filtro
         )
-        .await
-    {
+    };
+    let filas = match conn.query(&consulta("pp.codigo_barras"), params()).await {
+        Ok(f) => Ok(f),
+        Err(_) => conn.query(&consulta("NULL"), params()).await,
+    };
+    if let Ok(mut filas) = filas {
         while let Ok(Some(f)) = filas.next().await {
             opciones.presentaciones.push(Presentacion {
                 id: f.get(0).ok(),
@@ -167,6 +184,7 @@ async fn leer(conn: &libsql::Connection, solo_producto: Option<i64>) -> Opciones
                 nombre: f.get(2).unwrap_or_default(),
                 factor: f.get(3).unwrap_or(1.0),
                 precio: f.get(4).unwrap_or(0.0),
+                codigo_barras: f.get::<String>(5).ok(),
             });
         }
     }
@@ -216,6 +234,39 @@ pub async fn del_producto(
     Ok(Json(opciones))
 }
 
+/// Un código de barras de presentación no puede ser el código de un
+/// producto ni el de una presentación de OTRO producto (al escanearlo no se
+/// sabría qué agregar). `producto_id`: el producto al que pertenecen.
+pub async fn revisar_codigos(conn: &libsql::Connection, producto_id: i64, presentaciones: &[Presentacion]) -> Result<(), Fallo> {
+    for p in presentaciones {
+        let Some(codigo) = &p.codigo_barras else { continue };
+        let mut filas = conn
+            .query("SELECT nombre FROM productos WHERE lower(codigo) = lower(?1) LIMIT 1", libsql::params![codigo.clone()])
+            .await
+            .map_err(e500)?;
+        if let Some(f) = filas.next().await.map_err(e500)? {
+            let nombre: String = f.get(0).unwrap_or_default();
+            return Err(malo(format!("El código {} ya es el código del producto \"{}\".", codigo, nombre)));
+        }
+        drop(filas);
+        if let Ok(mut filas) = conn
+            .query(
+                "SELECT p.nombre, pp.nombre FROM producto_presentaciones pp JOIN productos p ON p.id = pp.producto_id
+                 WHERE pp.activo = 1 AND p.activo = 1 AND pp.producto_id <> ?1 AND lower(pp.codigo_barras) = lower(?2) LIMIT 1",
+                libsql::params![producto_id, codigo.clone()],
+            )
+            .await
+        {
+            if let Ok(Some(f)) = filas.next().await {
+                let producto: String = f.get(0).unwrap_or_default();
+                let pres: String = f.get(1).unwrap_or_default();
+                return Err(malo(format!("El código {} ya es de \"{}\" de {}.", codigo, pres, producto)));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// PUT /productos/:id/presentaciones — reemplaza las presentaciones y los
 /// precios por mayor del producto por los que manda el formulario.
 pub async fn guardar(
@@ -233,8 +284,11 @@ pub async fn guardar(
         return Err((StatusCode::NOT_FOUND, "El producto no existe.".into()));
     }
     drop(filas);
+    revisar_codigos(&conn, id, &opciones.presentaciones).await?;
     let sin_migracion = |e: libsql::Error| {
-        if e.to_string().contains("no such table") {
+        if e.to_string().contains("no such column") {
+            (StatusCode::SERVICE_UNAVAILABLE, "El código de barras de las presentaciones aún no está listo en este negocio (migración 0064). Intenta en unos minutos.".to_string())
+        } else if e.to_string().contains("no such table") {
             (StatusCode::SERVICE_UNAVAILABLE, "Las presentaciones aún no están listas en este negocio. Intenta en unos minutos.".to_string())
         } else {
             e500(e)
@@ -246,12 +300,24 @@ pub async fn guardar(
         .await
         .map_err(sin_migracion)?;
     for (orden, p) in opciones.presentaciones.iter().enumerate() {
-        conn.execute(
-            "INSERT INTO producto_presentaciones (producto_id, nombre, factor, precio, orden) VALUES (?1, ?2, ?3, ?4, ?5)",
-            libsql::params![id, p.nombre.clone(), p.factor, p.precio, orden as i64],
-        )
-        .await
-        .map_err(sin_migracion)?;
+        // Sin código, el INSERT de siempre (funciona aunque falte la 0064).
+        let r = match &p.codigo_barras {
+            None => {
+                conn.execute(
+                    "INSERT INTO producto_presentaciones (producto_id, nombre, factor, precio, orden) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    libsql::params![id, p.nombre.clone(), p.factor, p.precio, orden as i64],
+                )
+                .await
+            }
+            Some(codigo) => {
+                conn.execute(
+                    "INSERT INTO producto_presentaciones (producto_id, nombre, factor, precio, orden, codigo_barras) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    libsql::params![id, p.nombre.clone(), p.factor, p.precio, orden as i64, codigo.clone()],
+                )
+                .await
+            }
+        };
+        r        .map_err(sin_migracion)?;
     }
     conn.execute("DELETE FROM producto_precios_mayor WHERE producto_id = ?1", libsql::params![id])
         .await
@@ -265,6 +331,196 @@ pub async fn guardar(
         .map_err(sin_migracion)?;
     }
     del_producto(Extension(tenant), Path(id)).await
+}
+
+// ---------------------------------------------------------------------
+// Cargar presentaciones desde un Excel (pantalla Importar)
+// ---------------------------------------------------------------------
+
+/// Una fila del Excel de presentaciones, ya emparejada en el navegador.
+#[derive(Debug, Deserialize)]
+pub struct FilaPresentacion {
+    pub fila: i64,
+    /// Código del producto unidad al que pertenece (el que ya está en Productos).
+    #[serde(default)]
+    pub codigo_producto: String,
+    #[serde(default)]
+    pub nombre: String,
+    pub factor: Option<f64>,
+    pub precio: Option<f64>,
+    #[serde(default)]
+    pub codigo_barras: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImportarPresentaciones {
+    pub filas: Vec<FilaPresentacion>,
+    /// true: solo revisar (no guarda nada).
+    #[serde(default)]
+    pub solo_revisar: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FilaPresentacionRevisada {
+    pub fila: i64,
+    /// "NUEVA" | "ACTUALIZA" (ya había una con ese nombre) | "ERROR"
+    pub estado: &'static str,
+    pub motivo: Option<String>,
+    pub producto: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ResultadoPresentaciones {
+    pub nuevas: usize,
+    pub actualizadas: usize,
+    pub errores: usize,
+    pub guardado: bool,
+    pub filas: Vec<FilaPresentacionRevisada>,
+}
+
+const MAX_FILAS_PRESENTACIONES: usize = 2000;
+
+/// POST /productos/presentaciones/importar — agrega (o actualiza por nombre)
+/// las presentaciones de cada producto, sin tocar las demás que ya tenga ni
+/// sus precios por mayor. Solo el administrador y con el módulo encendido.
+/// Las filas con error no entran; las demás entran todas juntas.
+pub async fn importar(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<crate::models::auth::Claims>,
+    Json(datos): Json<ImportarPresentaciones>,
+) -> Result<Json<ResultadoPresentaciones>, Fallo> {
+    crate::middleware_auth::exigir_admin(&claims)?;
+    if datos.filas.is_empty() {
+        return Err(malo("El archivo no tiene filas."));
+    }
+    if datos.filas.len() > MAX_FILAS_PRESENTACIONES {
+        return Err(malo(format!("Máximo {} filas por archivo.", MAX_FILAS_PRESENTACIONES)));
+    }
+    let conn = tenant.0.connect().map_err(e500)?;
+    crate::handlers::rubros::exigir_modulo(&conn, crate::handlers::rubros::MODULO_PRESENTACIONES, "Presentaciones").await?;
+
+    // Productos por código (minúsculas) -> (id, nombre).
+    let mut productos: HashMap<String, (i64, String)> = HashMap::new();
+    let mut filas = conn.query("SELECT id, codigo, nombre FROM productos WHERE activo = 1", ()).await.map_err(e500)?;
+    while let Some(f) = filas.next().await.map_err(e500)? {
+        productos.insert(
+            f.get::<String>(1).unwrap_or_default().trim().to_lowercase(),
+            (f.get(0).unwrap_or_default(), f.get(2).unwrap_or_default()),
+        );
+    }
+    drop(filas);
+
+    let mut revisadas: Vec<FilaPresentacionRevisada> = Vec::new();
+    // producto_id -> lo que tendrá al final (las de antes + las del archivo).
+    let mut por_producto: HashMap<i64, Vec<Presentacion>> = HashMap::new();
+    // producto_id -> índices en `revisadas` de sus filas.
+    let mut filas_de: HashMap<i64, Vec<usize>> = HashMap::new();
+    // Código de barras -> producto, para no repetir entre productos del archivo.
+    let mut codigos_archivo: HashMap<String, i64> = HashMap::new();
+
+    for f in &datos.filas {
+        let error = |motivo: String, producto: Option<String>| FilaPresentacionRevisada { fila: f.fila, estado: "ERROR", motivo: Some(motivo), producto };
+        let Some((pid, pnombre)) = productos.get(&f.codigo_producto.trim().to_lowercase()).cloned() else {
+            revisadas.push(error(format!("No hay un producto con el código \"{}\".", f.codigo_producto.trim()), None));
+            continue;
+        };
+        let nueva = Presentacion {
+            id: None,
+            producto_id: None,
+            nombre: f.nombre.clone(),
+            factor: f.factor.unwrap_or(0.0),
+            precio: f.precio.unwrap_or(0.0),
+            codigo_barras: f.codigo_barras.clone(),
+        };
+        // Revisa la fila sola (nombre, factor, precio, código).
+        let sola = match validar(OpcionesVenta { presentaciones: vec![nueva], precios_mayor: vec![] }) {
+            Ok(o) => o.presentaciones.into_iter().next().unwrap(),
+            Err(e) => {
+                revisadas.push(error(e, Some(pnombre)));
+                continue;
+            }
+        };
+        if let Some(c) = &sola.codigo_barras {
+            if let Some(otro) = codigos_archivo.get(&c.to_lowercase()) {
+                if *otro != pid {
+                    revisadas.push(error(format!("El código de barras {} está en otra fila del archivo.", c), Some(pnombre)));
+                    continue;
+                }
+            }
+            if let Err((_, m)) = revisar_codigos(&conn, pid, std::slice::from_ref(&sola)).await {
+                revisadas.push(error(m, Some(pnombre)));
+                continue;
+            }
+            codigos_archivo.insert(c.to_lowercase(), pid);
+        }
+        if !por_producto.contains_key(&pid) {
+            let mut antes = leer(&conn, Some(pid)).await.presentaciones;
+            for a in antes.iter_mut() {
+                a.id = None;
+                a.producto_id = None;
+            }
+            por_producto.insert(pid, antes);
+        }
+        let lista = por_producto.get_mut(&pid).unwrap();
+        let estado = match lista.iter().position(|a| a.nombre.to_lowercase() == sola.nombre.to_lowercase()) {
+            Some(i) => {
+                lista[i] = sola;
+                "ACTUALIZA"
+            }
+            None => {
+                lista.push(sola);
+                "NUEVA"
+            }
+        };
+        filas_de.entry(pid).or_default().push(revisadas.len());
+        revisadas.push(FilaPresentacionRevisada { fila: f.fila, estado, motivo: None, producto: Some(pnombre) });
+    }
+
+    // Cada producto completo tiene que seguir siendo válido (máximo 12,
+    // sin nombres ni códigos repetidos): si no, sus filas no entran.
+    let mut validas: Vec<(i64, Vec<Presentacion>)> = Vec::new();
+    for (pid, lista) in por_producto {
+        match validar(OpcionesVenta { presentaciones: lista, precios_mayor: vec![] }) {
+            Ok(o) => validas.push((pid, o.presentaciones)),
+            Err(e) => {
+                for i in filas_de.get(&pid).cloned().unwrap_or_default() {
+                    revisadas[i].estado = "ERROR";
+                    revisadas[i].motivo = Some(e.clone());
+                }
+            }
+        }
+    }
+
+    let nuevas = revisadas.iter().filter(|r| r.estado == "NUEVA").count();
+    let actualizadas = revisadas.iter().filter(|r| r.estado == "ACTUALIZA").count();
+    let errores = revisadas.iter().filter(|r| r.estado == "ERROR").count();
+    let mut guardado = false;
+    if !datos.solo_revisar && !validas.is_empty() {
+        let tx = conn.transaction().await.map_err(e500)?;
+        for (pid, lista) in &validas {
+            tx.execute("UPDATE producto_presentaciones SET activo = 0 WHERE producto_id = ?1 AND activo = 1", libsql::params![*pid])
+                .await
+                .map_err(e500)?;
+            for (orden, p) in lista.iter().enumerate() {
+                tx.execute(
+                    "INSERT INTO producto_presentaciones (producto_id, nombre, factor, precio, orden, codigo_barras) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    libsql::params![*pid, p.nombre.clone(), p.factor, p.precio, orden as i64, p.codigo_barras.clone()],
+                )
+                .await
+                .map_err(|e| {
+                    if e.to_string().contains("no such column") {
+                        (StatusCode::SERVICE_UNAVAILABLE, "El código de barras de las presentaciones aún no está listo en este negocio (migración 0064). Intenta en unos minutos.".to_string())
+                    } else {
+                        e500(e)
+                    }
+                })?;
+            }
+        }
+        tx.commit().await.map_err(e500)?;
+        guardado = true;
+    }
+    revisadas.sort_by_key(|r| r.fila);
+    Ok(Json(ResultadoPresentaciones { nuevas, actualizadas, errores, guardado, filas: revisadas }))
 }
 
 /// Para validar una venta: por producto, sus presentaciones activas
@@ -339,8 +595,22 @@ pub fn precio_por_volumen_valido(precio: f64, cantidad: f64, especiales: &Especi
 mod pruebas {
     use super::*;
 
+    #[test]
+    fn codigo_de_barras_de_la_presentacion() {
+        let mut con = pres("Six pack", 6.0, 35.0);
+        con.codigo_barras = Some(" 7753749007962 ".into());
+        let mut vacio = pres("Caja x12", 12.0, 80.0);
+        vacio.codigo_barras = Some("  ".into());
+        let ok = validar(OpcionesVenta { presentaciones: vec![con.clone(), vacio], precios_mayor: vec![] }).unwrap();
+        assert_eq!(ok.presentaciones[0].codigo_barras.as_deref(), Some("7753749007962"));
+        assert_eq!(ok.presentaciones[1].codigo_barras, None);
+        let mut otra = pres("Pack x4", 4.0, 25.0);
+        otra.codigo_barras = Some("7753749007962".into());
+        assert!(validar(OpcionesVenta { presentaciones: vec![con, otra], precios_mayor: vec![] }).unwrap_err().contains("repetido"));
+    }
+
     fn pres(nombre: &str, factor: f64, precio: f64) -> Presentacion {
-        Presentacion { id: None, producto_id: None, nombre: nombre.into(), factor, precio }
+        Presentacion { id: None, producto_id: None, nombre: nombre.into(), factor, precio, codigo_barras: None }
     }
 
     #[test]
