@@ -12,7 +12,10 @@
 //! su PRIMER ciclo pagado (ese ciclo cuenta desde el día en que se
 //! registró). Desde el segundo ciclo cuenta normal. Ver `ciclo_con_prueba`.
 //!
-//! Se configura en el .env del backend (todos opcionales):
+//! Cada negocio tiene su plan (columna `tiendas.plan` de la base central,
+//! se cambia desde el panel): Básico, Comercial o Pro. Ver `Plan::por_codigo`.
+//! El Básico es el de todos los que no tienen otro y se configura en el .env
+//! del backend (todos opcionales):
 //!   PLAN_NOMBRE=Plan básico
 //!   PLAN_PRECIO=49            (mensualidad, S/)
 //!   PLAN_LIMITE=250           (boletas + facturas incluidas por ciclo)
@@ -55,6 +58,37 @@ impl Plan {
             precio_extra: numero_env("PLAN_PRECIO_EXTRA", 0.20),
         }
     }
+
+    /// Plan de un negocio según su código (`tiendas.plan`). Vacío o
+    /// desconocido cuenta como Básico (el del .env, como siempre). El
+    /// comprobante extra cuesta lo mismo en todos los planes.
+    pub fn por_codigo(codigo: Option<&str>) -> Plan {
+        let basico = Plan::desde_env();
+        let precio_extra = basico.precio_extra;
+        let otro = move |nombre: &str, precio: f64, limite: i64| Plan {
+            nombre: nombre.to_string(),
+            precio,
+            limite,
+            precio_extra,
+        };
+        match codigo.and_then(normalizar_plan) {
+            Some(PLAN_COMERCIAL) => otro("Plan comercial", 89.0, 700),
+            Some(PLAN_PRO) => otro("Plan pro", 149.0, 1800),
+            _ => basico,
+        }
+    }
+}
+
+/// Planes que se le pueden asignar a un negocio desde el panel.
+pub const PLAN_BASICO: &str = "BASICO";
+pub const PLAN_COMERCIAL: &str = "COMERCIAL";
+pub const PLAN_PRO: &str = "PRO";
+pub const PLANES: [&str; 3] = [PLAN_BASICO, PLAN_COMERCIAL, PLAN_PRO];
+
+/// " comercial " -> "COMERCIAL". None si no es uno de los planes.
+pub fn normalizar_plan(codigo: &str) -> Option<&'static str> {
+    let codigo = codigo.trim().to_uppercase();
+    PLANES.iter().copied().find(|p| *p == codigo)
 }
 
 /// Suma `meses` (puede ser negativo) a `fecha`. Si el día no existe en ese
@@ -177,6 +211,7 @@ pub async fn uso_del_negocio(
     conn: &libsql::Connection,
     fecha_vencimiento: Option<&str>,
     fecha_creacion: Option<&str>,
+    plan: &Plan,
 ) -> Result<UsoPlan, String> {
     let hoy = NaiveDate::parse_from_str(&crate::logica::tiempo::hoy_lima(), "%Y-%m-%d").map_err(|e| e.to_string())?;
     let vence = fecha_vencimiento.and_then(|f| NaiveDate::parse_from_str(f.get(..10).unwrap_or(f), "%Y-%m-%d").ok());
@@ -199,7 +234,7 @@ pub async fn uso_del_negocio(
         Some(f) => (f.get::<i64>(0).unwrap_or(0), f.get::<i64>(1).unwrap_or(0)),
         None => (0, 0),
     };
-    let mut uso = calcular(&Plan::desde_env(), inicio, siguiente, boletas, facturas);
+    let mut uso = calcular(plan, inicio, siguiente, boletas, facturas);
     uso.incluye_prueba = incluye_prueba;
     Ok(uso)
 }
@@ -247,6 +282,31 @@ mod pruebas {
     }
 
     #[test]
+    fn planes_por_negocio() {
+        assert_eq!(normalizar_plan(" comercial "), Some(PLAN_COMERCIAL));
+        assert_eq!(normalizar_plan("Pro"), Some(PLAN_PRO));
+        assert_eq!(normalizar_plan("premium"), None);
+        let comercial = Plan::por_codigo(Some("COMERCIAL"));
+        assert_eq!((comercial.nombre.as_str(), comercial.precio, comercial.limite), ("Plan comercial", 89.0, 700));
+        let pro = Plan::por_codigo(Some("PRO"));
+        assert_eq!((pro.nombre.as_str(), pro.precio, pro.limite), ("Plan pro", 149.0, 1800));
+        // Sin plan o con uno desconocido: el Básico de siempre.
+        assert_eq!(Plan::por_codigo(None), Plan::desde_env());
+        assert_eq!(Plan::por_codigo(Some("otro")), Plan::desde_env());
+        // El extra cuesta lo mismo en todos.
+        assert_eq!(comercial.precio_extra, Plan::desde_env().precio_extra);
+    }
+
+    #[test]
+    fn comercial_cuenta_hasta_700() {
+        let comercial = Plan { nombre: "Plan comercial".into(), precio: 89.0, limite: 700, precio_extra: 0.20 };
+        let dentro = calcular(&comercial, f("2026-11-10"), f("2026-12-10"), 650, 50);
+        assert_eq!((dentro.usados, dentro.extra, dentro.total_siguiente), (700, 0, 89.0));
+        let pasado = calcular(&comercial, f("2026-11-10"), f("2026-12-10"), 690, 20);
+        assert_eq!((pasado.extra, pasado.monto_extra, pasado.total_siguiente), (10, 2.0, 91.0));
+    }
+
+    #[test]
     fn dentro_del_plan_no_hay_extra() {
         let u = calcular(&plan(), f("2026-10-09"), f("2026-11-09"), 120, 12);
         assert_eq!((u.usados, u.extra, u.monto_extra, u.total_siguiente), (132, 0, 0.0, 49.0));
@@ -282,7 +342,7 @@ mod pruebas {
             .await
             .unwrap();
         }
-        let u = uso_del_negocio(&conn, None, None).await.unwrap();
+        let u = uso_del_negocio(&conn, None, None, &plan()).await.unwrap();
         assert_eq!((u.boletas, u.facturas, u.usados), (2, 1, 3));
         assert!(!u.incluye_prueba);
     }
@@ -389,9 +449,9 @@ mod pruebas {
             .await
             .unwrap();
         }
-        let sin = uso_del_negocio(&conn, Some(&vence), None).await.unwrap();
+        let sin = uso_del_negocio(&conn, Some(&vence), None, &plan()).await.unwrap();
         assert_eq!(sin.usados, 1, "sin la prueba: solo el de hoy");
-        let con = uso_del_negocio(&conn, Some(&vence), Some(&format!("{} 15:00:00", registro))).await.unwrap();
+        let con = uso_del_negocio(&conn, Some(&vence), Some(&format!("{} 15:00:00", registro)), &plan()).await.unwrap();
         assert_eq!((con.boletas, con.facturas, con.usados), (3, 1, 4));
         assert!(con.incluye_prueba);
         assert_eq!(con.ciclo_inicio, registro);

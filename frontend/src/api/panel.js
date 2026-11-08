@@ -66,6 +66,8 @@ export const panelApi = {
   cambiarEstado: (id, estado) => pedir(`/panel/negocios/${id}/estado`, { metodo: 'POST', cuerpo: { estado } }),
   // CLIENTE (negocio real) o DEMO (cuenta de prueba, sin vencimiento).
   cambiarTipo: (id, tipo) => pedir(`/panel/negocios/${id}/tipo`, { metodo: 'PUT', cuerpo: { tipo } }),
+  // BASICO, COMERCIAL o PRO: límite de comprobantes y mensualidad del negocio.
+  cambiarPlan: (id, plan) => pedir(`/panel/negocios/${id}/plan`, { metodo: 'PUT', cuerpo: { plan } }),
   fijarVencimiento: (id, fecha) => pedir(`/panel/negocios/${id}/vencimiento`, { metodo: 'PUT', cuerpo: { fecha } }),
   cambiarDireccion: (id, direccion) => pedir(`/panel/negocios/${id}/direccion`, { metodo: 'PUT', cuerpo: { direccion } }),
 

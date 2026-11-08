@@ -31,7 +31,7 @@ use crate::handlers::facturacion_directa::{leer_emisor, servidor_lycet};
 use crate::licencias_logica::{calcular_nueva_fecha, generar_codigo, hoy, normalizar_unidad, parsear_fecha};
 use crate::logica::alta_sunat::{self, AltaHecha, Chequeo, CAMPOS};
 use crate::logica::certificado;
-use crate::logica::plan::{uso_del_negocio, UsoPlan};
+use crate::logica::plan::{normalizar_plan, uso_del_negocio, Plan, UsoPlan, PLAN_BASICO};
 use crate::tenants::{NivelAcceso, TiendaConexion};
 use crate::AppState;
 
@@ -165,6 +165,8 @@ pub struct NegocioPanel {
     /// "CLIENTE" (negocio real) o "DEMO" (cuenta de prueba que se muestra a
     /// los interesados). Solo organiza el panel; no cambia lo que puede hacer.
     pub tipo: String,
+    /// "BASICO", "COMERCIAL" o "PRO" (se cambia desde la ficha del negocio).
+    pub plan: String,
     pub facturacion: FacturacionResumen,
     /// Boletas y facturas del ciclo frente a su plan. None si no se pudo
     /// leer su base.
@@ -219,9 +221,9 @@ async fn resumen_facturacion(state: &AppState, tienda: &TiendaConexion) -> Factu
     }
 }
 
-async fn uso_de(state: &AppState, tienda: &TiendaConexion, fecha_creacion: Option<&str>) -> Option<UsoPlan> {
+async fn uso_de(state: &AppState, tienda: &TiendaConexion, fecha_creacion: Option<&str>, plan: &str) -> Option<UsoPlan> {
     let conn = state.tiendas.conectar_cacheado(tienda).await.ok()?.connect().ok()?;
-    uso_del_negocio(&conn, tienda.fecha_vencimiento.as_deref(), fecha_creacion).await.ok()
+    uso_del_negocio(&conn, tienda.fecha_vencimiento.as_deref(), fecha_creacion, &Plan::por_codigo(Some(plan))).await.ok()
 }
 
 pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<Vec<NegocioPanel>>, Fallo> {
@@ -253,6 +255,16 @@ pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<
             }
         }
     }
+    // Plan (columna que crea el servidor al arrancar; si faltara, todos Básico).
+    let mut planes: HashMap<i64, String> = HashMap::new();
+    if let Ok(mut filas) = central.query("SELECT id, plan FROM tiendas", ()).await {
+        while let Ok(Some(f)) = filas.next().await {
+            if let (Ok(id), Ok(plan)) = (f.get::<i64>(0), f.get::<String>(1)) {
+                planes.insert(id, plan);
+            }
+        }
+    }
+    let plan_de = |id: i64| planes.get(&id).cloned().unwrap_or_else(|| PLAN_BASICO.to_string());
     let mut usuarios: HashMap<i64, Vec<String>> = HashMap::new();
     let mut filas = central.query("SELECT tienda_id, usuario FROM usuarios_indice ORDER BY usuario", ()).await.map_err(interno)?;
     while let Some(f) = filas.next().await.map_err(interno)? {
@@ -264,7 +276,7 @@ pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<
     // La facturación y los comprobantes del ciclo se leen de la base de
     // cada negocio, todas a la vez.
     let resumenes = futures_util::future::join_all(tiendas.iter().map(|t| async {
-        (resumen_facturacion(&state, t).await, uso_de(&state, t, creacion.get(&t.id).map(String::as_str)).await)
+        (resumen_facturacion(&state, t).await, uso_de(&state, t, creacion.get(&t.id).map(String::as_str), &plan_de(t.id)).await)
     }))
     .await;
 
@@ -286,6 +298,7 @@ pub async fn listar_negocios(State(state): State<Arc<AppState>>) -> Result<Json<
                 motivo,
                 usuarios: usuarios.remove(&t.id).unwrap_or_default(),
                 tipo: tipos.remove(&t.id).unwrap_or_else(|| TIPO_CLIENTE.to_string()),
+                plan: plan_de(t.id),
                 facturacion,
                 uso,
             }
@@ -420,6 +433,48 @@ pub async fn preparar_tipos(conn: &libsql::Connection) -> Result<(), String> {
         Err(e) if e.to_string().contains("duplicate column") => Ok(()),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// Al arrancar: crea la columna `plan` en la central si falta. Todos los
+/// negocios quedan en Básico (el de siempre) hasta que se les cambie desde el
+/// panel. Solo agrega: la versión anterior del backend la ignora.
+pub async fn preparar_planes(conn: &libsql::Connection) -> Result<(), String> {
+    match conn
+        .execute(
+            "ALTER TABLE tiendas ADD COLUMN plan TEXT NOT NULL DEFAULT 'BASICO' CHECK (plan IN ('BASICO', 'COMERCIAL', 'PRO'))",
+            (),
+        )
+        .await
+    {
+        Ok(_) => Ok(()),
+        Err(e) if e.to_string().contains("duplicate column") => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct CambiarPlan {
+    pub plan: String,
+}
+
+/// PUT /panel/negocios/:id/plan — Básico, Comercial o Pro. Cambia el límite
+/// de comprobantes y la mensualidad que se le muestran desde el ciclo
+/// actual. No toca su suscripción ni lo que ya emitió.
+pub async fn cambiar_plan(State(state): State<Arc<AppState>>, Path(id): Path<i64>, Json(datos): Json<CambiarPlan>) -> Result<Json<Value>, Fallo> {
+    let plan = normalizar_plan(&datos.plan).ok_or_else(|| malo("Plan no válido: BASICO, COMERCIAL o PRO."))?;
+    let (_, _, nombre) = datos_suscripcion(&state, id).await?;
+    let conn = state.tiendas.conexion_central().map_err(interno)?;
+    conn.execute("UPDATE tiendas SET plan = ?1 WHERE id = ?2", libsql::params![plan, id])
+        .await
+        .map_err(interno)?;
+    let detalle = Plan::por_codigo(Some(plan));
+    Ok(Json(serde_json::json!({
+        "plan": plan,
+        "mensaje": format!(
+            "{} pasa al {}: {} comprobantes al mes, S/ {:.2}.",
+            nombre, detalle.nombre.to_lowercase(), detalle.limite, detalle.precio
+        ),
+    })))
 }
 
 #[derive(Deserialize)]

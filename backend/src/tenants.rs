@@ -304,6 +304,17 @@ impl RegistroTiendas {
         filas.next().await.ok()??.get::<String>(0).ok()
     }
 
+    /// Plan del negocio (`tiendas.plan`: BASICO, COMERCIAL o PRO). None si
+    /// la columna aún no existe o no se pudo leer: cuenta como Básico.
+    pub async fn plan(&self, tienda_id: i64) -> Option<String> {
+        let conn = self.central_db.connect().ok()?;
+        let mut filas = conn
+            .query("SELECT plan FROM tiendas WHERE id = ?1", libsql::params![tienda_id])
+            .await
+            .ok()?;
+        filas.next().await.ok()??.get::<String>(0).ok()
+    }
+
     pub fn conexion_central(&self) -> Result<libsql::Connection, String> {
         self.central_db.connect().map_err(|e| e.to_string())
     }

@@ -209,6 +209,7 @@ function UsoCorto({ uso }) {
         <span className={`pnl-uso-relleno pnl-uso-${tono}`} style={{ width: `${Math.min(100, uso.porcentaje)}%` }} />
       </span>
       <small className={uso.extra > 0 ? 'pnl-texto-rojo' : ''}>
+        {String(uso.plan || '').replace(/^Plan /i, '').replace(/^./, (c) => c.toUpperCase())} ·{' '}
         {uso.extra > 0 ? `+${uso.extra} extra · ${soles(uso.monto_extra)}` : `Quedan ${uso.limite - uso.usados}`}
       </small>
     </span>

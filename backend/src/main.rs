@@ -65,6 +65,10 @@ async fn main() {
     if let Err(e) = handlers::panel::preparar_tipos(&conn_central).await {
         eprintln!("⚠️  No se pudo preparar el tipo de los negocios (cliente/demo): {}", e);
     }
+    // Plan de cada negocio (Básico, Comercial o Pro): crea la columna si falta.
+    if let Err(e) = handlers::panel::preparar_planes(&conn_central).await {
+        eprintln!("⚠️  No se pudo preparar el plan de los negocios: {}", e);
+    }
 
     let state = Arc::new(AppState {
         db,
@@ -520,6 +524,7 @@ async fn main() {
         .route("/panel/negocios/:id/vencimiento", axum::routing::put(handlers::panel::fijar_vencimiento))
         .route("/panel/negocios/:id/direccion", axum::routing::put(handlers::panel::cambiar_direccion))
         .route("/panel/negocios/:id/tipo", axum::routing::put(handlers::panel::cambiar_tipo))
+        .route("/panel/negocios/:id/plan", axum::routing::put(handlers::panel::cambiar_plan))
         .route("/panel/negocios/:id/facturacion", get(handlers::panel::detalle_facturacion))
         .route("/panel/negocios/:id/facturacion/datos", axum::routing::put(handlers::panel::guardar_datos))
         .route("/panel/negocios/:id/facturacion/establecimiento", axum::routing::put(handlers::panel::guardar_establecimiento))

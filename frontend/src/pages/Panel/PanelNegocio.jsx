@@ -165,6 +165,27 @@ function Suscripcion({ negocio, onCambio }) {
     if (ok) hacer(() => panelApi.cambiarTipo(negocio.id, nuevo));
   };
 
+  // Plan del negocio: cambia su límite de comprobantes y su mensualidad.
+  const plan = negocio.plan || 'BASICO';
+  const PLANES = [
+    ['BASICO', 'Básico', 'S/ 49 · 250 al mes'],
+    ['COMERCIAL', 'Comercial', 'S/ 89 · 700 al mes'],
+    ['PRO', 'Pro', 'S/ 149 · 1,800 al mes'],
+  ];
+  const cambiarPlan = async (nuevo) => {
+    if (nuevo === plan) return;
+    const [, nombre, detalle] = PLANES.find(([valor]) => valor === nuevo);
+    const ok = await confirmar({
+      titulo: `¿Pasar al plan ${nombre}?`,
+      mensaje: 'Desde este ciclo se cuenta con su nuevo límite y su nueva mensualidad. No cambia su vencimiento ni lo que ya emitió.',
+      detalle: { etiqueta: negocio.nombre, valor: `${nombre} · ${detalle}` },
+      textoConfirmar: `Pasar a ${nombre}`,
+      tipo: 'normal',
+      icono: 'tiempo',
+    });
+    if (ok) hacer(() => panelApi.cambiarPlan(negocio.id, nuevo));
+  };
+
   const n = Number(cantidad);
   const cantidadValida = Number.isInteger(n) && n >= 1 && n <= 120;
 
@@ -191,6 +212,27 @@ function Suscripcion({ negocio, onCambio }) {
           ))}
         </div>
         <p className="pnl-nota">Las demos se listan aparte y no vencen. Los negocios que se registran entran como clientes.</p>
+      </div>
+
+      <div className="pnl-caja">
+        <h2>Plan</h2>
+        <div className="pnl-segmentos" role="radiogroup" aria-label="Plan">
+          {PLANES.map(([valor, texto, detalle]) => (
+            <button
+              key={valor}
+              type="button"
+              role="radio"
+              aria-checked={plan === valor}
+              className={plan === valor ? 'activo' : ''}
+              disabled={ocupado}
+              onClick={() => cambiarPlan(valor)}
+              title={detalle}
+            >
+              {texto}
+            </button>
+          ))}
+        </div>
+        <p className="pnl-nota">{PLANES.find(([valor]) => valor === plan)?.[2]}. Si pasa del límite no se le corta: cada comprobante extra se suma a su siguiente mensualidad.</p>
       </div>
 
       <UsoDelPlan uso={negocio.uso} />

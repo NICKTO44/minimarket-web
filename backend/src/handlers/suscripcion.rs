@@ -61,7 +61,9 @@ pub async fn uso_plan(
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     // Si no se pudiera leer la fecha de registro, se cuenta como antes.
     let registro = state.tiendas.fecha_creacion(claims.tienda_id).await;
-    crate::logica::plan::uso_del_negocio(&conn, tienda.fecha_vencimiento.as_deref(), registro.as_deref())
+    // Su plan (Básico, Comercial o Pro); sin plan guardado, el Básico.
+    let plan = crate::logica::plan::Plan::por_codigo(state.tiendas.plan(claims.tienda_id).await.as_deref());
+    crate::logica::plan::uso_del_negocio(&conn, tienda.fecha_vencimiento.as_deref(), registro.as_deref(), &plan)
         .await
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
