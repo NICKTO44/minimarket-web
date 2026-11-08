@@ -698,7 +698,7 @@ pub async fn procesar_venta(
         let esp = crate::handlers::presentaciones::especiales_de(&conn, &ids).await;
         for p in payload.productos.iter_mut() {
             let Some(pid) = p.presentacion_id else { continue };
-            let Some((nombre_pres, factor, precio_pres)) =
+            let Some((nombre_pres, factor, precio_pres, mayor_pres)) =
                 esp.get(&p.id).and_then(|e| e.presentaciones.get(&pid)).cloned()
             else {
                 return Err((
@@ -712,13 +712,18 @@ pub async fn procesar_venta(
                     format!("La cantidad de {} no corresponde a \"{}\". Vuelve a agregarlo.", p.nombre, nombre_pres),
                 ));
             };
-            let precio_esperado = crate::handlers::presentaciones::precio_unitario_de(precio_pres, factor);
-            if revisar_precios && (p.precio - precio_esperado).abs() >= 1e-6 {
+            // Desde `mayor_desde` presentaciones (3 cajas), la caja va a su
+            // precio por mayor (migración 0065). Vale también el normal.
+            let precio_caja = crate::handlers::presentaciones::precio_presentacion_para(precio_pres, mayor_pres, n);
+            let vale = |precio_presentacion: f64| {
+                (p.precio - crate::handlers::presentaciones::precio_unitario_de(precio_presentacion, factor)).abs() < 1e-6
+            };
+            if revisar_precios && !vale(precio_pres) && !vale(precio_caja) {
                 return Err((
                     StatusCode::CONFLICT,
                     format!(
                         "El precio de {} ({}) cambió: ahora es S/ {:.2}. Quítalo del carrito y vuelve a agregarlo.",
-                        p.nombre, nombre_pres, precio_pres
+                        p.nombre, nombre_pres, precio_caja
                     ),
                 ));
             }

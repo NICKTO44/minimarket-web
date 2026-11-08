@@ -10,6 +10,16 @@
 /** Precio por unidad del producto de una presentación (6 decimales). */
 export const precioUnitarioDe = (precioPresentacion, factor) => Math.round((precioPresentacion / factor) * 1e6) / 1e6;
 
+/**
+ * Precio de cada presentación cuando la línea lleva `n` (migración 0065):
+ * desde `mayor_desde` (3 cajas) vale `precio_mayor`. Igual que el servidor
+ * (precio_presentacion_para).
+ */
+export const precioPresentacionPara = (presentacion, n) =>
+  presentacion.mayor_desde > 0 && presentacion.precio_mayor > 0 && n + 1e-9 >= presentacion.mayor_desde
+    ? presentacion.precio_mayor
+    : presentacion.precio;
+
 /** "Rollo x 100 m", 2 -> "2 × Rollo x 100 m" (igual que lo guarda el servidor). */
 export const detallePresentacion = (nombre, cantidad) => `${cantidad} × ${nombre}`;
 
@@ -82,6 +92,8 @@ export function opcionesAFormulario(respuesta) {
       factor: String(p.factor),
       precio: String(p.precio),
       codigo_barras: p.codigo_barras || '',
+      mayor_desde: p.mayor_desde != null ? String(p.mayor_desde) : '',
+      precio_mayor: p.precio_mayor != null ? String(p.precio_mayor) : '',
     })),
     precios_mayor: (respuesta?.precios_mayor || []).map((m) => ({ desde: String(m.desde), precio: String(m.precio) })),
   };
@@ -107,7 +119,29 @@ export function formularioAOpciones(opciones) {
     if (!f.nombre.trim() || !(factor > 0) || !(precio > 0)) {
       return { error: 'Completa cada presentación: nombre, cuánto lleva y su precio (o bórrala).' };
     }
-    presentaciones.push({ nombre: f.nombre.trim(), factor, precio, codigo_barras: String(f.codigo_barras || '').trim() || null });
+    // Precio por mayor de la presentación: los dos o ninguno.
+    const textoDesde = String(f.mayor_desde ?? '').trim();
+    const textoMayor = String(f.precio_mayor ?? '').trim();
+    let mayor_desde = null;
+    let precio_mayor = null;
+    if (textoDesde || textoMayor) {
+      mayor_desde = numeroDeTexto(textoDesde);
+      precio_mayor = numeroDeTexto(textoMayor);
+      if (!(mayor_desde >= 2) || !Number.isInteger(mayor_desde) || !(precio_mayor > 0)) {
+        return { error: `"${f.nombre.trim()}": el precio por mayor va desde 2 o más (número entero) y con su precio, o deja los dos vacíos.` };
+      }
+      if (precio_mayor >= precio) {
+        return { error: `"${f.nombre.trim()}": el precio por mayor debe ser menor a su precio normal.` };
+      }
+    }
+    presentaciones.push({
+      nombre: f.nombre.trim(),
+      factor,
+      precio,
+      codigo_barras: String(f.codigo_barras || '').trim() || null,
+      mayor_desde,
+      precio_mayor,
+    });
   }
   const precios_mayor = [];
   for (const f of opciones.precios_mayor.filter((x) => !vacia(x))) {

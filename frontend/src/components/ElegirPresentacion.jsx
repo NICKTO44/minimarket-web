@@ -63,6 +63,7 @@ export default function ElegirPresentacion({ producto, presentaciones, escalas =
                   {p.nombre}
                   <small>
                     {formatoCantidad(p.factor)} {unidad}
+                    {p.mayor_desde > 0 && p.precio_mayor > 0 && ` · desde ${p.mayor_desde}: S/ ${Number(p.precio_mayor).toFixed(2)} c/u`}
                     {!alcanza && ' · no alcanza el stock'}
                   </small>
                 </span>

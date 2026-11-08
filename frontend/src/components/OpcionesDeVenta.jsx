@@ -59,10 +59,38 @@ export default function OpcionesDeVenta({ opciones, onCambiar, unidad, precioNor
                     Sale a S/ {formatoPrecio(precioUnitarioDe(precio, factor))} por {abrev}
                   </p>
                 )}
+                {conPrecioMayor && (
+                  // Precio por mayor de la presentación: desde 3 cajas, cada caja a S/ 100.
+                  <div className="odv-mayor-pres">
+                    <label className="odv-campo">
+                      <span>Por mayor desde (cant.)</span>
+                      <input
+                        inputMode="numeric"
+                        placeholder="3"
+                        value={f.mayor_desde || ''}
+                        onChange={(e) => cambiarFila('presentaciones', i, 'mayor_desde', e.target.value)}
+                      />
+                    </label>
+                    <label className="odv-campo">
+                      <span>Precio c/u por mayor S/</span>
+                      <input
+                        inputMode="decimal"
+                        placeholder="Opcional"
+                        value={f.precio_mayor || ''}
+                        onChange={(e) => cambiarFila('presentaciones', i, 'precio_mayor', e.target.value)}
+                      />
+                    </label>
+                    {numero(f.mayor_desde) >= 2 && numero(f.precio_mayor) > 0 && (
+                      <p className="odv-nota">
+                        Desde {numero(f.mayor_desde)} {f.nombre.trim() || 'presentaciones'}, cada una a S/ {formatoPrecio(numero(f.precio_mayor))}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
-          <button type="button" className="odv-agregar" onClick={() => agregar('presentaciones', { nombre: '', factor: '', precio: '', codigo_barras: '' })}>
+          <button type="button" className="odv-agregar" onClick={() => agregar('presentaciones', { nombre: '', factor: '', precio: '', codigo_barras: '', mayor_desde: '', precio_mayor: '' })}>
             <Plus size={15} /> Agregar presentación
           </button>
         </section>

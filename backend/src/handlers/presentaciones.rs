@@ -48,6 +48,22 @@ pub struct Presentacion {
     /// (migración 0064). Al escanearlo entra esta presentación.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codigo_barras: Option<String>,
+    /// Precio por mayor de la presentación (migración 0065), opcional: desde
+    /// `mayor_desde` presentaciones en la misma línea (3 cajas), cada una
+    /// vale `precio_mayor` (S/ 100 en vez de S/ 110). Van juntos o ninguno.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mayor_desde: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub precio_mayor: Option<f64>,
+}
+
+/// Precio de cada presentación cuando la línea lleva `n` (el de mayor desde
+/// `mayor_desde`). Mismo cálculo que el punto de venta (utils/presentaciones.js).
+pub fn precio_presentacion_para(precio: f64, mayor: Option<(f64, f64)>, n: i64) -> f64 {
+    match mayor {
+        Some((desde, precio_mayor)) if n as f64 + 1e-9 >= desde => precio_mayor,
+        _ => precio,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -135,6 +151,26 @@ pub fn validar(mut opciones: OpcionesVenta) -> Result<OpcionesVenta, String> {
             }
             codigos.push(c.to_lowercase());
         }
+        match (p.mayor_desde, p.precio_mayor) {
+            (None, None) => {}
+            (Some(desde), Some(precio_mayor)) => {
+                if !desde.is_finite() || desde < 2.0 || desde > 100_000.0 || (desde - desde.round()).abs() > 1e-9 {
+                    return Err(format!("\"{}\": el precio por mayor va desde 2 o más (número entero).", p.nombre));
+                }
+                let precio_mayor = (precio_mayor * 100.0).round() / 100.0;
+                if !(precio_mayor > 0.0) || !precio_mayor.is_finite() {
+                    return Err(format!("\"{}\": el precio por mayor debe ser mayor a 0.", p.nombre));
+                }
+                if precio_mayor >= p.precio {
+                    return Err(format!("\"{}\": el precio por mayor debe ser menor a su precio normal (S/ {:.2}).", p.nombre, p.precio));
+                }
+                p.mayor_desde = Some(desde.round());
+                p.precio_mayor = Some(precio_mayor);
+            }
+            _ => {
+                return Err(format!("\"{}\": completa \"desde cuántas\" y el precio por mayor, o deja los dos vacíos.", p.nombre));
+            }
+        }
     }
     let mut desdes: Vec<f64> = Vec::new();
     for m in opciones.precios_mayor.iter_mut() {
@@ -164,6 +200,7 @@ async fn leer(conn: &libsql::Connection, solo_producto: Option<i64>) -> Opciones
     let params = || libsql::params![producto];
     // Sin la migración 0030 estas consultas fallan: listas vacías, como antes.
     // Con el código de barras (migración 0064); sin ella, como antes.
+    // Con el precio por mayor de la presentación (migración 0065); sin ella, vacío.
     let consulta = |codigo: &str| {
         format!(
             "SELECT pp.id, pp.producto_id, pp.nombre, CAST(pp.factor AS REAL), CAST(pp.precio AS REAL), {}
@@ -172,9 +209,15 @@ async fn leer(conn: &libsql::Connection, solo_producto: Option<i64>) -> Opciones
             codigo, filtro
         )
     };
-    let filas = match conn.query(&consulta("pp.codigo_barras"), params()).await {
+    let filas = match conn
+        .query(&consulta("pp.codigo_barras, CAST(pp.mayor_desde AS REAL), CAST(pp.precio_mayor AS REAL)"), params())
+        .await
+    {
         Ok(f) => Ok(f),
-        Err(_) => conn.query(&consulta("NULL"), params()).await,
+        Err(_) => match conn.query(&consulta("pp.codigo_barras, NULL, NULL"), params()).await {
+            Ok(f) => Ok(f),
+            Err(_) => conn.query(&consulta("NULL, NULL, NULL"), params()).await,
+        },
     };
     if let Ok(mut filas) = filas {
         while let Ok(Some(f)) = filas.next().await {
@@ -185,6 +228,8 @@ async fn leer(conn: &libsql::Connection, solo_producto: Option<i64>) -> Opciones
                 factor: f.get(3).unwrap_or(1.0),
                 precio: f.get(4).unwrap_or(0.0),
                 codigo_barras: f.get::<String>(5).ok(),
+                mayor_desde: f.get::<f64>(6).ok(),
+                precio_mayor: f.get::<f64>(7).ok(),
             });
         }
     }
@@ -287,7 +332,7 @@ pub async fn guardar(
     revisar_codigos(&conn, id, &opciones.presentaciones).await?;
     let sin_migracion = |e: libsql::Error| {
         if e.to_string().contains("no such column") {
-            (StatusCode::SERVICE_UNAVAILABLE, "El código de barras de las presentaciones aún no está listo en este negocio (migración 0064). Intenta en unos minutos.".to_string())
+            (StatusCode::SERVICE_UNAVAILABLE, "Esta función de las presentaciones aún no está lista en este negocio. Intenta en unos minutos.".to_string())
         } else if e.to_string().contains("no such table") {
             (StatusCode::SERVICE_UNAVAILABLE, "Las presentaciones aún no están listas en este negocio. Intenta en unos minutos.".to_string())
         } else {
@@ -300,8 +345,16 @@ pub async fn guardar(
         .await
         .map_err(sin_migracion)?;
     for (orden, p) in opciones.presentaciones.iter().enumerate() {
-        // Sin código, el INSERT de siempre (funciona aunque falte la 0064).
-        let r = match &p.codigo_barras {
+        // Sin código ni mayor, el INSERT de siempre (funciona aunque falte la 0064).
+        let r = if p.mayor_desde.is_some() {
+            conn.execute(
+                "INSERT INTO producto_presentaciones (producto_id, nombre, factor, precio, orden, codigo_barras, mayor_desde, precio_mayor)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                libsql::params![id, p.nombre.clone(), p.factor, p.precio, orden as i64, p.codigo_barras.clone(), p.mayor_desde, p.precio_mayor],
+            )
+            .await
+        } else {
+            match &p.codigo_barras {
             None => {
                 conn.execute(
                     "INSERT INTO producto_presentaciones (producto_id, nombre, factor, precio, orden) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -316,8 +369,9 @@ pub async fn guardar(
                 )
                 .await
             }
+            }
         };
-        r        .map_err(sin_migracion)?;
+        r.map_err(sin_migracion)?;
     }
     conn.execute("DELETE FROM producto_precios_mayor WHERE producto_id = ?1", libsql::params![id])
         .await
@@ -350,6 +404,12 @@ pub struct FilaPresentacion {
     pub precio: Option<f64>,
     #[serde(default)]
     pub codigo_barras: Option<String>,
+    /// Precio por mayor de la presentación (opcional; vacío en una fila que
+    /// actualiza una presentación conserva el que ya tenía).
+    #[serde(default)]
+    pub mayor_desde: Option<f64>,
+    #[serde(default)]
+    pub precio_mayor: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -431,6 +491,8 @@ pub async fn importar(
             factor: f.factor.unwrap_or(0.0),
             precio: f.precio.unwrap_or(0.0),
             codigo_barras: f.codigo_barras.clone(),
+            mayor_desde: f.mayor_desde,
+            precio_mayor: f.precio_mayor,
         };
         // Revisa la fila sola (nombre, factor, precio, código).
         let sola = match validar(OpcionesVenta { presentaciones: vec![nueva], precios_mayor: vec![] }) {
@@ -464,6 +526,13 @@ pub async fn importar(
         let lista = por_producto.get_mut(&pid).unwrap();
         let estado = match lista.iter().position(|a| a.nombre.to_lowercase() == sola.nombre.to_lowercase()) {
             Some(i) => {
+                let mut sola = sola;
+                // Sin precio por mayor en la fila: se queda el que tenía (si
+                // aún vale con el precio nuevo; si no, la revisión de abajo avisa).
+                if sola.mayor_desde.is_none() {
+                    sola.mayor_desde = lista[i].mayor_desde;
+                    sola.precio_mayor = lista[i].precio_mayor;
+                }
                 lista[i] = sola;
                 "ACTUALIZA"
             }
@@ -502,14 +571,24 @@ pub async fn importar(
                 .await
                 .map_err(e500)?;
             for (orden, p) in lista.iter().enumerate() {
-                tx.execute(
-                    "INSERT INTO producto_presentaciones (producto_id, nombre, factor, precio, orden, codigo_barras) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    libsql::params![*pid, p.nombre.clone(), p.factor, p.precio, orden as i64, p.codigo_barras.clone()],
-                )
-                .await
+                let r = if p.mayor_desde.is_some() {
+                    tx.execute(
+                        "INSERT INTO producto_presentaciones (producto_id, nombre, factor, precio, orden, codigo_barras, mayor_desde, precio_mayor)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                        libsql::params![*pid, p.nombre.clone(), p.factor, p.precio, orden as i64, p.codigo_barras.clone(), p.mayor_desde, p.precio_mayor],
+                    )
+                    .await
+                } else {
+                    tx.execute(
+                        "INSERT INTO producto_presentaciones (producto_id, nombre, factor, precio, orden, codigo_barras) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        libsql::params![*pid, p.nombre.clone(), p.factor, p.precio, orden as i64, p.codigo_barras.clone()],
+                    )
+                    .await
+                };
+                r
                 .map_err(|e| {
                     if e.to_string().contains("no such column") {
-                        (StatusCode::SERVICE_UNAVAILABLE, "El código de barras de las presentaciones aún no está listo en este negocio (migración 0064). Intenta en unos minutos.".to_string())
+                        (StatusCode::SERVICE_UNAVAILABLE, "Esta función de las presentaciones aún no está lista en este negocio. Intenta en unos minutos.".to_string())
                     } else {
                         e500(e)
                     }
@@ -524,10 +603,11 @@ pub async fn importar(
 }
 
 /// Para validar una venta: por producto, sus presentaciones activas
-/// (id -> (nombre, factor, precio)) y sus escalas por mayor (desde, precio).
+/// (id -> (nombre, factor, precio, mayor: (desde, precio por presentación)))
+/// y sus escalas por mayor (desde, precio).
 #[derive(Debug, Default)]
 pub struct Especiales {
-    pub presentaciones: HashMap<i64, (String, f64, f64)>,
+    pub presentaciones: HashMap<i64, (String, f64, f64, Option<(f64, f64)>)>,
     pub mayor: Vec<(f64, f64)>,
 }
 
@@ -537,22 +617,29 @@ pub async fn especiales_de(conn: &libsql::Connection, ids: &[i64]) -> HashMap<i6
         return mapa;
     }
     let lista = ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",");
-    if let Ok(mut filas) = conn
-        .query(
-            &format!(
-                "SELECT id, producto_id, nombre, CAST(factor AS REAL), CAST(precio AS REAL)
-                 FROM producto_presentaciones WHERE activo = 1 AND producto_id IN ({})",
-                lista
-            ),
-            (),
+    let consulta = |mayor: &str| {
+        format!(
+            "SELECT id, producto_id, nombre, CAST(factor AS REAL), CAST(precio AS REAL), {}
+             FROM producto_presentaciones WHERE activo = 1 AND producto_id IN ({})",
+            mayor, lista
         )
-        .await
-    {
+    };
+    // Sin la migración 0065, sin precio por mayor de presentación.
+    let filas = match conn.query(&consulta("CAST(mayor_desde AS REAL), CAST(precio_mayor AS REAL)"), ()).await {
+        Ok(f) => Ok(f),
+        Err(_) => conn.query(&consulta("NULL, NULL"), ()).await,
+    };
+    if let Ok(mut filas) = filas {
         while let Ok(Some(f)) = filas.next().await {
             let (Ok(pid), Ok(producto)) = (f.get::<i64>(0), f.get::<i64>(1)) else { continue };
             mapa.entry(producto).or_default().presentaciones.insert(
                 pid,
-                (f.get(2).unwrap_or_default(), f.get(3).unwrap_or(1.0), f.get(4).unwrap_or(0.0)),
+                (
+                    f.get(2).unwrap_or_default(),
+                    f.get(3).unwrap_or(1.0),
+                    f.get(4).unwrap_or(0.0),
+                    f.get::<f64>(5).ok().zip(f.get::<f64>(6).ok()),
+                ),
             );
         }
     }
@@ -586,7 +673,7 @@ pub fn precio_por_mayor_valido(precio: f64, cantidad: f64, escalas: &[(f64, f64)
 /// presentación (150 m de cable con "Rollo x 100 m a S/ 85" -> S/ 0.85 el m).
 pub fn precio_por_volumen_valido(precio: f64, cantidad: f64, especiales: &Especiales) -> bool {
     precio_por_mayor_valido(precio, cantidad, &especiales.mayor)
-        || especiales.presentaciones.values().any(|(_, factor, precio_pres)| {
+        || especiales.presentaciones.values().any(|(_, factor, precio_pres, _)| {
             cantidad + 1e-9 >= *factor && (precio - precio_unitario_de(*precio_pres, *factor)).abs() < 1e-6
         })
 }
@@ -610,7 +697,30 @@ mod pruebas {
     }
 
     fn pres(nombre: &str, factor: f64, precio: f64) -> Presentacion {
-        Presentacion { id: None, producto_id: None, nombre: nombre.into(), factor, precio, codigo_barras: None }
+        Presentacion { id: None, producto_id: None, nombre: nombre.into(), factor, precio, codigo_barras: None, mayor_desde: None, precio_mayor: None }
+    }
+
+    #[test]
+    fn caja_por_mayor_desde_tres() {
+        let mut caja = pres("Caja x12", 12.0, 110.0);
+        caja.mayor_desde = Some(3.0);
+        caja.precio_mayor = Some(100.0);
+        let ok = validar(OpcionesVenta { presentaciones: vec![caja.clone()], precios_mayor: vec![] }).unwrap();
+        assert_eq!(ok.presentaciones[0].mayor_desde, Some(3.0));
+        let mayor = Some((3.0, 100.0));
+        assert_eq!(precio_presentacion_para(110.0, mayor, 2), 110.0);
+        assert_eq!(precio_presentacion_para(110.0, mayor, 3), 100.0);
+        assert_eq!(precio_presentacion_para(110.0, None, 5), 110.0);
+        // Uno sin el otro, desde 1, o más caro que el normal: no.
+        let mut a_medias = caja.clone();
+        a_medias.precio_mayor = None;
+        assert!(validar(OpcionesVenta { presentaciones: vec![a_medias], precios_mayor: vec![] }).is_err());
+        let mut desde_uno = caja.clone();
+        desde_uno.mayor_desde = Some(1.0);
+        assert!(validar(OpcionesVenta { presentaciones: vec![desde_uno], precios_mayor: vec![] }).is_err());
+        let mut caro = caja;
+        caro.precio_mayor = Some(120.0);
+        assert!(validar(OpcionesVenta { presentaciones: vec![caro], precios_mayor: vec![] }).is_err());
     }
 
     #[test]
@@ -655,7 +765,7 @@ mod pruebas {
     #[test]
     fn la_presentacion_da_precio_por_volumen() {
         let mut e = Especiales::default();
-        e.presentaciones.insert(1, ("Rollo x 100 m".into(), 100.0, 85.0));
+        e.presentaciones.insert(1, ("Rollo x 100 m".into(), 100.0, 85.0, None));
         e.mayor.push((300.0, 0.8));
         assert!(precio_por_volumen_valido(0.85, 150.0, &e));
         assert!(precio_por_volumen_valido(0.85, 100.0, &e));

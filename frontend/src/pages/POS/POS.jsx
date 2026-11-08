@@ -25,7 +25,7 @@ import { UNIDAD_PIE_TABLAR, formatoCantidad, formatoPrecio, leerCantidad, seVend
 import CalculadoraPieTablar from '../../components/CalculadoraPieTablar';
 import CantidadFraccionada from '../../components/CantidadFraccionada';
 import ElegirPresentacion from '../../components/ElegirPresentacion';
-import { agruparOpciones, detallePresentacion, escalaPara, escalasDe, indicePorCodigo, precioUnitarioDe } from '../../utils/presentaciones';
+import { agruparOpciones, detallePresentacion, escalaPara, escalasDe, indicePorCodigo, precioPresentacionPara, precioUnitarioDe } from '../../utils/presentaciones';
 import CotizacionImprimible from '../../components/CotizacionImprimible';
 import { numeroCotizacion } from '../../utils/formato';
 import '../../components/PantallaModulo.css';
@@ -169,7 +169,8 @@ function PrecioEditable({ valor, onCambiar, etiqueta }) {
 
 // Línea del carrito vendida en una presentación (módulo PRESENTACIONES):
 // n rollos de 100 m entran como n × 100 m al precio del rollo / 100. Su
-// clave es la de la presentación: dos toques suman un rollo más.
+// clave es la de la presentación: dos toques suman un rollo más. Desde
+// `mayor_desde` presentaciones (3 cajas), cada una a su precio por mayor.
 const redondear6 = (n) => Math.round(n * 1e6) / 1e6;
 function lineaDePresentacion(producto, presentacion, n) {
   return {
@@ -178,7 +179,8 @@ function lineaDePresentacion(producto, presentacion, n) {
     presentacion,
     cantidadPresentacion: n,
     cantidad: redondear6(presentacion.factor * n),
-    precio: precioUnitarioDe(presentacion.precio, presentacion.factor),
+    precio: precioUnitarioDe(precioPresentacionPara(presentacion, n), presentacion.factor),
+    presentacionPorMayor: precioPresentacionPara(presentacion, n) !== presentacion.precio,
     detalle: detallePresentacion(presentacion.nombre, n),
   };
 }
@@ -2920,7 +2922,8 @@ export default function POS({
                 {item.presentacion ? (
                   // Rollo, caja...: su precio fijo y cuánto es en la unidad del producto.
                   <span className="pos-carrito-item-precio">
-                    S/ {Number(item.presentacion.precio).toFixed(2)} c/u · {formatoCantidad(item.cantidad)}{' '}
+                    S/ {Number(precioPresentacionPara(item.presentacion, item.cantidadPresentacion)).toFixed(2)} c/u
+                    {item.presentacionPorMayor && ' (por mayor)'} · {formatoCantidad(item.cantidad)}{' '}
                     {abreviaturaUnidad(item.unidad_medida)} · S/ {subtotalLinea(item.precio, item.cantidad).toFixed(2)}
                   </span>
                 ) : precioEditable && !cobrandoPedido ? (
