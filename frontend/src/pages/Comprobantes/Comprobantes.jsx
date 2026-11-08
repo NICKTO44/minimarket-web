@@ -169,8 +169,11 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
       for (let numPagina = 1; numPagina <= documento.numPages; numPagina++) {
         const pagina = await documento.getPage(numPagina);
         const viewportBase = pagina.getViewport({ scale: 1 });
+        // Tamaño real, como sale impreso (1 pt = 96/72 px): el ticket de 80 mm
+        // no se estira al ancho del modal. Si no entra (A4 en celular), se achica.
+        const anchoReal = Math.min(anchoContenedor - 24, (viewportBase.width * 96) / 72);
         // *2 para que se vea nítido en pantallas retina/alta densidad
-        const escala = (anchoContenedor / viewportBase.width) * 2;
+        const escala = (anchoReal / viewportBase.width) * 2;
         const viewport = pagina.getViewport({ scale: escala });
 
         const canvas = document.createElement('canvas');
@@ -179,7 +182,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         const contexto = canvas.getContext('2d');
         await pagina.render({ canvasContext: contexto, viewport }).promise;
 
-        paginasRenderizadas.push(canvas.toDataURL('image/png'));
+        paginasRenderizadas.push({ src: canvas.toDataURL('image/png'), ancho: anchoReal });
       }
 
       setPdfPaginas(paginasRenderizadas);
@@ -946,7 +949,8 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                 pdfPaginas.map((imagenPagina, indice) => (
                   <img
                     key={indice}
-                    src={imagenPagina}
+                    src={imagenPagina.src}
+                    style={{ '--ancho-real': `${imagenPagina.ancho}px` }}
                     alt={`Página ${indice + 1} del comprobante`}
                     className="comp-pdf-pagina-img"
                   />

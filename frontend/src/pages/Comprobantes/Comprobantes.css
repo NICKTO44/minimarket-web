@@ -316,7 +316,8 @@
 
 .comp-pdf-pagina-img {
   width: calc(100% - 24px);
-  max-width: 100%;
+  /* En pantalla, a tamaño real (lo calcula renderizarPdf). */
+  max-width: min(100%, var(--ancho-real, 100%));
   height: auto;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
   background: #fff;
@@ -349,6 +350,10 @@
   .comp-pdf-paginas,
   .comp-pdf-paginas * {
     visibility: visible;
+  }
+
+  .comp-pdf-pagina-img {
+    max-width: 100%;
   }
 
   .comp-pdf-paginas {
