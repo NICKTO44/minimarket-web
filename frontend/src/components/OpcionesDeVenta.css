@@ -27,7 +27,8 @@
 
 .odv-fila {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  /* Nombre, cuánto lleva, precio, código de barras (opcional) y quitar. */
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto;
   gap: 8px;
   align-items: end;
   margin-bottom: 8px;
@@ -97,5 +98,8 @@
   }
   .odv-campo-nombre {
     grid-column: 1 / -1;
+  }
+  .odv-campo-codigo {
+    grid-column: 1 / 3;
   }
 }

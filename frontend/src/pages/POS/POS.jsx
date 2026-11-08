@@ -25,7 +25,7 @@ import { UNIDAD_PIE_TABLAR, formatoCantidad, formatoPrecio, leerCantidad, seVend
 import CalculadoraPieTablar from '../../components/CalculadoraPieTablar';
 import CantidadFraccionada from '../../components/CantidadFraccionada';
 import ElegirPresentacion from '../../components/ElegirPresentacion';
-import { agruparOpciones, detallePresentacion, escalaPara, escalasDe, precioUnitarioDe } from '../../utils/presentaciones';
+import { agruparOpciones, detallePresentacion, escalaPara, escalasDe, indicePorCodigo, precioUnitarioDe } from '../../utils/presentaciones';
 import CotizacionImprimible from '../../components/CotizacionImprimible';
 import { numeroCotizacion } from '../../utils/formato';
 import '../../components/PantallaModulo.css';
@@ -442,6 +442,11 @@ export default function POS({
   useEffect(() => {
     recargarOpcionesVenta();
   }, [recargarOpcionesVenta]);
+  // Código de barras propio de cada presentación (el six pack, la caja...).
+  const presentacionPorCodigo = useMemo(
+    () => (presentaciones ? indicePorCodigo(opcionesVenta) : new Map()),
+    [presentaciones, opcionesVenta]
+  );
   // Fichas de medicamentos (Map producto_id -> ficha), solo con el módulo.
   const [fichas, setFichas] = useState(() => new Map());
   useEffect(() => {
@@ -901,7 +906,15 @@ export default function POS({
             ((fichaRepuesto || compatibilidad) &&
               coincidenTodas(palabrasDeBusqueda(q), p.nombre, p.codigo, p.descripcion, fichaRepuesto && resumenRepuesto(repuestos.get(p.id)))) ||
             // Librería: por palabras ("vargas llosa", "harry potter 3") en título, código (ISBN), autor, editorial o serie.
-            (fichaLibro && coincidenTodas(palabrasDeBusqueda(q), p.nombre, p.codigo, textoLibro(libros.get(p.id))))
+            (fichaLibro && coincidenTodas(palabrasDeBusqueda(q), p.nombre, p.codigo, textoLibro(libros.get(p.id)))) ||
+            // Presentaciones: "six pack cusqueña" o el código de barras del pack.
+            (presentaciones &&
+              opcionesVenta.get(p.id)?.presentaciones.length > 0 &&
+              coincidenTodas(
+                palabrasDeBusqueda(q),
+                p.nombre,
+                opcionesVenta.get(p.id).presentaciones.map((x) => `${x.nombre} ${x.codigo_barras || ''}`).join(' ')
+              ))
         )
       : paraEditorial;
 
@@ -920,7 +933,7 @@ export default function POS({
     }
     return base;
   }, [productosVenta, busqueda, ordenPrecio, categoriaActiva, fichaMedicamento, fichas, fichaRepuesto, repuestos, compatibilidad,
-      compatibilidades, vehiculoFiltro, fichaLibro, libros, editorialFiltro]);
+      compatibilidades, vehiculoFiltro, fichaLibro, libros, editorialFiltro, presentaciones, opcionesVenta]);
 
   // Tallas y colores: una tarjeta por modelo (con las tallas que pasaron el
   // buscador). Sin el módulo, una tarjeta por producto, como siempre.
@@ -1134,13 +1147,17 @@ export default function POS({
     const producto = productoConPresentaciones;
     setProductoConPresentaciones(null);
     if (!producto) return;
+    agregarPresentacionDe(producto, presentacion);
+  };
+  // false si no alcanza el stock (no se agrega).
+  const agregarPresentacionDe = (producto, presentacion) => {
     const clave = `pres-${presentacion.id}`;
     const yaHay = carrito.find((i) => i.clave === clave)?.cantidadPresentacion || 0;
     if (disponibleDe(producto.id, clave) + 1e-6 < presentacion.factor * (yaHay + 1)) {
-      if (ofrecerAlternativas(producto)) return;
+      if (ofrecerAlternativas(producto)) return false;
       setAvisoStock({ texto: textoSinStock(producto.id, producto.nombre, disponibleDe(producto.id)) });
       recargarProductos();
-      return;
+      return false;
     }
     setCarrito((prev) => {
       const existe = prev.find((i) => i.clave === clave);
@@ -1151,6 +1168,16 @@ export default function POS({
       }
       return [...prev, { ...lineaDePresentacion(producto, presentacion, 1), descuentoMonto: 0 }];
     });
+    return true;
+  };
+  // Escaneado o escrito el código de barras de una presentación (el del six
+  // pack): entra directo esa presentación. null si el código no es de una.
+  const agregarPorCodigoDePresentacion = (codigo) => {
+    const hallado = presentacionPorCodigo.get(String(codigo).trim().toLowerCase());
+    if (!hallado) return null;
+    const producto = productos.find((p) => p.id === hallado.productoId);
+    if (!producto) return null;
+    return { agregado: agregarPresentacionDe(producto, hallado.presentacion), nombre: `${producto.nombre} (${hallado.presentacion.nombre})` };
   };
 
   // La calculadora devolvió pies y medidas: entra como línea propia (la
@@ -1223,6 +1250,10 @@ export default function POS({
       const texto = busqueda.trim();
       const exacto =
         productos.find((p) => p.codigo.toLowerCase() === texto.toLowerCase()) || (fichaRepuesto ? porCodigoDeRepuesto(texto) : null);
+      if (!exacto && agregarPorCodigoDePresentacion(texto)) {
+        setBusqueda('');
+        return;
+      }
       const elegido = exacto || resultadosTabla[Math.min(resaltado, resultadosTabla.length - 1)];
       if (elegido) elegirEnTabla(elegido);
     }
@@ -1238,6 +1269,11 @@ export default function POS({
       productos.find((p) => p.codigo.toLowerCase() === texto.toLowerCase()) || (fichaRepuesto ? porCodigoDeRepuesto(texto) : null);
     if (porCodigoExacto) {
       agregarAlCarrito(porCodigoExacto);
+      setBusqueda('');
+      return;
+    }
+    // El código de barras de un six pack o una caja (módulo Presentaciones).
+    if (agregarPorCodigoDePresentacion(texto)) {
       setBusqueda('');
       return;
     }
@@ -1270,7 +1306,12 @@ export default function POS({
     alEscanear.current = (codigo) => {
       const producto =
         productos.find((p) => p.codigo.toLowerCase() === codigo.toLowerCase()) || (fichaRepuesto ? porCodigoDeRepuesto(codigo) : null);
-      if (!producto) {
+      const deCaja = producto ? null : agregarPorCodigoDePresentacion(codigo);
+      if (deCaja) {
+        setUltimoEscaneo(
+          deCaja.agregado ? { tipo: 'ok', texto: `${deCaja.nombre} agregado` } : { tipo: 'error', texto: `${deCaja.nombre}: sin stock, no se agregó` }
+        );
+      } else if (!producto) {
         setUltimoEscaneo({ tipo: 'error', texto: `Código "${codigo}" no encontrado` });
       } else if (agregarAlCarrito(producto)) {
         setUltimoEscaneo({ tipo: 'ok', texto: `${producto.nombre} agregado` });

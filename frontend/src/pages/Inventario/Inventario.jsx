@@ -10,6 +10,7 @@ import { AFECTACIONES, etiquetaAfectacion } from '../../utils/igv';
 import CategoriasIgv from './CategoriasIgv';
 import FormularioModelo, { ConvertirEnModelo } from './FormularioModelo';
 import ImportarProductos from './ImportarProductos';
+import ImportarPresentaciones from './ImportarPresentaciones';
 import { TIPO_XLSX, escribirXlsx } from '../../utils/hojas';
 import { descargarArchivo } from '../../utils/pdfTicket';
 import { fechaCorta, hoyLima } from '../../utils/formato';
@@ -251,6 +252,8 @@ export default function Inventario({
   const [modeloForm, setModeloForm] = useState(null);
   // Importar productos desde Excel o CSV (solo el administrador).
   const [importando, setImportando] = useState(false);
+  // Módulo PRESENTACIONES: cargar six packs, cajas... desde un Excel.
+  const [importandoPresentaciones, setImportandoPresentaciones] = useState(false);
   const [modelosAbiertos, setModelosAbiertos] = useState(() => new Set());
 
   const cargarTodo = () => {
@@ -999,6 +1002,17 @@ export default function Inventario({
               >
                 ⬆ Importar
               </button>
+              {presentaciones && (
+                <button
+                  className="inv-boton-categorias"
+                  onClick={() => {
+                    setMensaje(null);
+                    setImportandoPresentaciones(true);
+                  }}
+                >
+                  ⬆ Presentaciones
+                </button>
+              )}
               <button className="inv-boton-categorias" onClick={fichaRepuesto ? exportarRepuestos : exportarProductos} disabled={productos.length === 0}>
                 ⬇ Exportar
               </button>
@@ -1216,6 +1230,22 @@ export default function Inventario({
             </tbody>
           </table>
         </div>
+      )}
+
+      {importandoPresentaciones && (
+        <ImportarPresentaciones
+          onCerrar={() => setImportandoPresentaciones(false)}
+          onTerminado={(r) => {
+            setImportandoPresentaciones(false);
+            setMensaje({
+              tipo: 'exito',
+              texto: `Presentaciones cargadas: ${r.nuevas} nueva${r.nuevas === 1 ? '' : 's'}${
+                r.actualizadas > 0 ? ` y ${r.actualizadas} actualizada${r.actualizadas === 1 ? '' : 's'}` : ''
+              }${r.errores > 0 ? ` (${r.errores} con error no entraron)` : ''}.`,
+            });
+            cargarTodo();
+          }}
+        />
       )}
 
       {importando && (

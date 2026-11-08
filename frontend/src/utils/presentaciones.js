@@ -29,6 +29,20 @@ export function agruparOpciones(respuesta) {
   return mapa;
 }
 
+/**
+ * Código de barras -> { productoId, presentacion }, de las presentaciones que
+ * tienen el suyo (el six pack, la caja...). Para escanearlas en el punto de venta.
+ */
+export function indicePorCodigo(mapa) {
+  const indice = new Map();
+  for (const [productoId, opcion] of mapa || []) {
+    for (const p of opcion.presentaciones) {
+      if (p.codigo_barras) indice.set(String(p.codigo_barras).toLowerCase(), { productoId, presentacion: p });
+    }
+  }
+  return indice;
+}
+
 /** De las escalas que alcanza esa cantidad, la de menor precio (o null). */
 export function escalaPara(escalas, cantidad) {
   let elegida = null;
@@ -63,7 +77,12 @@ export function escalasDe(opcion, precioNormal, { mayor = true, presentaciones =
 /** Lo que guarda el servidor -> filas del formulario (texto). */
 export function opcionesAFormulario(respuesta) {
   return {
-    presentaciones: (respuesta?.presentaciones || []).map((p) => ({ nombre: p.nombre, factor: String(p.factor), precio: String(p.precio) })),
+    presentaciones: (respuesta?.presentaciones || []).map((p) => ({
+      nombre: p.nombre,
+      factor: String(p.factor),
+      precio: String(p.precio),
+      codigo_barras: p.codigo_barras || '',
+    })),
     precios_mayor: (respuesta?.precios_mayor || []).map((m) => ({ desde: String(m.desde), precio: String(m.precio) })),
   };
 }
@@ -88,7 +107,7 @@ export function formularioAOpciones(opciones) {
     if (!f.nombre.trim() || !(factor > 0) || !(precio > 0)) {
       return { error: 'Completa cada presentación: nombre, cuánto lleva y su precio (o bórrala).' };
     }
-    presentaciones.push({ nombre: f.nombre.trim(), factor, precio });
+    presentaciones.push({ nombre: f.nombre.trim(), factor, precio, codigo_barras: String(f.codigo_barras || '').trim() || null });
   }
   const precios_mayor = [];
   for (const f of opciones.precios_mayor.filter((x) => !vacia(x))) {

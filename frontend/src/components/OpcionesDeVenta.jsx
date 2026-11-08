@@ -42,6 +42,15 @@ export default function OpcionesDeVenta({ opciones, onCambiar, unidad, precioNor
                   <span>Precio S/</span>
                   <input inputMode="decimal" placeholder="85.00" value={f.precio} onChange={(e) => cambiarFila('presentaciones', i, 'precio', e.target.value)} />
                 </label>
+                <label className="odv-campo odv-campo-codigo">
+                  <span>Cód. de barras</span>
+                  <input
+                    placeholder="Opcional"
+                    maxLength={40}
+                    value={f.codigo_barras || ''}
+                    onChange={(e) => cambiarFila('presentaciones', i, 'codigo_barras', e.target.value.trim())}
+                  />
+                </label>
                 <button type="button" className="odv-quitar" onClick={() => quitar('presentaciones', i)} aria-label="Quitar presentación">
                   <Trash2 size={16} />
                 </button>
@@ -53,7 +62,7 @@ export default function OpcionesDeVenta({ opciones, onCambiar, unidad, precioNor
               </div>
             );
           })}
-          <button type="button" className="odv-agregar" onClick={() => agregar('presentaciones', { nombre: '', factor: '', precio: '' })}>
+          <button type="button" className="odv-agregar" onClick={() => agregar('presentaciones', { nombre: '', factor: '', precio: '', codigo_barras: '' })}>
             <Plus size={15} /> Agregar presentación
           </button>
         </section>
