@@ -189,6 +189,20 @@
      cada equipo: utils/papelTicket.js). De los 58 mm imprime solo los 48 mm
      del centro (384 puntos). Mismo diseño, un poco más compacto. El @page de
      58 mm lo agrega utils/papelTicket.js. */
+  /* Módulo "Logo en el ticket": centrado y en gris/negro (la ticketera no
+     imprime color). */
+  .recibo-logo {
+    display: block;
+    max-width: 40mm;
+    max-height: 22mm;
+    margin: 0 auto 2mm;
+    object-fit: contain;
+    filter: grayscale(1);
+  }
+  html.papel-58 .recibo-logo {
+    max-width: 32mm;
+    max-height: 18mm;
+  }
   html.papel-58 .recibo-imprimible {
     width: 48mm;
     padding: 2.5mm 0.5mm 5mm;

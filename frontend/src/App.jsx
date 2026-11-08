@@ -49,6 +49,7 @@ import DireccionNegocio from './components/DireccionNegocio';
 import { irADireccion, leerDireccion } from './utils/direccion';
 import { usarAppDelNegocio } from './utils/appInstalable';
 import { usarComprobanteClasico } from './utils/comprobanteClasico';
+import { usarLogoTicket } from './utils/logoTicket';
 import { usarEstablecimiento } from './utils/establecimiento';
 import {
   conPermisosDeAdmin,
@@ -85,6 +86,7 @@ import {
   MODULO_VENTA_FUERA_INVENTARIO,
   MODULO_VENTA_SIN_CONEXION,
   MODULO_COMPROBANTE_CLASICO,
+  MODULO_LOGO_TICKET,
   MODULO_CATALOGO,
   MODULO_VEHICULOS,
   MODULO_ORDENES_SERVICIO,
@@ -523,6 +525,8 @@ function App() {
   // Módulo "Comprobante formato clásico": lo leen todas las impresiones
   // (utils/comprobanteClasico.js). Sin el módulo, todo se imprime como siempre.
   usarComprobanteClasico(negocio.modulos.includes(MODULO_COMPROBANTE_CLASICO));
+  // Módulo "Logo en el ticket" (utils/logoTicket.js). Sin él, el ticket sale sin logo.
+  usarLogoTicket(negocio.modulos.includes(MODULO_LOGO_TICKET));
   // Establecimiento anexo: "Sucursal: ..." en las impresiones (utils/establecimiento.js).
   usarEstablecimiento(configuracionTienda?.sucursal);
   const restaurante = negocio.modulos.includes(MODULO_MESAS);

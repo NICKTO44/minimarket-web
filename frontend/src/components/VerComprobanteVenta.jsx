@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, API_URL } from '../api/api';
 import { datosClasicos, datosDelTicket, facturaConA4, pagoDeVenta } from '../utils/documentoVenta';
 import { datosA4DeDocumento, imprimirComprobanteA4 } from '../utils/facturaA4';
-import { descargarArchivo, pdfDeVenta } from '../utils/pdfTicket';
+import { descargarArchivo, logoParaPdf, pdfDeVenta } from '../utils/pdfTicket';
 import './VerComprobanteVenta.css';
 
 /**
@@ -60,6 +60,7 @@ export default function VerComprobanteVenta({ venta, onCerrar }) {
       ruc: cfg?.ruc || comp.ruc_emisor || '',
       // Quien hizo la venta (no quien la está revisando).
       cajero: venta.cajero || '',
+      logoImagen: await logoParaPdf(cfg?.logo_path ? `${API_URL}${cfg.logo_path}` : null),
     });
   };
 

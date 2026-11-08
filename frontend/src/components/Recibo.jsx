@@ -5,6 +5,7 @@ import { montoEnLetras } from '../utils/numeroALetras';
 import { construirCadenaQrSunat } from '../utils/qrSunat';
 import { nombreMetodo, pagoParaImprimir } from '../utils/metodoPago';
 import { comprobanteClasico, soloFecha } from '../utils/comprobanteClasico';
+import { logoEnTicket } from '../utils/logoTicket';
 import { sucursalActual } from '../utils/establecimiento';
 import { desgloseDeComprobante, etiquetaTasa } from '../utils/igv';
 import { formatoCantidad, formatoPrecio, subtotalLinea } from '../utils/medidas';
@@ -40,6 +41,8 @@ export default function Recibo({
   provisional = null,
   // Formato clásico: quién hizo la venta (al reimprimir). Sin él, `cajero`.
   vendedor = null,
+  // URL del logo de Configuración. Solo sale con el módulo "Logo en el ticket".
+  logo = null,
 }) {
   // Módulo "Comprobante formato clásico": sin hora, "Vendedor" y el
   // teléfono del cliente. El pago ya llega solo con su medio (metodoPago.js).
@@ -128,6 +131,7 @@ export default function Recibo({
   // pantalla (ver utils/imprimirTicket.js).
   return createPortal(
     <div className="recibo-imprimible">
+      {logo && logoEnTicket() && <img className="recibo-logo" src={logo} alt="" />}
       <div className="recibo-centro recibo-nombre-tienda">{nombreTienda}</div>
       {/* Razón social (la pide SUNAT cuando es distinta del nombre comercial). */}
       {razonSocial && razonSocial.trim() !== String(nombreTienda || '').trim() && (

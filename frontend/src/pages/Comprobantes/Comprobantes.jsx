@@ -10,7 +10,7 @@ import EmitirDesdeNota from '../../components/EmitirDesdeNota';
 import { imprimirNotaCredito } from '../../utils/notaCredito';
 import '../../components/Recibo.css';
 import { fechaHoraLima, hoyLima } from '../../utils/formato';
-import { descargarArchivo, pdfDeVenta } from '../../utils/pdfTicket';
+import { descargarArchivo, logoParaPdf, pdfDeVenta } from '../../utils/pdfTicket';
 import { enlaceComprobantePublico } from '../../utils/enlacePublico';
 import { imprimirTicket as imprimirSoloTicket } from '../../utils/imprimirTicket';
 import { a4Propio, datosClasicos, datosDelTicket, facturaConA4, pagoDeVenta } from '../../utils/documentoVenta';
@@ -435,6 +435,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
         ruc,
         cajero: usuario?.nombre || '',
         etiquetaCajero: etiquetaRol(usuario),
+        logoImagen: await logoParaPdf(logoNegocio),
       });
       entregarPdf(bytes, nombre);
     } catch (e) {

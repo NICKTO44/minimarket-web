@@ -75,6 +75,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 const DEBOUNCE_BUSQUEDA_VIVA_MS = 400;
 const DURACION_MENSAJE_ESCANEO_MS = 2500;
+// Pistola de código de barras: escribe cada letra en pocos milisegundos y
+// termina con Enter. Una persona tarda bastante más entre tecla y tecla.
+const PAUSA_MAX_PISTOLA_MS = 50;
+const LARGO_MIN_PISTOLA = 4;
 
 const REGLAS_DOCUMENTO = {
   DNI: { maxLength: 8, soloNumeros: true, label: 'DNI (8 dígitos)' },
@@ -1303,24 +1307,81 @@ export default function POS({
   // (con el carrito y el stock al día).
   const alEscanear = useRef(null);
   useEffect(() => {
-    alEscanear.current = (codigo) => {
+    // `avisar` recibe { tipo, texto }: la cámara lo muestra en su ventana; la
+    // pistola, en el aviso del POS (solo los errores).
+    alEscanear.current = (codigo, avisar = setUltimoEscaneo) => {
       const producto =
         productos.find((p) => p.codigo.toLowerCase() === codigo.toLowerCase()) || (fichaRepuesto ? porCodigoDeRepuesto(codigo) : null);
       const deCaja = producto ? null : agregarPorCodigoDePresentacion(codigo);
       if (deCaja) {
-        setUltimoEscaneo(
+        avisar(
           deCaja.agregado ? { tipo: 'ok', texto: `${deCaja.nombre} agregado` } : { tipo: 'error', texto: `${deCaja.nombre}: sin stock, no se agregó` }
         );
       } else if (!producto) {
-        setUltimoEscaneo({ tipo: 'error', texto: `Código "${codigo}" no encontrado` });
+        avisar({ tipo: 'error', texto: `Código "${codigo}" no encontrado` });
       } else if (agregarAlCarrito(producto)) {
-        setUltimoEscaneo({ tipo: 'ok', texto: `${producto.nombre} agregado` });
+        avisar({ tipo: 'ok', texto: `${producto.nombre} agregado` });
       } else {
-        setUltimoEscaneo({ tipo: 'error', texto: `${producto.nombre}: sin stock, no se agregó` });
+        avisar({ tipo: 'error', texto: `${producto.nombre}: sin stock, no se agregó` });
       }
     };
   });
   const manejarCodigoEscaneado = useCallback((codigo) => alEscanear.current?.(codigo), []);
+
+  // Pistola de código de barras en cualquier parte del POS, sin tener que
+  // hacer clic en el buscador: si el cursor quedó en una tarjeta, el carrito,
+  // un botón u otro campo, el código se perdía. Se reconoce la ráfaga de la
+  // pistola (letras muy seguidas + Enter) y se agrega igual que con la
+  // cámara. En el buscador sigue su propio Enter (manejarEnterBusquedaProducto
+  // o manejarTeclaTabla). Lo que escribe una persona no se toca.
+  useEffect(() => {
+    if (escanerAbierto) return undefined; // la cámara ya agrega lo que lee
+    let codigo = '';
+    let ultimaTecla = 0;
+    let destino = null;
+    let valorAntes = null;
+    const esCampo = (el) =>
+      !!el &&
+      (el.tagName === 'TEXTAREA' ||
+        el.isContentEditable ||
+        (el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'file', 'range', 'color'].includes(el.type)));
+    // Devuelve el campo a como estaba antes de la ráfaga (un campo de React
+    // necesita el evento "input" para enterarse).
+    const restaurar = (el, valor) => {
+      const ponerValor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
+      if (!ponerValor) return;
+      ponerValor.call(el, valor);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    const alTeclear = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const ahora = performance.now();
+      if (e.key.length === 1) {
+        if (ahora - ultimaTecla > PAUSA_MAX_PISTOLA_MS) {
+          codigo = '';
+          destino = e.target;
+          valorAntes = esCampo(e.target) ? e.target.value : null;
+        }
+        codigo += e.key;
+        ultimaTecla = ahora;
+        return;
+      }
+      if (e.key === 'Shift') return; // la pistola lo usa para las mayúsculas
+      const leido = codigo.trim();
+      codigo = '';
+      if (e.key !== 'Enter') return;
+      const esPistola = leido.length >= LARGO_MIN_PISTOLA && ahora - ultimaTecla <= PAUSA_MAX_PISTOLA_MS;
+      if (!esPistola || e.target === buscadorRef.current) return;
+      // El Enter de la pistola no debe apretar el botón que tenga el foco
+      // (por ejemplo "Cobrar").
+      e.preventDefault();
+      e.stopPropagation();
+      if (destino && valorAntes !== null && esCampo(destino) && destino.value !== valorAntes) restaurar(destino, valorAntes);
+      alEscanear.current?.(leido, (r) => r.tipo === 'error' && setMensaje(r));
+    };
+    window.addEventListener('keydown', alTeclear, true);
+    return () => window.removeEventListener('keydown', alTeclear, true);
+  }, [escanerAbierto]);
 
   // El mensaje de "producto agregado / no encontrado" se borra solo tras
   // un par de segundos, para no acumular texto viejo mientras se sigue

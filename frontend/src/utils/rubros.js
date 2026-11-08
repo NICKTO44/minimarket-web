@@ -48,6 +48,8 @@ export const MODULO_VENTA_FUERA_INVENTARIO = 'VENTA_FUERA_INVENTARIO';
 export const MODULO_VENTA_SIN_CONEXION = 'VENTA_SIN_CONEXION';
 // Comprobante impreso en formato clásico: datos del cliente en recuadro, sin hora y pago solo por su medio.
 export const MODULO_COMPROBANTE_CLASICO = 'COMPROBANTE_CLASICO';
+// Logo del negocio arriba del ticket de 80/58 mm (boleta, factura y nota de venta).
+export const MODULO_LOGO_TICKET = 'LOGO_TICKET';
 // Catálogo: los productos en tarjetas con foto, solo para mirar (vendedores).
 export const MODULO_CATALOGO = 'CATALOGO';
 // Lubricentro: vehículos de los clientes, placa y kilometraje en la venta.
@@ -92,7 +94,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_CATALOGO];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_CATALOGO];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -238,6 +240,12 @@ export const MODULOS = [
     label: 'Comprobante formato clásico',
     descripcion:
       'Cambia cómo se imprimen tus boletas, facturas y notas (hoja A4, A5 y ticket): los datos del cliente van en un recuadro (R.U.C. o DNI, señores, vendedor, dirección y teléfono), sin la hora, y el pago solo con su medio ("Efectivo", "Yape / Plin"), sin montos. Lo que se envía a SUNAT no cambia.',
+  },
+  {
+    valor: MODULO_LOGO_TICKET,
+    label: 'Logo en el ticket',
+    descripcion:
+      'Pone el logo de tu negocio (el de Configuración) arriba del ticket de 80 o 58 mm: boleta, factura y nota de venta, al imprimir, al reimprimir y en el PDF que mandas por WhatsApp. Sale en blanco y negro: usa un logo de fondo blanco o transparente. Lo que se envía a SUNAT no cambia.',
   },
   {
     valor: MODULO_CATALOGO,

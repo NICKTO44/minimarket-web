@@ -103,6 +103,11 @@ pub const MODULO_VENTA_SIN_CONEXION: &str = "VENTA_SIN_CONEXION";
 /// sin la hora y con el pago solo por su medio ("Yape / Plin"). Solo cambia
 /// lo impreso, no lo que se envía a SUNAT. Sirve para cualquier rubro.
 pub const MODULO_COMPROBANTE_CLASICO: &str = "COMPROBANTE_CLASICO";
+/// Logo del negocio (el de Configuración) arriba del ticket de 80/58 mm:
+/// boleta, factura y nota de venta, al imprimir, al reimprimir y en su PDF.
+/// Solo cambia lo impreso. Apagado, el ticket sale como siempre (sin logo).
+/// Sirve para cualquier rubro.
+pub const MODULO_LOGO_TICKET: &str = "LOGO_TICKET";
 /// Catálogo de productos en tarjetas con foto, solo para mirar (sin
 /// vender ni editar), para que los vendedores revisen rápido. Solo es una
 /// pantalla del frontend: lee lo mismo que Productos. Sirve para cualquier
@@ -191,6 +196,7 @@ const MODULOS: &[&str] = &[
     MODULO_VENTA_FUERA_INVENTARIO,
     MODULO_VENTA_SIN_CONEXION,
     MODULO_COMPROBANTE_CLASICO,
+    MODULO_LOGO_TICKET,
     MODULO_CATALOGO,
     MODULO_VEHICULOS,
     MODULO_ORDENES_SERVICIO,

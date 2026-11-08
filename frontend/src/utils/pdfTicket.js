@@ -17,6 +17,7 @@ import { fechaCorta } from './formato';
 import { abreviaturaUnidad } from './unidades';
 import { pagoParaImprimir } from './metodoPago';
 import { comprobanteClasico, soloFecha } from './comprobanteClasico';
+import { logoEnTicket } from './logoTicket';
 
 const ANCHO = 226.77; // 80 mm en puntos
 const MARGEN = 11;
@@ -140,10 +141,11 @@ function crearLienzo() {
       trazos.push({ tipo: 'qr', modulos, lado, x: (ANCHO - lado) / 2, y: y + 2 });
       y += lado + 6;
     },
-    /** Imagen centrada (ya en escala de grises, ver grisesDeImagen). Una por PDF. */
-    imagen(imagen, lado) {
-      trazos.push({ tipo: 'imagen', imagen, lado, x: (ANCHO - lado) / 2, y: y + 2 });
-      y += lado + 6;
+    /** Imagen centrada (ya en escala de grises, ver grisesDeImagen). Una por PDF.
+     *  `alto` se omite para una imagen cuadrada (el QR de la guía). */
+    imagen(imagen, lado, alto = lado) {
+      trazos.push({ tipo: 'imagen', imagen, ancho: lado, alto, x: (ANCHO - lado) / 2, y: y + 2 });
+      y += alto + 6;
     },
     terminar() {
       return { trazos, alto: y + MARGEN };
@@ -177,7 +179,7 @@ function contenido(trazos, alto) {
       }
       ops.push('f');
     } else if (t.tipo === 'imagen') {
-      ops.push(`q ${n(t.lado)} 0 0 ${n(t.lado)} ${n(t.x)} ${n(alto - t.y - t.lado)} cm /Im1 Do Q`);
+      ops.push(`q ${n(t.ancho)} 0 0 ${n(t.alto)} ${n(t.x)} ${n(alto - t.y - t.alto)} cm /Im1 Do Q`);
     }
   }
   return ops.join('\n');
@@ -228,7 +230,7 @@ const soles = (monto) => `S/.${Number(monto).toFixed(2)}`;
  * (texto ya listo para mostrar).
  * Devuelve { bytes, nombre } con el archivo y un nombre sugerido.
  */
-export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, direccion, telefono, ruc, cajero, etiquetaCajero = 'Cajero', fecha, vendedor = null }) {
+export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, direccion, telefono, ruc, cajero, etiquetaCajero = 'Cajero', fecha, vendedor = null, logoImagen = null }) {
   // Formato clásico (igual que Recibo.jsx): sin hora, "Vendedor" y teléfono del cliente.
   const clasico = comprobanteClasico();
   const esComprobante = !!comprobante;
@@ -250,6 +252,12 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
   const centro = { alinear: 'centro' };
 
   const l = crearLienzo();
+  // Módulo "Logo en el ticket" (igual que Recibo.jsx): hasta 40 x 22 mm.
+  const logo = logoEnTicket() ? logoImagen : null;
+  if (logo) {
+    const escala = Math.min(113 / logo.ancho, 62 / logo.alto);
+    l.imagen(logo, logo.ancho * escala, logo.alto * escala);
+  }
   for (const linea of partir(String(nombreTienda || '').toUpperCase(), 12)) l.texto(linea, { tam: 12, negrita: true, ...centro });
   // Establecimiento anexo: la sucursal antes de la dirección fiscal (igual que Recibo.jsx).
   if (sucursalActual()) for (const linea of partir(`Sucursal: ${sucursalActual()}`, TAM)) l.texto(linea, centro);
@@ -367,24 +375,47 @@ export function pdfDeVenta({ venta, items, comprobante, cliente, nombreTienda, d
   const tipo = comprobante ? (comprobante.tipo === 'FACTURA' ? 'Factura' : 'Boleta') : 'Nota de venta';
   const titulo = `${tipo} ${numeroDocumento || venta.folio}`;
   return {
-    bytes: armarPdf(contenido(trazos, alto), alto, titulo),
+    bytes: armarPdf(contenido(trazos, alto), alto, titulo, logo),
     nombre: `${titulo.replace(/\s+/g, '-')}.pdf`,
   };
+}
+
+/**
+ * Logo del negocio (URL de Configuración) listo para pdfDeVenta, achicado a
+ * lo que necesita el ticket. null si el módulo "Logo en el ticket" está
+ * apagado, si no hay logo o si no se pudo leer: el PDF sale igual, sin logo.
+ */
+export async function logoParaPdf(url) {
+  if (!url || !logoEnTicket()) return null;
+  try {
+    const respuesta = await fetch(url);
+    if (!respuesta.ok) return null;
+    const enlace = URL.createObjectURL(await respuesta.blob());
+    try {
+      return await grisesDeImagen(enlace, 360);
+    } finally {
+      URL.revokeObjectURL(enlace);
+    }
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Imagen (data:image/...) -> sus píxeles en escala de grises, en hexadecimal,
  * para meterla en el PDF. Lo transparente cuenta como blanco.
  */
-async function grisesDeImagen(dataUrl) {
+async function grisesDeImagen(dataUrl, maxLado = 0) {
   const img = new Image();
   await new Promise((listo, fallo) => {
     img.onload = listo;
     img.onerror = () => fallo(new Error('No se pudo leer la imagen del QR.'));
     img.src = dataUrl;
   });
-  const ancho = img.naturalWidth;
-  const alto = img.naturalHeight;
+  // maxLado (el logo): se achica para que el PDF no pese de más.
+  const reduccion = maxLado ? Math.min(1, maxLado / Math.max(img.naturalWidth, img.naturalHeight)) : 1;
+  const ancho = Math.round(img.naturalWidth * reduccion);
+  const alto = Math.round(img.naturalHeight * reduccion);
   if (!ancho || !alto || ancho * alto > 1200 * 1200) throw new Error('La imagen del QR no es válida.');
   const lienzo = document.createElement('canvas');
   lienzo.width = ancho;
@@ -392,7 +423,7 @@ async function grisesDeImagen(dataUrl) {
   const ctx = lienzo.getContext('2d');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, ancho, alto);
-  ctx.drawImage(img, 0, 0);
+  ctx.drawImage(img, 0, 0, ancho, alto);
   const { data } = ctx.getImageData(0, 0, ancho, alto);
   let hex = '';
   for (let i = 0; i < data.length; i += 4) {
