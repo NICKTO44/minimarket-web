@@ -1,0 +1,122 @@
+/* Aviso de vencimiento del plan: tarjeta pequeña flotante, abajo a la
+   derecha. No ocupa lugar en la pantalla (position: fixed). */
+.app-shell .app-contenido > .aviso-venc,
+.aviso-venc {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 900;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  height: auto;
+  padding: 14px 10px 14px 14px;
+  border: 1px solid #ececef;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(17, 24, 39, 0.1), 0 2px 6px rgba(17, 24, 39, 0.06);
+  color: #1f2937;
+  animation: aviso-venc-entrar 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes aviso-venc-entrar {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Punto de color: ámbar con tiempo, naranja si vence hoy o mañana. */
+.aviso-venc-punto {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: #e0a526;
+  box-shadow: 0 0 0 4px rgba(224, 165, 38, 0.15);
+}
+
+.aviso-venc-pronto .aviso-venc-punto {
+  background: #e8632b;
+  box-shadow: 0 0 0 4px rgba(232, 99, 43, 0.15);
+}
+
+.aviso-venc-cuerpo {
+  flex: 1;
+  min-width: 0;
+}
+
+.aviso-venc-titulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.aviso-venc-texto {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+.aviso-venc-renovar {
+  margin-top: 10px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #111827;
+  color: #ffffff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.aviso-venc-renovar:hover {
+  background: #374151;
+}
+
+.aviso-venc-cerrar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px 0 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+}
+
+.aviso-venc-cerrar:hover {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+/* Celular: encima de la barra de navegación inferior. */
+@media (max-width: 899px) {
+  .app-shell .app-contenido > .aviso-venc,
+  .aviso-venc {
+    right: 12px;
+    left: 12px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    width: auto;
+  }
+}
+
+@media print {
+  .aviso-venc {
+    display: none !important;
+  }
+}

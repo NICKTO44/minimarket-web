@@ -6,6 +6,7 @@ import { aplicarTema, limpiarTema } from './utils/tema';
 import POS from './pages/POS/POS';
 import PosBloqueado from './components/PosBloqueado';
 import Caja from './pages/Caja/Caja';
+import AvisoVencimiento from './components/AvisoVencimiento';
 import Sidebar from './components/Sidebar';
 import NavegacionMovil from './components/NavegacionMovil';
 import MenuArriba from './components/MenuArriba';
@@ -644,6 +645,14 @@ function App() {
         versionLogo={versionLogo}
       />
       <div className="app-contenido">
+        {usuarioActual?.rol_id === 1 && pantallaVisible !== 'SUSCRIPCION' && pantallaVisible !== 'POS' && (
+          <AvisoVencimiento
+            dias={estadoSuscripcion?.dias_restantes ?? null}
+            fechaVencimiento={estadoSuscripcion?.fecha_vencimiento}
+            negocio={tiendaRecordada?.identificador}
+            onRenovar={() => setPantalla('SUSCRIPCION')}
+          />
+        )}
         {negocio.modulos.includes(MODULO_VENTA_SIN_CONEXION) && <EstadoSinConexion nombreTienda={nombreTienda} identificadorNegocio={tiendaRecordada?.identificador} />}
         {pantallaVisible === 'MESAS' && soloRepartidor && (
           <MisEntregas nombreTienda={nombreTienda} onCobrar={handleCobrarPedido} />
