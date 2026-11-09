@@ -1,4 +1,5 @@
 import { hoyLima } from './formato';
+import { tiendaDeLaPestana } from './sesionPestana';
 // Módulo VENTA_SIN_CONEXION: vender sin internet.
 //
 // Solo funciona en un negocio con el módulo encendido (App.jsx llama a
@@ -57,9 +58,19 @@ const RUTAS_GUARDADAS = new Set([
 // haya abierto esas pantallas.
 const RUTAS_PRECARGA = ['/productos', '/categorias', '/clientes/todos', '/configuracion', '/cajas/abierta', '/gastos/categorias', '/unidades'];
 
+// Encendido por negocio (CLAVE_ACTIVO:<negocio>): con dos negocios en dos
+// pestañas, cada pestaña solo usa la venta sin conexión de SU negocio.
+function claveDe(tienda) {
+  return `${CLAVE_ACTIVO}:${tienda}`;
+}
+
 function leerActivo() {
+  const propia = tiendaDeLaPestana()?.identificador || null;
+  if (!propia) return null;
   try {
-    return localStorage.getItem(CLAVE_ACTIVO) || null;
+    // CLAVE_ACTIVO sola es como se guardaba antes (un negocio por navegador).
+    const encendido = localStorage.getItem(claveDe(propia)) || localStorage.getItem(CLAVE_ACTIVO) === propia;
+    return encendido ? propia : null;
   } catch {
     return null;
   }
@@ -287,6 +298,7 @@ export function activarSinConexion(tienda, pedirLectura) {
   const cambio = tiendaActiva !== tienda;
   tiendaActiva = tienda;
   try {
+    localStorage.setItem(claveDe(tienda), '1');
     localStorage.setItem(CLAVE_ACTIVO, tienda);
   } catch {
     // sin localStorage: queda encendido hasta recargar
@@ -309,9 +321,11 @@ export function activarSinConexion(tienda, pedirLectura) {
 /** Módulo apagado: deja de guardar copias. Lo que falte subir se conserva. */
 export function desactivarSinConexion() {
   if (!tiendaActiva) return;
+  const tienda = tiendaActiva;
   tiendaActiva = null;
   try {
-    localStorage.removeItem(CLAVE_ACTIVO);
+    localStorage.removeItem(claveDe(tienda));
+    if (localStorage.getItem(CLAVE_ACTIVO) === tienda) localStorage.removeItem(CLAVE_ACTIVO);
   } catch {
     // nada que hacer
   }

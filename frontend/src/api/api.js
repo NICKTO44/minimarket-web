@@ -7,11 +7,19 @@ import {
   guardarCopia,
   registrarSubida,
 } from '../utils/sinConexion';
-const STORAGE_KEY = 'minimarket_sesion';
+import {
+  CLAVE_SESION as STORAGE_KEY,
+  cerrarSesionVencida,
+  guardarEnPestana,
+  leerGuardado,
+  recordarEnLlavero,
+} from '../utils/sesionPestana';
 
+// Siempre el token de ESTA pestaña (utils/sesionPestana.js): con dos
+// negocios abiertos en dos pestañas, cada una graba en el suyo.
 function obtenerToken() {
   try {
-    const sesion = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    const sesion = JSON.parse(leerGuardado(STORAGE_KEY) || 'null');
     return sesion?.token || null;
   } catch {
     return null;
@@ -22,8 +30,11 @@ function obtenerToken() {
 // un token nuevo para este dispositivo (el anterior deja de servir).
 export function guardarTokenSesion(token) {
   try {
-    const sesion = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if (sesion && token) localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...sesion, token }));
+    const sesion = JSON.parse(leerGuardado(STORAGE_KEY) || 'null');
+    if (sesion && token) {
+      guardarEnPestana(STORAGE_KEY, JSON.stringify({ ...sesion, token }));
+      recordarEnLlavero();
+    }
   } catch {
     // Sin almacenamiento: la sesión sigue en memoria hasta recargar.
   }
@@ -49,7 +60,7 @@ async function request(path, options = {}) {
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
 
   if (res.status === 401) {
-    localStorage.removeItem(STORAGE_KEY);
+    cerrarSesionVencida();
     window.location.reload();
     throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
   }
@@ -126,7 +137,7 @@ async function requestConCopia(path, options = {}) {
   marcarConConexion();
 
   if (res.status === 401) {
-    localStorage.removeItem(STORAGE_KEY);
+    cerrarSesionVencida();
     window.location.reload();
     const e = new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
     e.status = 401;
@@ -620,7 +631,7 @@ async function descargarArchivoSunat(ruta) {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (res.status === 401) {
-    localStorage.removeItem(STORAGE_KEY);
+    cerrarSesionVencida();
     window.location.reload();
     throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
   }

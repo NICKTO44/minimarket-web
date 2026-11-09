@@ -99,11 +99,26 @@ import {
   rubroDe,
 } from './utils/rubros';
 
+import {
+  CLAVE_SESION,
+  CLAVE_TIENDA,
+  guardarEnPestana,
+  guardarNegocioDelLogin,
+  haySesionDe,
+  leerGuardado,
+  olvidarDelLlavero,
+  quitarDePestana,
+  quitarSoloDeLaPestana,
+  recordarEnLlavero,
+  usarNegocioEnPestana,
+} from './utils/sesionPestana';
+
 // Panel del dueño de Monspeet (/panel): se carga solo si se abre esa dirección.
 const Panel = lazy(() => import('./pages/Panel/Panel'));
 
-const STORAGE_KEY = 'minimarket_sesion';
-const TIENDA_STORAGE_KEY = 'minimarket_tienda';
+// Sesión y negocio de ESTA pestaña (utils/sesionPestana.js).
+const STORAGE_KEY = CLAVE_SESION;
+const TIENDA_STORAGE_KEY = CLAVE_TIENDA;
 
 // Pantallas que solo existen con su módulo encendido.
 const MODULO_DE_PANTALLA = {
@@ -169,7 +184,7 @@ function App() {
     const { slug } = direccionInicial;
     if (!slug) return false;
     try {
-      const recordada = JSON.parse(localStorage.getItem(TIENDA_STORAGE_KEY) || 'null');
+      const recordada = JSON.parse(leerGuardado(TIENDA_STORAGE_KEY) || 'null');
       return !(recordada && (recordada.slug === slug || recordada.identificador === slug));
     } catch {
       return true;
@@ -183,14 +198,14 @@ function App() {
   };
 
   useEffect(() => {
-    const guardado = localStorage.getItem(STORAGE_KEY);
+    const guardado = leerGuardado(STORAGE_KEY);
     if (guardado) {
       try {
         const sesion = JSON.parse(guardado);
         if (sesion?.token && sesion?.usuario) {
           setUsuarioActual(sesion.usuario);
           try {
-            const tienda = JSON.parse(localStorage.getItem(TIENDA_STORAGE_KEY) || 'null');
+            const tienda = JSON.parse(leerGuardado(TIENDA_STORAGE_KEY) || 'null');
             if (esAlmacen(sesion.usuario)) {
               setPantalla('PRODUCTOS');
             } else if (tienda?.modo_negocio === 'RESTAURANTE') {
@@ -210,16 +225,16 @@ function App() {
           cargarEstadoSuscripcion();
         }
       } catch {
-        localStorage.removeItem(STORAGE_KEY);
+        quitarDePestana(STORAGE_KEY);
       }
     }
 
-    const tiendaGuardada = localStorage.getItem(TIENDA_STORAGE_KEY);
+    const tiendaGuardada = leerGuardado(TIENDA_STORAGE_KEY);
     if (tiendaGuardada) {
       try {
         setTiendaRecordada(JSON.parse(tiendaGuardada));
       } catch {
-        localStorage.removeItem(TIENDA_STORAGE_KEY);
+        quitarDePestana(TIENDA_STORAGE_KEY);
       }
     }
 
@@ -255,8 +270,7 @@ function App() {
     setLogueado(true);
     setModoLectura(!!data.modo_lectura);
     setAvisoSuscripcion(data.aviso || null);
-    localStorage.setItem(
-      STORAGE_KEY,
+    guardarEnPestana(STORAGE_KEY,
       JSON.stringify({
         token: data.token,
         usuario: sesionUsuario,
@@ -266,15 +280,18 @@ function App() {
     );
 
     if (data.tienda) {
-      localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(data.tienda));
+      guardarEnPestana(TIENDA_STORAGE_KEY, JSON.stringify(data.tienda));
       setTiendaRecordada(data.tienda);
     } else {
       // Sin datos del negocio (p. ej. recién registrado): no se reutiliza
       // el negocio recordado de otra cuenta en este navegador, para que
       // su logo o color no aparezcan ni por un instante.
-      localStorage.removeItem(TIENDA_STORAGE_KEY);
+      quitarDePestana(TIENDA_STORAGE_KEY);
       setTiendaRecordada(null);
     }
+
+    // La sesión de esta pestaña queda en el llavero de su negocio.
+    recordarEnLlavero();
 
     api.configuracionObtener().then(setConfiguracionTienda).catch(() => {});
     cargarEstadoSuscripcion();
@@ -284,7 +301,7 @@ function App() {
   // identificó a qué negocio pertenece el usuario escrito (con su logo
   // y color), pero TODAVÍA no hay sesión. Solo recuerda el negocio.
   const handleTiendaIdentificada = (tienda) => {
-    localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(tienda));
+    guardarNegocioDelLogin(JSON.stringify(tienda));
     setTiendaRecordada(tienda);
   };
     // Se llama desde Configuración cuando el dueño cambia el logo o el
@@ -300,12 +317,15 @@ function App() {
     setTiendaRecordada((actual) => {
       if (!actual) return actual;
       const actualizada = { ...actual, ...cambios };
-      localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(actualizada));
+      guardarEnPestana(TIENDA_STORAGE_KEY, JSON.stringify(actualizada));
+      recordarEnLlavero();
       return actualizada;
     });
   };
 
-  const handleLogout = () => {
+  // `soloPestana`: se deja este negocio solo en esta pestaña (para entrar a
+  // otro); su sesión sigue abierta en las demás pestañas y en el llavero.
+  const handleLogout = ({ soloPestana = false } = {}) => {
     setLogueado(false);
     setUsuarioActual(null);
     setPantalla('RESUMEN');
@@ -316,22 +336,28 @@ function App() {
     setModoLectura(false);
     setAvisoSuscripcion(null);
     setEstadoSuscripcion(null);
-    localStorage.removeItem(STORAGE_KEY);
+    if (soloPestana) {
+      quitarSoloDeLaPestana(STORAGE_KEY);
+    } else {
+      olvidarDelLlavero();
+      quitarDePestana(STORAGE_KEY);
+    }
   };
 
   const handleOlvidarTienda = () => {
-    localStorage.removeItem(TIENDA_STORAGE_KEY);
+    quitarDePestana(TIENDA_STORAGE_KEY);
     setTiendaRecordada(null);
   };
 
   const handleSuscripcionActivada = () => {
     setModoLectura(false);
     setAvisoSuscripcion(null);
-    const guardado = localStorage.getItem(STORAGE_KEY);
+    const guardado = leerGuardado(STORAGE_KEY);
     if (guardado) {
       try {
         const sesion = JSON.parse(guardado);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...sesion, modoLectura: false, aviso: null }));
+        guardarEnPestana(STORAGE_KEY, JSON.stringify({ ...sesion, modoLectura: false, aviso: null }));
+        recordarEnLlavero();
       } catch {
         // si el guardado estaba corrupto, no hay nada que actualizar
       }
@@ -372,7 +398,7 @@ function App() {
     const { slug } = direccionInicial;
     let recordada = null;
     try {
-      recordada = JSON.parse(localStorage.getItem(TIENDA_STORAGE_KEY) || 'null');
+      recordada = JSON.parse(leerGuardado(TIENDA_STORAGE_KEY) || 'null');
     } catch {
       recordada = null;
     }
@@ -411,7 +437,8 @@ function App() {
           const nombre = negocioPropio.nombre_negocio || actual.nombre_negocio;
           if (actual.slug === negocioPropio.slug && actual.nombre_negocio === nombre) return actual;
           const actualizada = { ...actual, slug: negocioPropio.slug, nombre_negocio: nombre };
-          localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(actualizada));
+          guardarEnPestana(TIENDA_STORAGE_KEY, JSON.stringify(actualizada));
+          recordarEnLlavero();
           return actualizada;
         });
       })
@@ -489,19 +516,27 @@ function App() {
         <div className="login-tienda-form">
           <h1 className="login-tienda-nombre">{otroNegocio.nombre_negocio}</h1>
           <p className="login-tienda-subtitulo">
-            Esta dirección es de {otroNegocio.nombre_negocio}, pero en este navegador está abierta la sesión de {nombreTienda}.
+            Esta dirección es de {otroNegocio.nombre_negocio}, pero en esta pestaña está abierto {nombreTienda}. Puedes
+            cambiar esta pestaña a {otroNegocio.nombre_negocio}: {nombreTienda} sigue abierto en las otras pestañas.
           </p>
           <button
             type="button"
             className="login-tienda-submit"
             onClick={() => {
               const destino = otroNegocio;
+              // Ya tiene sesión abierta en este navegador: entra sin volver a iniciar sesión.
+              if (usarNegocioEnPestana(destino.identificador)) {
+                window.location.reload();
+                return;
+              }
               setOtroNegocio(null);
-              handleLogout();
+              handleLogout({ soloPestana: true });
               handleTiendaIdentificada(destino);
             }}
           >
-            Cerrar sesión y entrar a {otroNegocio.nombre_negocio}
+            {haySesionDe(otroNegocio.identificador)
+              ? `Abrir ${otroNegocio.nombre_negocio} en esta pestaña`
+              : `Entrar a ${otroNegocio.nombre_negocio} en esta pestaña`}
           </button>
           <button type="button" className="login-tienda-cambiar" onClick={() => setOtroNegocio(null)}>
             Seguir en {nombreTienda}
@@ -604,7 +639,8 @@ function App() {
     setTiendaRecordada((actual) => {
       if (!actual) return actual;
       const actualizada = { ...actual, ...cambio };
-      localStorage.setItem(TIENDA_STORAGE_KEY, JSON.stringify(actualizada));
+      guardarEnPestana(TIENDA_STORAGE_KEY, JSON.stringify(actualizada));
+      recordarEnLlavero();
       return actualizada;
     });
   };
