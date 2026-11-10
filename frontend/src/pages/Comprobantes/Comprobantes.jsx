@@ -34,6 +34,8 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
   const [cargando, setCargando] = useState(true);
   const [filtroTipo, setFiltroTipo] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
+  // Quién vendió (con varias cajas, de qué caja salió). Se filtra en la lista ya cargada.
+  const [filtroVendedor, setFiltroVendedor] = useState('');
   const [mensaje, setMensaje] = useState(null);
   const [ventaParaImprimir, setVentaParaImprimir] = useState(null);
   // Fila cuyo archivo se está preparando (para no pedirlo dos veces).
@@ -457,8 +459,9 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
       direccion,
       telefono,
       ruc,
-      cajero: usuario?.nombre || '',
-      etiquetaCajero: etiquetaRol(usuario),
+      // Quien hizo la venta (no quien reimprime).
+      cajero: datos.cajeroVenta || usuario?.nombre || '',
+      etiquetaCajero: datos.cajeroVenta ? datos.etiquetaCajeroVenta || 'Cajero' : etiquetaRol(usuario),
       logoImagen: await logoParaPdf(logoNegocio),
     });
   };
@@ -628,6 +631,9 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
     else descargarOficial(comp, cual);
   };
 
+  const vendedores = [...new Set(comprobantes.map((c) => c.vendedor).filter(Boolean))].sort();
+  const visibles = filtroVendedor ? comprobantes.filter((c) => c.vendedor === filtroVendedor) : comprobantes;
+
   return (
     <div className="comp-layout">
       <h1>Comprobantes</h1>
@@ -646,6 +652,16 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
           <option value="RECHAZADO">Rechazado</option>
           <option value="PENDIENTE">Pendiente</option>
         </select>
+        {(vendedores.length > 1 || filtroVendedor) && (
+          <select value={filtroVendedor} onChange={(e) => setFiltroVendedor(e.target.value)} aria-label="Filtrar por vendedor">
+            <option value="">Todos los vendedores</option>
+            {vendedores.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {avisos?.pendientes > 0 && <AvisoSunat avisos={avisos} />}
@@ -690,6 +706,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                 <th>Comprobante</th>
                 <th>Venta</th>
                 <th>Cliente</th>
+                <th>Vendedor</th>
                 <th>Monto</th>
                 <th>Estado</th>
                 <th>Fecha</th>
@@ -697,7 +714,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
               </tr>
             </thead>
             <tbody>
-              {comprobantes.map((c) => (
+              {visibles.map((c) => (
                 <tr key={claveFila(c)}>
                   <td>
                     {c.tipo === 'NINGUNO' ? (
@@ -747,6 +764,7 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                   </td>
                   <td className="comp-folio-venta">{c.folio_venta}</td>
                   <td>{c.cliente_nombre || '—'}</td>
+                  <td className="comp-vendedor">{c.vendedor || '—'}</td>
                   <td>
                     S/ {c.monto.toFixed(2)}
                     {/* Módulo "Vender algo que no está en inventario": el monto ya lo incluye. */}
@@ -852,9 +870,9 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
                   </td>
                 </tr>
               ))}
-              {comprobantes.length === 0 && (
+              {visibles.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="comp-sin-resultados">
+                  <td colSpan={8} className="comp-sin-resultados">
                     No hay comprobantes que coincidan.
                   </td>
                 </tr>
@@ -993,8 +1011,8 @@ export default function Comprobantes({ usuario, nombreTienda = 'Mi Minimarket', 
           direccion={direccion}
           telefono={telefono}
           ruc={ruc}
-          cajero={usuario?.nombre || ''}
-          etiquetaCajero={etiquetaRol(usuario)}
+          cajero={ventaParaImprimir.cajeroVenta || usuario?.nombre || ''}
+          etiquetaCajero={ventaParaImprimir.cajeroVenta ? ventaParaImprimir.etiquetaCajeroVenta || 'Cajero' : etiquetaRol(usuario)}
           fecha={ventaParaImprimir.fecha}
           vendedor={ventaParaImprimir.vendedor || null}
           logo={logoNegocio}

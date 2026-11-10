@@ -743,3 +743,9 @@
   color: #92400e;
   white-space: nowrap;
 }
+
+/* Quién vendió (con varias cajas, de qué caja salió el comprobante). */
+.comp-vendedor {
+  white-space: nowrap;
+  color: var(--pos-texto-tenue, #6b7280);
+}

@@ -9,6 +9,7 @@ import { pagoParaImprimir, textoPago } from './metodoPago';
 import { lineasDeVenta, precioSinIgv } from './codigosVenta';
 import { lineasFuera, ventaDelCliente } from './fueraInventario';
 import { comprobanteClasico } from './comprobanteClasico';
+import { etiquetaRol } from './menu';
 
 // Comprobante con hoja A4 (además del ticket de 80 mm):
 // - la factura de FacturaLibre (su PDF oficial);
@@ -70,6 +71,15 @@ export const datosDelTicket = async (comp, { conCodigos = false } = {}) => {
     fecha: fechaHoraLima(comp.fecha_emision),
     // Formato clásico: quién hizo la venta (no quien reimprime).
     ...(comprobanteClasico() && leida.vendedor ? { vendedor: leida.vendedor } : {}),
+    // El cajero del ticket es quien hizo la venta, no quien reimprime (con
+    // varias cajas, dice de qué caja salió). Si el servidor aún no lo manda,
+    // Comprobantes usa al usuario actual, como antes.
+    ...(leida.vendedor
+      ? {
+          cajeroVenta: leida.vendedor,
+          etiquetaCajeroVenta: leida.vendedor_rol_id ? etiquetaRol({ rol_id: leida.vendedor_rol_id, rol_nombre: leida.vendedor_rol }) : null,
+        }
+      : {}),
     // metodoPago: para la "Forma de pago" de la factura (contado o crédito).
     venta: {
       folio: detalle.folio,
