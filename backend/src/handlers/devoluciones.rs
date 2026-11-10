@@ -118,33 +118,39 @@ pub async fn buscar_venta_para_devolucion(
     let pago_efectivo_metodo = if metodo_pago == "MIXTO" { medio_segunda_parte(&conn, venta_id).await } else { None };
 
     let fuera_inventario = crate::handlers::fuera_inventario::de_venta(&conn, venta_id).await;
-    let (vendedor, cliente_telefono) = vendedor_y_telefono(&conn, venta_id).await;
+    let (vendedor, cliente_telefono, vendedor_rol_id, vendedor_rol) = vendedor_y_telefono(&conn, venta_id).await;
 
     Ok(Json(VentaParaDevolucion {
         venta_id, folio: folio_venta, fecha_hora, total, metodo_pago,
         pago_efectivo, pago_otro, pago_otro_metodo, pago_efectivo_metodo,
         productos, comprobante, fuera_inventario, vendedor, cliente_telefono,
+        vendedor_rol_id, vendedor_rol,
     }))
 }
 
-/// Módulo COMPROBANTE_CLASICO: nombre de quien hizo la venta y teléfono del
-/// cliente. Si algo falla, (None, None): el comprobante sale sin esas líneas.
-async fn vendedor_y_telefono(conn: &libsql::Connection, venta_id: i64) -> (Option<String>, Option<String>) {
+/// Nombre y rol de quien hizo la venta, y teléfono del cliente: para
+/// reimprimir con el cajero real (no quien reimprime) y para el formato
+/// clásico. Si algo falla, todo None: el comprobante sale sin esas líneas.
+async fn vendedor_y_telefono(
+    conn: &libsql::Connection,
+    venta_id: i64,
+) -> (Option<String>, Option<String>, Option<i64>, Option<String>) {
     let Ok(mut filas) = conn
         .query(
-            "SELECT u.nombre_completo, c.telefono FROM ventas v
+            "SELECT u.nombre_completo, c.telefono, u.rol_id, r.nombre FROM ventas v
              LEFT JOIN usuarios u ON u.id = v.usuario_id
+             LEFT JOIN roles r ON r.id = u.rol_id
              LEFT JOIN clientes c ON c.id = v.cliente_id
              WHERE v.id = ?1",
             libsql::params![venta_id],
         )
         .await
     else {
-        return (None, None);
+        return (None, None, None, None);
     };
-    let Ok(Some(fila)) = filas.next().await else { return (None, None) };
+    let Ok(Some(fila)) = filas.next().await else { return (None, None, None, None) };
     let texto = |i: i32| fila.get::<String>(i).ok().map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
-    (texto(0), texto(1))
+    (texto(0), texto(1), fila.get::<i64>(2).ok(), texto(3))
 }
 
 /// Medio de la parte `pago_efectivo` de una venta mixta (migración 0028):

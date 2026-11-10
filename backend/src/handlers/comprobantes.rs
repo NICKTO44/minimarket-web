@@ -125,7 +125,29 @@ pub async fn listar_comprobantes(
             notas: Vec::new(),
             anulacion: None,
             fuera_inventario: None,
+            vendedor: None,
         });
+    }
+
+    // Quién vendió cada uno, en una sola consulta para toda la página.
+    let ids: Vec<String> = comprobantes.iter().map(|c| c.venta_id.to_string()).collect();
+    if !ids.is_empty() {
+        // Son números (venta_id de la base), no texto del usuario.
+        let sql = format!(
+            "SELECT v.id, u.nombre_completo FROM ventas v JOIN usuarios u ON u.id = v.usuario_id WHERE v.id IN ({})",
+            ids.join(",")
+        );
+        if let Ok(mut filas) = conn.query(&sql, ()).await {
+            let mut nombres = std::collections::HashMap::new();
+            while let Ok(Some(f)) = filas.next().await {
+                if let (Ok(id), Ok(nombre)) = (f.get::<i64>(0), f.get::<String>(1)) {
+                    nombres.insert(id, nombre.trim().to_string());
+                }
+            }
+            for c in comprobantes.iter_mut() {
+                c.vendedor = nombres.get(&c.venta_id).filter(|n| !n.is_empty()).cloned();
+            }
+        }
     }
 
     // Notas de crédito de los comprobantes directos de la página.

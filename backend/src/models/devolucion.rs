@@ -43,6 +43,12 @@ pub struct VentaParaDevolucion {
     pub vendedor: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cliente_telefono: Option<String>,
+    /// Rol de quien hizo la venta (id y nombre), para que la reimpresión
+    /// diga "Cajero", "Vendedor" o "Administrador" como el ticket original.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vendedor_rol_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vendedor_rol: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

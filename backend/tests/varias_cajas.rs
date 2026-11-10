@@ -179,3 +179,30 @@ async fn sin_el_modulo_una_sola_caja_como_siempre() {
     let vista = cajas::obtener_caja_abierta(Extension(t.clone()), Extension(usuario(3))).await.0;
     assert_eq!(vista.map(|c| c.id), Some(caja));
 }
+
+#[tokio::test]
+async fn comprobantes_dicen_quien_vendio() {
+    use axum::extract::{Path, Query};
+    use minimarket_backend::handlers::{comprobantes, devoluciones};
+
+    let t = base("comprobantes", "SERVICIOS,VARIAS_CAJAS").await;
+    abrir(&t, 2, 0.0).await.unwrap();
+    abrir(&t, 3, 0.0).await.unwrap();
+    vender(&t, 2, 1.0).await.unwrap();
+    vender(&t, 3, 2.0).await.unwrap();
+
+    // La lista de Comprobantes (la ve el dueño) dice quién vendió cada uno.
+    let filtros = serde_json::from_value(json!({})).unwrap();
+    let lista = comprobantes::listar_comprobantes(Extension(t.clone()), Extension(usuario(1)), Query(filtros)).await.unwrap().0;
+    let mut quien: Vec<(f64, Option<String>)> = lista.iter().map(|c| (c.monto, c.vendedor.clone())).collect();
+    quien.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    assert_eq!(quien, vec![(25.0, Some("Leonardo".to_string())), (50.0, Some("Yenifer".to_string()))]);
+
+    // Al reimprimir se lee la venta: trae a quien la hizo y su rol, no a
+    // quien reimprime.
+    let folio = lista.iter().find(|c| c.monto == 25.0).unwrap().folio_venta.clone();
+    let venta = devoluciones::buscar_venta_para_devolucion(Extension(t.clone()), Path(folio)).await.unwrap().0;
+    assert_eq!(venta.vendedor.as_deref(), Some("Leonardo"));
+    assert_eq!(venta.vendedor_rol_id, Some(2));
+    assert!(venta.vendedor_rol.is_some());
+}

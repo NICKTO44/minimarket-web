@@ -43,4 +43,8 @@ pub struct ComprobanteResumen {
     /// (ya sumado en `monto`). None en una venta de siempre.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fuera_inventario: Option<f64>,
+    /// Quién hizo la venta (su nombre). Con varias cajas, dice de qué caja
+    /// salió el comprobante.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vendedor: Option<String>,
 }
