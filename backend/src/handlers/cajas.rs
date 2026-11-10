@@ -7,6 +7,40 @@ use crate::models::auth::Claims;
 use crate::models::caja::{AbrirCajaRequest, CerrarCajaRequest, MovimientoCajaRequest, CajaResponse};
 use crate::models::caja::CajaEstado;
 
+/// Módulo VARIAS_CAJAS en la lista de módulos tal como se guarda ("A,B,C").
+pub fn varias_cajas_en(modulos: &str) -> bool {
+    modulos.split(',').any(|m| m.trim() == crate::handlers::rubros::MODULO_VARIAS_CAJAS)
+}
+
+/// ¿El negocio tiene encendido VARIAS_CAJAS? Apagado: una sola caja abierta
+/// por negocio y todos venden en ella (como siempre).
+pub async fn varias_cajas(conn: &libsql::Connection) -> bool {
+    crate::handlers::rubros::negocio(conn)
+        .await
+        .modulos
+        .iter()
+        .any(|m| m == crate::handlers::rubros::MODULO_VARIAS_CAJAS)
+}
+
+/// La caja abierta donde trabaja un usuario: la suya y, sin VARIAS_CAJAS,
+/// si no tiene, la del negocio. Es la misma regla de los triggers de caja.
+/// Con VARIAS_CAJAS solo cuenta la suya.
+pub async fn caja_de_usuario(conn: &libsql::Connection, usuario_id: i64, varias: bool) -> Result<Option<i64>, (StatusCode, String)> {
+    let sql = if varias {
+        "SELECT id FROM cajas WHERE estado = 'ABIERTA' AND usuario_id = ?1 ORDER BY id DESC LIMIT 1"
+    } else {
+        "SELECT id FROM cajas WHERE estado = 'ABIERTA' ORDER BY (usuario_id = ?1) DESC, id DESC LIMIT 1"
+    };
+    let mut filas = conn
+        .query(sql, libsql::params![usuario_id])
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(match filas.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        Some(f) => f.get::<i64>(0).ok(),
+        None => None,
+    })
+}
+
 pub async fn abrir_caja(
     Extension(tenant): Extension<Arc<TenantDb>>,
     Extension(claims): Extension<Claims>,
@@ -18,39 +52,47 @@ pub async fn abrir_caja(
         return Err((StatusCode::FORBIDDEN, "Este usuario no maneja caja (mesero o barra/cocina).".into()));
     }
 
+    // Con VARIAS_CAJAS cada usuario tiene su caja: solo se revisa la suya.
+    let varias = varias_cajas(&conn).await;
     let mut rows = conn
         .query(
             "SELECT c.id, u.nombre_completo FROM cajas c
              JOIN usuarios u ON u.id = c.usuario_id
-             WHERE c.estado = 'ABIERTA'",
-            (),
+             WHERE c.estado = 'ABIERTA' AND (?1 = 0 OR c.usuario_id = ?2)",
+            libsql::params![varias as i64, claims.sub],
         )
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     if let Some(row) = rows.next().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))? {
+        if varias {
+            return Err((StatusCode::BAD_REQUEST, "Ya tienes una caja abierta. Ciérrala antes de abrir otra.".into()));
+        }
         let cajero: String = row.get(1).unwrap_or_default();
         return Err((StatusCode::BAD_REQUEST, format!(
             "Ya hay una caja abierta en el sistema (cajero: {}). Debe cerrarse primero.", cajero
         )));
     }
+    drop(rows);
 
     if payload.monto_inicial < 0.0 {
         return Err((StatusCode::BAD_REQUEST, "El monto inicial no puede ser negativo".into()));
     }
 
     // La misma sentencia revisa que no haya otra abierta: con un doble clic
-    // (o dos cajeros a la vez) antes podían quedar DOS cajas abiertas.
+    // (o dos cajeros a la vez) antes podían quedar DOS cajas abiertas. Con
+    // VARIAS_CAJAS, que este usuario no tenga otra abierta.
     let abiertas = conn.execute(
         "INSERT INTO cajas (usuario_id, numero_caja, turno, monto_inicial, observaciones_apertura, fecha_apertura, hora_apertura)
          SELECT ?1, ?2, 'GENERAL', ?3, ?4, datetime('now','localtime'), strftime('%H:%M:%S','now','localtime')
-         WHERE NOT EXISTS (SELECT 1 FROM cajas WHERE estado = 'ABIERTA')",
-        libsql::params![claims.sub, payload.numero_caja.unwrap_or(1), payload.monto_inicial, payload.observaciones.clone()],
+         WHERE NOT EXISTS (SELECT 1 FROM cajas WHERE estado = 'ABIERTA' AND (?5 = 0 OR usuario_id = ?1))",
+        libsql::params![claims.sub, payload.numero_caja.unwrap_or(1), payload.monto_inicial, payload.observaciones.clone(), varias as i64],
     )
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al abrir caja: {}", e)))?;
     if abiertas == 0 {
-        return Err((StatusCode::BAD_REQUEST, "Ya hay una caja abierta en el sistema. Debe cerrarse primero.".into()));
+        let texto = if varias { "Ya tienes una caja abierta. Ciérrala antes de abrir otra." } else { "Ya hay una caja abierta en el sistema. Debe cerrarse primero." };
+        return Err((StatusCode::BAD_REQUEST, texto.into()));
     }
 
     let caja_id = conn.last_insert_rowid();
@@ -296,13 +338,20 @@ pub struct MovimientoCaja {
 /// del más reciente al más antiguo.
 pub async fn movimientos_caja_abierta(
     Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
 ) -> Result<Json<Vec<MovimientoCaja>>, (StatusCode, String)> {
     let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // La caja que ve este usuario (la suya; sin VARIAS_CAJAS, la del negocio).
+    // Con varias cajas abiertas no se mezclan los movimientos de las demás.
+    let caja_id = match caja_de_usuario(&conn, claims.sub, varias_cajas(&conn).await).await? {
+        Some(id) => id,
+        None => return Ok(Json(Vec::new())),
+    };
     // La base (Turso) guarda la hora en UTC: se muestra la de Perú.
     const COLUMNAS: &str = "m.id, m.tipo, CAST(m.monto AS REAL), m.motivo,
          COALESCE(strftime('%H:%M', m.fecha_hora, '-5 hours'), ''), COALESCE(u.nombre_completo, '')";
     const DESDE: &str = "FROM movimientos_caja m
-         JOIN cajas c ON c.id = m.caja_id AND c.estado = 'ABIERTA'
+         JOIN cajas c ON c.id = m.caja_id AND c.estado = 'ABIERTA' AND c.id = ?1
          LEFT JOIN usuarios u ON u.id = m.usuario_id";
     // Con el número de gasto (migración 0022) y la forma de pago (0063); si
     // la base aún no las tiene, la consulta más simple que funcione.
@@ -310,7 +359,7 @@ pub async fn movimientos_caja_abierta(
     let mut filas = None;
     for extra in [format!("{}, m.metodo_pago", GASTO), format!("{}, NULL", GASTO), "NULL, NULL".to_string()] {
         if let Ok(f) = conn
-            .query(&format!("SELECT {}, {} {} ORDER BY m.id DESC", COLUMNAS, extra, DESDE), ())
+            .query(&format!("SELECT {}, {} {} ORDER BY m.id DESC", COLUMNAS, extra, DESDE), libsql::params![caja_id])
             .await
         {
             filas = Some(f);
@@ -337,31 +386,24 @@ pub async fn movimientos_caja_abierta(
 /// Columnas de la migración 0019, al final de cada consulta de cajas.
 const BILLETERAS: &str = "CAST(c.ventas_yape AS REAL), CAST(c.ventas_plin AS REAL), CAST(c.ventas_yape_plin AS REAL), c.detalle_billeteras";
 
-pub async fn obtener_caja_abierta(
-    Extension(tenant): Extension<Arc<TenantDb>>,
-) -> Json<Option<CajaEstado>> {
-    let conn = match tenant.0.connect() {
-        Ok(c) => c,
-        Err(_) => return Json(None),
-    };
-
+/// Cajas abiertas como las ve el punto de venta: `filtro` va después de
+/// "WHERE c.estado = 'ABIERTA'" y puede usar ?1.
+async fn leer_cajas_abiertas(conn: &libsql::Connection, filtro: &str, param: i64) -> Option<Vec<CajaEstado>> {
     // Con Yape y Plin por separado (migración 0019); si la base aún no tiene
     // esas columnas, la consulta de siempre (y van en cero).
     const COLUMNAS: &str = "c.id, u.nombre_completo, c.monto_inicial, c.ventas_efectivo,
                     c.ventas_tarjeta, c.ventas_transferencia, c.total_ventas, c.numero_transacciones,
                     c.devoluciones_monto, c.retiros_total, c.ingresos_total, c.gastos_total, c.fecha_apertura";
-    const DESDE: &str = "FROM cajas c JOIN usuarios u ON u.id = c.usuario_id WHERE c.estado = 'ABIERTA'";
-    let con_billeteras = format!("SELECT {}, {} {}", COLUMNAS, BILLETERAS, DESDE);
-    let mut rows = match conn.query(&con_billeteras, ()).await {
+    let desde = format!("FROM cajas c JOIN usuarios u ON u.id = c.usuario_id WHERE c.estado = 'ABIERTA' {}", filtro);
+    let con_billeteras = format!("SELECT {}, {} {}", COLUMNAS, BILLETERAS, desde);
+    let mut rows = match conn.query(&con_billeteras, libsql::params![param]).await {
         Ok(r) => r,
-        Err(_) => match conn.query(&format!("SELECT {} {}", COLUMNAS, DESDE), ()).await {
-            Ok(r) => r,
-            Err(_) => return Json(None),
-        },
+        Err(_) => conn.query(&format!("SELECT {} {}", COLUMNAS, desde), libsql::params![param]).await.ok()?,
     };
 
-    match rows.next().await {
-        Ok(Some(row)) => Json(Some(CajaEstado {
+    let mut cajas = Vec::new();
+    while let Ok(Some(row)) = rows.next().await {
+        cajas.push(CajaEstado {
             id: row.get(0).unwrap_or_default(),
             usuario_nombre: row.get(1).unwrap_or_default(),
             monto_inicial: row.get(2).unwrap_or_default(),
@@ -379,9 +421,45 @@ pub async fn obtener_caja_abierta(
             ingresos_total: row.get(10).unwrap_or_default(),
             gastos_total: row.get(11).unwrap_or_default(),
             fecha_apertura: row.get(12).unwrap_or_default(),
-        })),
-        _ => Json(None),
+        });
     }
+    Some(cajas)
+}
+
+/// GET /cajas/abierta — la caja de quien pregunta. Sin VARIAS_CAJAS, la del
+/// negocio (la suya primero, como los triggers). Con VARIAS_CAJAS, solo la
+/// suya: si no abrió una, None y el punto de venta le pide abrirla.
+pub async fn obtener_caja_abierta(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+) -> Json<Option<CajaEstado>> {
+    let conn = match tenant.0.connect() {
+        Ok(c) => c,
+        Err(_) => return Json(None),
+    };
+    let filtro = if varias_cajas(&conn).await {
+        "AND c.usuario_id = ?1 ORDER BY c.id DESC LIMIT 1"
+    } else {
+        "ORDER BY (c.usuario_id = ?1) DESC, c.id DESC LIMIT 1"
+    };
+    Json(leer_cajas_abiertas(&conn, filtro, claims.sub).await.and_then(|c| c.into_iter().next()))
+}
+
+/// GET /cajas/abiertas — todas las cajas abiertas del negocio (para que el
+/// administrador vea y cierre las de cada vendedor con VARIAS_CAJAS).
+pub async fn listar_cajas_abiertas(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<CajaEstado>>, (StatusCode, String)> {
+    if !crate::middleware_auth::es_admin(&claims) {
+        return Err((StatusCode::FORBIDDEN, "Solo el administrador ve todas las cajas abiertas.".into()));
+    }
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // ?1 no se usa aquí, pero la consulta siempre lleva un parámetro.
+    leer_cajas_abiertas(&conn, "AND ?1 = ?1 ORDER BY c.id", 0)
+        .await
+        .map(Json)
+        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "No se pudieron leer las cajas abiertas.".into()))
 }
 
 #[derive(Deserialize)]

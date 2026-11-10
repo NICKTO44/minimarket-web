@@ -541,9 +541,15 @@ async fn subir_apertura(
     let mut r = Resultado { uuid: op.uuid.clone(), tipo: op.tipo.clone(), estado: "HECHA".into(), ..Default::default() };
 
     // Si ya hay una abierta (la dejaron abierta, o la abrió otro equipo), las
-    // ventas entran en esa: no hace falta abrir otra.
+    // ventas entran en esa: no hace falta abrir otra. Con VARIAS_CAJAS solo
+    // cuenta la de este usuario: la de otro vendedor no es la suya.
+    let varias = crate::handlers::cajas::varias_cajas(conn).await;
     let mut filas = conn
-        .query("SELECT id FROM cajas WHERE estado = 'ABIERTA' ORDER BY id DESC LIMIT 1", ())
+        .query(
+            "SELECT id FROM cajas WHERE estado = 'ABIERTA' AND (?1 = 0 OR usuario_id = ?2)
+             ORDER BY (usuario_id = ?2) DESC, id DESC LIMIT 1",
+            libsql::params![varias as i64, claims.sub],
+        )
         .await
         .map_err(e500)?;
     let abierta: Option<i64> = match filas.next().await.map_err(e500)? {

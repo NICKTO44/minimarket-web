@@ -413,8 +413,15 @@ pub async fn procesar_venta(
                         (SELECT id FROM cajas WHERE estado = 'ABIERTA'
                           ORDER BY (usuario_id = ?2) DESC, id DESC LIMIT 1),
                         (SELECT CAST(iva_porcentaje AS REAL) FROM configuracion_tienda LIMIT 1)";
-    let (rol, caja_abierta, tasa_igv, modulos): (Option<String>, Option<i64>, Option<f64>, Option<String>) = {
-        let con_modulos = format!("{}, (SELECT modulos FROM configuracion_tienda LIMIT 1)", PREVIO);
+    //
+    // Con los módulos va también el dueño de esa caja: con VARIAS_CAJAS cada
+    // uno vende solo en la suya.
+    let (rol, caja_abierta, tasa_igv, modulos, dueno_caja): (Option<String>, Option<i64>, Option<f64>, Option<String>, Option<i64>) = {
+        let con_modulos = format!(
+            "{}, (SELECT modulos FROM configuracion_tienda LIMIT 1),
+                 (SELECT usuario_id FROM cajas WHERE estado = 'ABIERTA' ORDER BY (usuario_id = ?2) DESC, id DESC LIMIT 1)",
+            PREVIO
+        );
         let mut filas = match conn.query(&con_modulos, libsql::params![claims.rol_id, usuario_id]).await {
             Ok(filas) => filas,
             Err(_) => conn
@@ -428,8 +435,9 @@ pub async fn procesar_venta(
                 f.get::<i64>(1).ok(),
                 f.get::<f64>(2).ok(),
                 f.get::<String>(3).ok(),
+                f.get::<i64>(4).ok(),
             ),
-            None => (None, None, None, None),
+            None => (None, None, None, None, None),
         }
     };
     let con_ganancias = modulos.as_deref().is_some_and(crate::handlers::ganancias::encendido_en);
@@ -446,6 +454,11 @@ pub async fn procesar_venta(
     // 1. Verificar caja abierta.
     if caja_abierta.is_none() {
         return Err((StatusCode::BAD_REQUEST, "Debes abrir una caja antes de procesar ventas".into()));
+    }
+    // Módulo VARIAS_CAJAS: la caja que eligió la consulta (y que usará el
+    // trigger) tiene que ser la de quien cobra, no la de otro vendedor.
+    if modulos.as_deref().is_some_and(crate::handlers::cajas::varias_cajas_en) && dueno_caja != Some(usuario_id) {
+        return Err((StatusCode::BAD_REQUEST, "Abre tu caja antes de vender: con varias cajas, cada uno vende en la suya.".into()));
     }
 
     // 1a-0. Módulo VENTA_FUERA_INVENTARIO: lo que se vende de afuera. Una

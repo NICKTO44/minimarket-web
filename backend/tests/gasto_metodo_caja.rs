@@ -97,7 +97,7 @@ async fn cajero_paga_por_yape_desde_la_caja() {
     assert_eq!(totales(&t, caja).await, (0.0, 0.0));
 
     // Aparece en el turno con su forma de pago.
-    let movs = cajas::movimientos_caja_abierta(Extension(t.clone())).await.expect("movimientos").0;
+    let movs = cajas::movimientos_caja_abierta(Extension(t.clone()), Extension(cajero())).await.expect("movimientos").0;
     assert_eq!(movs.len(), 1);
     assert_eq!(movs[0].tipo, "GASTO");
     assert_eq!(movs[0].metodo_pago.as_deref(), Some("YAPE"));
@@ -106,14 +106,14 @@ async fn cajero_paga_por_yape_desde_la_caja() {
     // En efectivo de la caja: como siempre, descuenta.
     let _ = gastos::registrar(Extension(t.clone()), Extension(cajero()), Json(gasto("EFECTIVO_CAJA", 30.0))).await.expect("gasto de caja");
     assert_eq!(totales(&t, caja).await, (0.0, 30.0));
-    let movs = cajas::movimientos_caja_abierta(Extension(t.clone())).await.unwrap().0;
+    let movs = cajas::movimientos_caja_abierta(Extension(t.clone()), Extension(cajero())).await.unwrap().0;
     assert_eq!(movs[0].metodo_pago, None);
 
     // Al anular el de Yape se quita del turno y el cuadre no cambia.
     let _ = gastos::anular(Extension(t.clone()), Extension(admin()), Path(r.0.id), Json(gastos::Anulacion { motivo: "error".into() }))
         .await
         .expect("anular");
-    let movs = cajas::movimientos_caja_abierta(Extension(t.clone())).await.unwrap().0;
+    let movs = cajas::movimientos_caja_abierta(Extension(t.clone()), Extension(cajero())).await.unwrap().0;
     assert_eq!(movs.len(), 1);
     assert_eq!(totales(&t, caja).await, (0.0, 30.0));
 }
@@ -133,7 +133,7 @@ async fn admin_desde_gastos_no_va_al_turno() {
     d.desde_caja = false;
     let r = gastos::registrar(Extension(t.clone()), Extension(admin()), Json(d)).await.expect("gasto");
     assert_eq!(r.0.fecha, "2026-01-01");
-    assert!(cajas::movimientos_caja_abierta(Extension(t.clone())).await.unwrap().0.is_empty());
+    assert!(cajas::movimientos_caja_abierta(Extension(t.clone()), Extension(cajero())).await.unwrap().0.is_empty());
 }
 
 #[tokio::test]
@@ -155,7 +155,7 @@ async fn retiro_por_yape_no_toca_el_efectivo() {
     let _ = cajas::registrar_movimiento(Extension(t.clone()), Extension(cajero()), Json(mov(Some("EFECTIVO_CAJA"), 40.0))).await.expect("retiro");
     assert_eq!(totales(&t, caja).await, (40.0, 0.0));
 
-    let movs = cajas::movimientos_caja_abierta(Extension(t.clone())).await.unwrap().0;
+    let movs = cajas::movimientos_caja_abierta(Extension(t.clone()), Extension(cajero())).await.unwrap().0;
     assert_eq!(movs.iter().map(|m| m.metodo_pago.clone()).collect::<Vec<_>>(), vec![None, Some("YAPE".to_string())]);
     // Forma de pago que no corresponde.
     assert!(cajas::registrar_movimiento(Extension(t.clone()), Extension(cajero()), Json(mov(Some("CHEQUE"), 5.0))).await.is_err());

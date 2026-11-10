@@ -372,6 +372,8 @@ async fn main() {
         .route("/cajas/cerrar", post(handlers::cajas::cerrar_caja))
         .route("/cajas/movimiento", post(handlers::cajas::registrar_movimiento))
         .route("/cajas/abierta", get(handlers::cajas::obtener_caja_abierta))
+        // Módulo VARIAS_CAJAS: el administrador ve todas las cajas abiertas.
+        .route("/cajas/abiertas", get(handlers::cajas::listar_cajas_abiertas))
         .route("/cajas/movimientos", get(handlers::cajas::movimientos_caja_abierta))
         .route("/cajas/:id/detalle", get(handlers::cajas::detalle_caja))
         // Gastos del negocio (alquiler, luz, sueldos...); ver handlers/gastos.rs.

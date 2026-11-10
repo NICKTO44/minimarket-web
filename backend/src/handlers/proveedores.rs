@@ -128,12 +128,15 @@ pub async fn crear_compra(
     // Con la plata de la caja: la caja abierta (la más reciente, como en
     // Gastos) y que alcance el efectivo. Se revisa antes de guardar nada.
     let monto_caja = (total * 100.0).round() / 100.0;
+    // La de quien registra la compra primero; con VARIAS_CAJAS, solo la suya.
     let caja: Option<(i64, String)> = if con_caja && monto_caja > 0.0 {
+        let varias = crate::handlers::cajas::varias_cajas(&conn).await;
         let mut filas = conn
             .query(
                 "SELECT c.id, COALESCE(u.nombre_completo, '') FROM cajas c LEFT JOIN usuarios u ON u.id = c.usuario_id
-                 WHERE c.estado = 'ABIERTA' ORDER BY c.id DESC LIMIT 1",
-                (),
+                 WHERE c.estado = 'ABIERTA' AND (?1 = 0 OR c.usuario_id = ?2)
+                 ORDER BY (c.usuario_id = ?2) DESC, c.id DESC LIMIT 1",
+                libsql::params![varias as i64, claims.sub],
             )
             .await
             .map_err(e500)?;

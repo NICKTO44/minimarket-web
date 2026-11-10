@@ -154,6 +154,12 @@ pub const MODULO_COSTEO: &str = "COSTEO";
 /// venta (handlers/reparaciones.rs). Solo para el rubro Tecnología.
 pub const MODULO_REPARACIONES: &str = "REPARACIONES";
 
+/// Varias cajas abiertas a la vez: cada usuario que cobra abre la suya (por
+/// ejemplo, una por computadora) y vende solo en ella; el administrador ve y
+/// puede cerrar todas (handlers/cajas.rs). Apagado, una sola caja por
+/// negocio, como siempre. Sirve para cualquier rubro.
+pub const MODULO_VARIAS_CAJAS: &str = "VARIAS_CAJAS";
+
 pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
 
 /// (módulo, único rubro donde se puede encender).
@@ -212,6 +218,7 @@ const MODULOS: &[&str] = &[
     MODULO_DELIVERY,
     MODULO_COSTEO,
     MODULO_REPARACIONES,
+    MODULO_VARIAS_CAJAS,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.

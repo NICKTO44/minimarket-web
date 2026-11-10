@@ -301,8 +301,15 @@ pub async fn registrar(
     let mut movimiento_id: Option<i64> = None;
     let mut caja_abierta: Option<i64> = None;
     if gasto.desde_caja {
+        // La caja de quien registra (la suya primero). Con VARIAS_CAJAS, solo
+        // la suya: el gasto no sale del efectivo de otro vendedor.
+        let varias = crate::handlers::cajas::varias_cajas(&conn).await;
         let mut filas = conn
-            .query("SELECT id FROM cajas WHERE estado = 'ABIERTA' ORDER BY id DESC LIMIT 1", ())
+            .query(
+                "SELECT id FROM cajas WHERE estado = 'ABIERTA' AND (?1 = 0 OR usuario_id = ?2)
+                 ORDER BY (usuario_id = ?2) DESC, id DESC LIMIT 1",
+                libsql::params![varias as i64, claims.sub],
+            )
             .await
             .map_err(e500)?;
         caja_abierta = match filas.next().await.map_err(e500)? {
