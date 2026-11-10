@@ -273,6 +273,8 @@ export const api = {
   comprobanteReenviar: (id) => request(`/comprobantes/${id}/reenviar`, { method: 'POST' }),
   sunatAvisos: () => request('/sunat/avisos'),
   cajaAbierta: () => request('/cajas/abierta'),
+  // Módulo "Varias cajas": todas las cajas abiertas (solo el administrador).
+  cajasAbiertas: () => request('/cajas/abiertas'),
   cajasListar: (inicio, fin) => request(`/cajas?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   // Retiro o ingreso de efectivo en la caja abierta (los gastos van por /gastos).
   cajaMovimiento: (data) => request('/cajas/movimiento', { method: 'POST', body: JSON.stringify(data) }),

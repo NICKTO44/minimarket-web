@@ -11,9 +11,94 @@ import './Caja.css';
 
 const NOMBRE_MOVIMIENTO = { GASTO: 'Gasto', RETIRO: 'Retiro', INGRESO: 'Ingreso' };
 
+const efectivoDe = (c) => c.monto_inicial + c.ventas_efectivo + c.ingresos_total - c.retiros_total - c.gastos_total;
+
+// Módulo "Varias cajas": el administrador ve las cajas abiertas de los
+// demás vendedores y puede cerrar cualquiera (con el efectivo contado).
+function OtrasCajas({ cajas, usuario, onCerrada }) {
+  const [cerrando, setCerrando] = useState(null);
+  const [contado, setContado] = useState('');
+  const [procesando, setProcesando] = useState(false);
+  const [error, setError] = useState(null);
+
+  if (cajas.length === 0) return null;
+
+  const cerrar = async (c) => {
+    const monto = parseFloat(contado);
+    if (isNaN(monto) || monto < 0) {
+      setError('Ingresa el efectivo contado de esa caja.');
+      return;
+    }
+    setProcesando(true);
+    setError(null);
+    try {
+      await api.cajaCerrar({
+        caja_id: c.id,
+        usuario_id: usuario.id,
+        usuario_rol_id: usuario.rol_id,
+        monto_contado: monto,
+        observaciones: `Cerrada por ${usuario?.nombre || 'el administrador'}`,
+      });
+      setCerrando(null);
+      setContado('');
+      onCerrada(`Caja de ${c.usuario_nombre} cerrada. Diferencia: ${textoDiferencia(monto - efectivoDe(c))}.`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  return (
+    <div className="caja-card">
+      <h2>Cajas de los vendedores</h2>
+      <p className="caja-subtitulo">Abiertas ahora, cada una en su computadora.</p>
+      {cajas.map((c) => (
+        <div key={c.id} className="caja-otra">
+          <div className="caja-encabezado">
+            <strong>{c.usuario_nombre}</strong>
+            <span className="caja-badge">Desde {fechaHoraLima(c.fecha_apertura)}</span>
+          </div>
+          <div className="caja-resumen-fila">
+            <span>Vendido ({c.numero_transacciones} ventas)</span>
+            <strong>S/ {c.total_ventas.toFixed(2)}</strong>
+          </div>
+          <div className="caja-resumen-fila">
+            <span>Efectivo esperado</span>
+            <strong>S/ {efectivoDe(c).toFixed(2)}</strong>
+          </div>
+          {cerrando === c.id ? (
+            <>
+              <label className="caja-label">Efectivo contado de esta caja</label>
+              <input type="number" placeholder="0.00" value={contado} onChange={(e) => setContado(e.target.value)} />
+              {error && <p className="caja-mensaje caja-mensaje-error">{error}</p>}
+              <div className="caja-mov-acciones">
+                <button type="button" onClick={() => cerrar(c)} disabled={procesando}>
+                  {procesando ? 'Cerrando...' : 'Confirmar cierre'}
+                </button>
+                <button type="button" onClick={() => { setCerrando(null); setError(null); }} disabled={procesando}>
+                  Cancelar
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="caja-mov-acciones">
+              <button type="button" onClick={() => { setCerrando(c.id); setContado(''); setError(null); }}>
+                Cerrar esta caja
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // sinConexion: módulo "Venta sin conexión" (sin internet se puede abrir la
 // caja y registrar gastos de caja; se suben al volver la conexión).
-export default function Caja({ usuario, sinConexion = false }) {
+// variasCajas: módulo "Varias cajas" (cada vendedor abre la suya; el
+// administrador ve además las de los demás).
+export default function Caja({ usuario, sinConexion = false, variasCajas = false, esAdmin = false }) {
   const [caja, setCaja] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [montoInicial, setMontoInicial] = useState('');
@@ -26,6 +111,9 @@ export default function Caja({ usuario, sinConexion = false }) {
   // registrar uno ('GASTO' | 'RETIRO' | 'INGRESO').
   const [movimientos, setMovimientos] = useState([]);
   const [ventana, setVentana] = useState(null);
+  // Con "Varias cajas": las cajas abiertas de los demás (solo el administrador).
+  const [otrasCajas, setOtrasCajas] = useState([]);
+  const conOtras = variasCajas && esAdmin;
 
   const cargarCaja = () => {
     setCargando(true);
@@ -35,10 +123,23 @@ export default function Caja({ usuario, sinConexion = false }) {
         setCaja(c);
         if (c) api.cajaMovimientos().then(setMovimientos).catch(() => setMovimientos([]));
         else setMovimientos([]);
+        if (conOtras) {
+          api
+            .cajasAbiertas()
+            .then((todas) => setOtrasCajas((todas || []).filter((o) => o.id !== c?.id)))
+            .catch(() => setOtrasCajas([]));
+        }
       })
       .catch(() => setCaja(null))
       .finally(() => setCargando(false));
   };
+
+  const otraCerrada = (texto) => {
+    setMensaje({ tipo: 'exito', texto });
+    cargarCaja();
+  };
+
+  const panelOtras = conOtras && <OtrasCajas cajas={otrasCajas} usuario={usuario} onCerrada={otraCerrada} />;
 
   const movimientoGuardado = (texto) => {
     setVentana(null);
@@ -230,8 +331,12 @@ export default function Caja({ usuario, sinConexion = false }) {
     return (
       <div className="caja-layout">
         <div className="caja-card">
-          <h2>Abrir caja</h2>
-          <p className="caja-subtitulo">No hay ninguna caja abierta en el sistema.</p>
+          <h2>{variasCajas ? 'Abrir mi caja' : 'Abrir caja'}</h2>
+          <p className="caja-subtitulo">
+            {variasCajas
+              ? 'No tienes una caja abierta. Cada vendedor abre la suya en su computadora; las de los demás siguen abiertas.'
+              : 'No hay ninguna caja abierta en el sistema.'}
+          </p>
 
           <label className="caja-label">Monto inicial en efectivo</label>
           <input
@@ -254,6 +359,7 @@ export default function Caja({ usuario, sinConexion = false }) {
             {procesando ? 'Abriendo...' : 'Abrir caja'}
           </button>
         </div>
+        {panelOtras}
       </div>
     );
   }
@@ -262,7 +368,7 @@ export default function Caja({ usuario, sinConexion = false }) {
     <div className="caja-layout">
       <div className="caja-card">
         <div className="caja-encabezado">
-          <h2>Caja abierta</h2>
+          <h2>{variasCajas ? 'Mi caja' : 'Caja abierta'}</h2>
           <span className="caja-badge">{caja.usuario_nombre}</span>
         </div>
         <p className="caja-subtitulo">Desde {fechaHoraLima(caja.fecha_apertura)}</p>
@@ -394,6 +500,8 @@ export default function Caja({ usuario, sinConexion = false }) {
           {procesando ? 'Cerrando...' : 'Cerrar caja'}
         </button>
       </div>
+
+      {panelOtras}
 
       {ventana === 'GASTO' && (
         <FormularioGasto

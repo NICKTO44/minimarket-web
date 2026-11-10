@@ -330,3 +330,19 @@
   line-height: 1.4;
   text-align: left;
 }
+
+/* Módulo "Varias cajas": las cajas de los demás vendedores, al lado (o
+   debajo, en pantallas angostas) de la caja propia. */
+.caja-layout:has(.caja-otra) {
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 16px;
+}
+
+.caja-otra {
+  border-top: 1px solid var(--pos-borde, #e4e6eb);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

@@ -86,6 +86,7 @@ import {
   MODULO_MENU_ARRIBA,
   MODULO_VENTA_FUERA_INVENTARIO,
   MODULO_VENTA_SIN_CONEXION,
+  MODULO_VARIAS_CAJAS,
   MODULO_COMPROBANTE_CLASICO,
   MODULO_LOGO_TICKET,
   MODULO_IMPRESION_DIRECTA,
@@ -775,7 +776,14 @@ function App() {
             }}
           />
         )}
-        {pantallaVisible === 'CAJA' && <Caja usuario={usuarioActual} sinConexion={negocio.modulos.includes(MODULO_VENTA_SIN_CONEXION)} />}
+        {pantallaVisible === 'CAJA' && (
+          <Caja
+            usuario={usuarioActual}
+            sinConexion={negocio.modulos.includes(MODULO_VENTA_SIN_CONEXION)}
+            variasCajas={negocio.modulos.includes(MODULO_VARIAS_CAJAS)}
+            esAdmin={conPermisosDeAdmin(usuarioActual)}
+          />
+        )}
         {pantallaVisible === 'HISTORIAL_CAJA' && <HistorialCaja />}
         {pantallaVisible === 'PRODUCTOS' && (
           <Inventario

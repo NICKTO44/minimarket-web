@@ -72,6 +72,8 @@ export const MODULO_DELIVERY = 'DELIVERY';
 export const MODULO_COSTEO = 'COSTEO';
 // Tecnología: órdenes de reparación (equipo, diagnóstico, presupuesto, garantía).
 export const MODULO_REPARACIONES = 'REPARACIONES';
+// Varias cajas abiertas a la vez: cada vendedor abre la suya (una por computadora).
+export const MODULO_VARIAS_CAJAS = 'VARIAS_CAJAS';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
@@ -96,7 +98,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -323,6 +325,12 @@ export const MODULOS = [
     descripcion:
       'El cliente deja su celular, laptop o impresora: tipo, marca, modelo, N° de serie o IMEI, lo que trae, cómo llega, la falla y su clave. Diagnóstico, presupuesto con repuestos del stock y mano de obra, aprobación por WhatsApp, técnico, adelanto sin comprobante, aviso de listo, garantía por IMEI y cobro del saldo al entregar.',
     rubros: ['TECNOLOGIA'],
+  },
+  {
+    valor: MODULO_VARIAS_CAJAS,
+    label: 'Varias cajas',
+    descripcion:
+      'Para vender en dos o más computadoras a la vez: cada vendedor abre su propia caja sin cerrar la de los demás, vende solo en la suya y la cuadra al cerrar. El administrador ve todas las cajas abiertas en la pantalla Caja y puede cerrar cualquiera. Para vender, el administrador también abre la suya.',
   },
 ];
 
