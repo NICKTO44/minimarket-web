@@ -13,3 +13,4 @@ pub mod anulaciones;
 pub mod plan;
 pub mod enlace_publico;
 pub mod imagen;
+pub mod pantallas;

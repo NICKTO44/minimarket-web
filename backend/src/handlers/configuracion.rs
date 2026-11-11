@@ -238,10 +238,88 @@ pub async fn listar_usuarios(
             rol_id: row.get(3).unwrap_or_default(),
             rol_nombre: row.get(4).unwrap_or_default(),
             activo: row.get::<i64>(5).unwrap_or(1) == 1,
+            pantallas_ocultas: Vec::new(),
         });
+    }
+    drop(rows);
+    for u in usuarios.iter_mut() {
+        if u.rol_id != ROL_ADMIN {
+            u.pantallas_ocultas = pantallas_ocultas_de(&conn, u.id).await;
+        }
     }
 
     Ok(Json(usuarios))
+}
+
+/// Pantallas ocultas de un usuario. Si la base aún no tiene la migración
+/// 0067 (o el dato es raro), ninguna: ve lo de su rol.
+pub async fn pantallas_ocultas_de(conn: &libsql::Connection, usuario_id: i64) -> Vec<String> {
+    let texto: Option<String> = match conn
+        .query("SELECT pantallas_ocultas FROM usuarios WHERE id = ?1", libsql::params![usuario_id])
+        .await
+    {
+        Ok(mut filas) => match filas.next().await {
+            Ok(Some(f)) => f.get::<Option<String>>(0).ok().flatten(),
+            _ => None,
+        },
+        Err(_) => None,
+    };
+    crate::logica::pantallas::desde_texto(texto.as_deref())
+}
+
+/// PUT /usuarios/:id/pantallas — el administrador elige qué pantallas no ve
+/// ese usuario. Lista vacía = vuelve a ver todo lo de su rol.
+pub async fn guardar_pantallas(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<i64>,
+    Json(payload): Json<PantallasUsuario>,
+) -> Result<Json<Vec<String>>, (StatusCode, String)> {
+    exigir_solo_admin(&claims)?;
+    let conn = tenant.0.connect().map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let rol_id: i64 = match conn
+        .query("SELECT rol_id FROM usuarios WHERE id = ?1", libsql::params![id])
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .next()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    {
+        Some(f) => f.get(0).unwrap_or_default(),
+        None => return Err((StatusCode::NOT_FOUND, "Ese usuario no existe.".into())),
+    };
+    if rol_id == ROL_ADMIN {
+        return Err((StatusCode::BAD_REQUEST, "El administrador siempre ve todas las pantallas.".into()));
+    }
+    let ocultas = crate::logica::pantallas::normalizar(&payload.ocultas);
+    let valor: Option<String> = if ocultas.is_empty() { None } else { serde_json::to_string(&ocultas).ok() };
+    conn.execute("UPDATE usuarios SET pantallas_ocultas = ?1 WHERE id = ?2", libsql::params![valor, id])
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                if e.to_string().contains("pantallas_ocultas") {
+                    "Falta actualizar la base de este negocio (migración 0067).".to_string()
+                } else {
+                    format!("No se pudieron guardar las pantallas: {}", e)
+                },
+            )
+        })?;
+    crate::middleware_auth::olvidar_pantallas(claims.tienda_id, id);
+    Ok(Json(ocultas))
+}
+
+/// GET /mi-cuenta/pantallas — las pantallas que el propio usuario no ve
+/// (la app arma el menú con esto al cargar).
+pub async fn mis_pantallas(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<String>>, StatusCode> {
+    if claims.rol_id == ROL_ADMIN {
+        return Ok(Json(Vec::new()));
+    }
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(pantallas_ocultas_de(&conn, claims.sub).await))
 }
 
 pub async fn crear_usuario(

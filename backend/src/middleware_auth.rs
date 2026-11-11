@@ -135,6 +135,15 @@ pub async fn requiere_auth(
         }
     }
 
+    // Pantallas que el administrador le ocultó a este usuario (además de lo
+    // que su rol no puede). El administrador nunca tiene ocultas.
+    if claims.rol_id != ROL_ADMIN {
+        let ocultas = pantallas_ocultas_cacheadas(claims.tienda_id, claims.sub, &db_tienda).await;
+        if crate::logica::pantallas::bloqueada(&ocultas, req.method(), req.uri().path()) {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
+
     req.extensions_mut().insert(claims);
     req.extensions_mut().insert(Arc::new(TenantDb(db_tienda)));
 
@@ -160,6 +169,37 @@ async fn nombre_rol_cacheado(tienda_id: i64, rol_id: i64, db: &libsql::Database)
     let nombre = crate::handlers::mesas::nombre_rol(&conn, rol_id).await?;
     recordar_rol(tienda_id, rol_id, &nombre);
     Some(nombre)
+}
+
+/// (tienda_id, usuario_id) -> pantallas ocultas, por 60 s (como el estado
+/// del usuario). Al cambiarlas, `olvidar_pantallas` hace que valga al tiro.
+type CachePantallas = Mutex<HashMap<(i64, i64), (Vec<String>, std::time::Instant)>>;
+fn cache_pantallas() -> &'static CachePantallas {
+    static CACHE: OnceLock<CachePantallas> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub async fn pantallas_ocultas_cacheadas(tienda_id: i64, usuario_id: i64, db: &libsql::Database) -> Vec<String> {
+    if let Some((ocultas, cuando)) = cache_pantallas().lock().ok().and_then(|c| c.get(&(tienda_id, usuario_id)).cloned()) {
+        if cuando.elapsed() < std::time::Duration::from_secs(60) {
+            return ocultas;
+        }
+    }
+    let ocultas = match db.connect() {
+        Ok(conn) => crate::handlers::configuracion::pantallas_ocultas_de(&conn, usuario_id).await,
+        // Sin conexión no se bloquea nada (mismo criterio que el estado del usuario).
+        Err(_) => return Vec::new(),
+    };
+    if let Ok(mut c) = cache_pantallas().lock() {
+        c.insert((tienda_id, usuario_id), (ocultas.clone(), std::time::Instant::now()));
+    }
+    ocultas
+}
+
+pub fn olvidar_pantallas(tienda_id: i64, usuario_id: i64) {
+    if let Ok(mut c) = cache_pantallas().lock() {
+        c.remove(&(tienda_id, usuario_id));
+    }
 }
 
 /// Guarda en la caché el nombre de un rol de un negocio. La usa el control

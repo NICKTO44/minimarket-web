@@ -94,6 +94,14 @@ pub struct UsuarioResumen {
     pub rol_id: i64,
     pub rol_nombre: String,
     pub activo: bool,
+    /// Pantallas que el administrador le ocultó (logica/pantallas.rs).
+    pub pantallas_ocultas: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PantallasUsuario {
+    /// Ids de utils/menu.js. Vacía = ve todo lo de su rol.
+    pub ocultas: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
