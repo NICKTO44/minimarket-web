@@ -32,24 +32,12 @@ function urlMiniatura(url) {
 }
 
 function Imagen({ url, alt, onClick }) {
-  // 0 = miniatura (o la foto grande si la tarjeta es más ancha que la
-  // miniatura de 400 px), 1 = foto grande (si aún no hay miniatura), 2 = sin foto.
+  // 0 = miniatura (400 px, liviana: el catálogo carga muchas a la vez),
+  // 1 = foto grande (si aún no hay miniatura), 2 = sin foto.
   const [intento, setIntento] = useState(0);
   if (intento === 2) return <Images size={34} strokeWidth={1.4} className="cat-sin-imagen" aria-hidden="true" />;
-  const grande = `${API_URL}${url}`;
-  const src = intento === 0 ? `${API_URL}${urlMiniatura(url)}` : grande;
-  return (
-    <img
-      src={src}
-      srcSet={intento === 0 ? `${src} 400w, ${grande} 800w` : undefined}
-      sizes={intento === 0 ? '(max-width: 899px) 50vw, 560px' : undefined}
-      alt={alt}
-      loading="lazy"
-      decoding="async"
-      onClick={onClick}
-      onError={() => setIntento((i) => i + 1)}
-    />
-  );
+  const src = `${API_URL}${intento === 0 ? urlMiniatura(url) : url}`;
+  return <img src={src} alt={alt} loading="lazy" decoding="async" onClick={onClick} onError={() => setIntento((i) => i + 1)} />;
 }
 
 function Foto({ producto, foto2 }) {
