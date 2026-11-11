@@ -80,9 +80,13 @@
 }
 
 .cat-grilla {
+  /* Dos productos por fila: fotos grandes. En pantallas muy anchas no
+     pasa de ~1160 px para que las tarjetas no crezcan sin fin. */
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+  max-width: 1160px;
+  margin: 0 auto;
 }
 
 /* Solo para mirar: sin botón, sin enlace, sin cursor de mano. */
@@ -116,12 +120,16 @@
   background: #f8f9fb;
 }
 
-/* Foto 2 (módulo Catálogo): flechas para pasar de una foto a otra. */
+/* Foto 2 (módulo Catálogo): puntos debajo de la foto para pasar de una a
+   otra (no tapan la foto). Tocar la foto también la cambia. */
 .cat-foto-varias {
-  position: relative;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .cat-foto-varias img {
+  flex: 1;
+  min-height: 0;
   cursor: pointer;
 }
 
@@ -129,46 +137,28 @@
   color: #c4c8d0;
 }
 
-.cat-flecha {
-  position: absolute;
-  top: 50%;
+.cat-puntos {
   display: flex;
-  align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  gap: 0;
+}
+
+/* El borde transparente agranda el área para tocar (dedos en el celular)
+   sin agrandar el punto. */
+.cat-punto {
+  box-sizing: content-box;
+  width: 10px;
+  height: 10px;
   padding: 0;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 6px solid transparent;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  color: #374151;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-  transform: translateY(-50%);
+  background: #d1d5db;
+  background-clip: padding-box;
   cursor: pointer;
 }
 
-.cat-flecha:hover {
-  color: var(--color-primario, #16a34a);
-}
-
-.cat-flecha-izq {
-  left: 6px;
-}
-
-.cat-flecha-der {
-  right: 6px;
-}
-
-.cat-contador {
-  position: absolute;
-  right: 8px;
-  bottom: 6px;
-  padding: 1px 7px;
-  border-radius: 10px;
-  background: rgba(17, 24, 39, 0.6);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
+.cat-punto.activo {
+  background-color: var(--color-primario, #16a34a);
 }
 
 .cat-cuerpo {
@@ -310,7 +300,6 @@
   }
 
   .cat-grilla {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 10px;
   }
 

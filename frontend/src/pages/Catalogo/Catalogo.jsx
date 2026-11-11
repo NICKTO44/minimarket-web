@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Images, PackageX, Search, X } from 'lucide-react';
+import { Images, PackageX, Search, X } from 'lucide-react';
 import { api, API_URL } from '../../api/api';
 import { textoPlano } from '../../utils/medicamentos';
 import {
@@ -32,16 +32,30 @@ function urlMiniatura(url) {
 }
 
 function Imagen({ url, alt, onClick }) {
-  // 0 = miniatura, 1 = foto grande (si aún no hay miniatura), 2 = sin foto.
+  // 0 = miniatura (o la foto grande si la tarjeta es más ancha que la
+  // miniatura de 400 px), 1 = foto grande (si aún no hay miniatura), 2 = sin foto.
   const [intento, setIntento] = useState(0);
   if (intento === 2) return <Images size={34} strokeWidth={1.4} className="cat-sin-imagen" aria-hidden="true" />;
-  const src = `${API_URL}${intento === 0 ? urlMiniatura(url) : url}`;
-  return <img src={src} alt={alt} loading="lazy" decoding="async" onClick={onClick} onError={() => setIntento((i) => i + 1)} />;
+  const grande = `${API_URL}${url}`;
+  const src = intento === 0 ? `${API_URL}${urlMiniatura(url)}` : grande;
+  return (
+    <img
+      src={src}
+      srcSet={intento === 0 ? `${src} 400w, ${grande} 800w` : undefined}
+      sizes={intento === 0 ? '(max-width: 899px) 50vw, 560px' : undefined}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onClick={onClick}
+      onError={() => setIntento((i) => i + 1)}
+    />
+  );
 }
 
 function Foto({ producto, foto2 }) {
-  // Foto 1 (la de siempre) y, si tiene, la foto 2: se pasa con las flechas
-  // o tocando la foto. Al llegar a la última vuelve a la primera.
+  // Foto 1 (la de siempre) y, si tiene, la foto 2: se pasa con los puntos
+  // de abajo (no tapan la foto) o tocando la foto. Al llegar a la última
+  // vuelve a la primera.
   const fotos = [producto.imagen_url, foto2].filter(Boolean);
   const [cual, setCual] = useState(0);
   if (fotos.length === 0) {
@@ -63,17 +77,18 @@ function Foto({ producto, foto2 }) {
         onClick={varias ? () => mover(1) : undefined}
       />
       {varias && (
-        <>
-          <button type="button" className="cat-flecha cat-flecha-izq" aria-label="Foto anterior" onClick={() => mover(-1)}>
-            <ChevronLeft size={18} strokeWidth={2.4} />
-          </button>
-          <button type="button" className="cat-flecha cat-flecha-der" aria-label="Foto siguiente" onClick={() => mover(1)}>
-            <ChevronRight size={18} strokeWidth={2.4} />
-          </button>
-          <span className="cat-contador">
-            {actual + 1}/{fotos.length}
-          </span>
-        </>
+        <div className="cat-puntos" role="group" aria-label="Fotos del producto">
+          {fotos.map((f, i) => (
+            <button
+              key={f}
+              type="button"
+              className={`cat-punto${i === actual ? ' activo' : ''}`}
+              aria-label={`Foto ${i + 1}`}
+              aria-pressed={i === actual}
+              onClick={() => setCual(i)}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
