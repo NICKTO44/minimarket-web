@@ -11,6 +11,23 @@ use libsql::Builder;
 
 use minimarket_backend::{crypto, estado_impresion, handlers, middleware_auth, migraciones, rate_limit, tenants, AppState};
 
+/// Fotos de productos (y sus miniaturas): el navegador las guarda 30 días y
+/// no las vuelve a pedir cada vez que se abre el Catálogo o el punto de
+/// venta. Al reemplazar una foto cambia su dirección (?v=), así que no se ve
+/// la anterior. Solo las respuestas correctas: un 404 (miniatura que aún no
+/// existe) no se guarda. Los logos (uploads/tienda) siguen como siempre.
+async fn cache_de_fotos(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    let de_productos = req.uri().path().starts_with("/uploads/productos/");
+    let mut res = next.run(req).await;
+    if de_productos && res.status().is_success() {
+        res.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("public, max-age=2592000"),
+        );
+    }
+    res
+}
+
 async fn health() -> &'static str {
     "minimarket-backend OK"
 }
@@ -232,7 +249,7 @@ async fn main() {
         // El sistema como app instalable, con el nombre y logo de cada negocio.
         .route("/publico/app/:direccion/manifest", get(handlers::app_instalable::manifiesto))
         .route("/publico/app/:direccion/icono/:tam", get(handlers::app_instalable::icono))
-        .nest_service("/uploads", ServeDir::new("uploads"))
+        .merge(Router::new().nest_service("/uploads", ServeDir::new("uploads")).layer(axum::middleware::from_fn(cache_de_fotos)))
         .merge(rutas_autenticacion);
 
     let rutas_protegidas = Router::new()
@@ -587,4 +604,41 @@ async fn senal_de_apagado() {
         _ = terminar => {},
     }
     println!("🛑 Señal de apagado recibida: terminando las peticiones en curso...");
+}
+#[cfg(test)]
+mod pruebas_cache_fotos {
+    use super::cache_de_fotos;
+    use axum::Router;
+    use tower_http::services::ServeDir;
+
+    /// Las fotos de productos salen con caché de 30 días; un 404 y los
+    /// logos, sin ella.
+    #[tokio::test]
+    async fn fotos_de_productos_con_cache() {
+        let carpeta = "uploads/productos/999991";
+        std::fs::create_dir_all(carpeta).unwrap();
+        std::fs::write(format!("{}/1.jpg", carpeta), b"jpg").unwrap();
+        std::fs::create_dir_all("uploads/tienda/999991").unwrap();
+        std::fs::write("uploads/tienda/999991/logo.png", b"png").unwrap();
+
+        let app = Router::new()
+            .merge(Router::new().nest_service("/uploads", ServeDir::new("uploads")).layer(axum::middleware::from_fn(cache_de_fotos)));
+        let escucha = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let dir = escucha.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(escucha, app).await.unwrap() });
+
+        let pedir = |ruta: &str| reqwest::get(format!("http://{}{}", dir, ruta));
+        let foto = pedir("/uploads/productos/999991/1.jpg?v=123").await.unwrap();
+        assert_eq!(foto.status(), 200);
+        assert_eq!(foto.headers().get("cache-control").unwrap(), "public, max-age=2592000");
+        let falta = pedir("/uploads/productos/999991/1_m.jpg").await.unwrap();
+        assert_eq!(falta.status(), 404);
+        assert!(falta.headers().get("cache-control").is_none());
+        let logo = pedir("/uploads/tienda/999991/logo.png").await.unwrap();
+        assert_eq!(logo.status(), 200);
+        assert!(logo.headers().get("cache-control").is_none());
+
+        let _ = std::fs::remove_dir_all(carpeta);
+        let _ = std::fs::remove_dir_all("uploads/tienda/999991");
+    }
 }

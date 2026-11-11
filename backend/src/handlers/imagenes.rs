@@ -79,7 +79,14 @@ pub async fn subir_imagen_producto(
         let _ = guardar(&carpeta, &ruta_m, m).await;
     }
 
-    let url_publica = format!("/uploads/productos/{}/{}.jpg", claims.tienda_id, id);
+    // ?v= como en la foto 2: el navegador guarda las fotos de productos por
+    // 30 días (main.rs, cache_de_fotos), así que al reemplazarla cambia la
+    // dirección y nadie sigue viendo la anterior. El archivo es el mismo.
+    let version = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let url_publica = format!("/uploads/productos/{}/{}.jpg?v={}", claims.tienda_id, id, version);
 
     conn.execute(
         "UPDATE productos SET imagen_url = ?1, fecha_actualizacion = datetime('now','localtime') WHERE id = ?2",
