@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Images, PackageX, Search, X } from 'lucide-react';
-import { api, API_URL } from '../../api/api';
+import { api, API_URL, claveDeSesion } from '../../api/api';
 import { textoPlano } from '../../utils/medicamentos';
 import {
   coincidenTodas,
@@ -25,6 +25,20 @@ import { sinCategoriaCarta } from '../../utils/categoriaCarta';
 
 const POR_TANDA = 40;
 const REFRESCO_MS = 30000;
+
+// Lo último que se leyó, en memoria mientras siga la misma sesión en esta
+// pestaña: al volver al Catálogo se muestra al instante y se actualiza por
+// detrás (el stock, a los pocos segundos). Al cerrar sesión, cambiar de
+// negocio o recargar la página se lee todo de nuevo.
+let guardado = { sesion: null };
+function deMemoria(campo, vacio) {
+  return guardado.sesion && guardado.sesion === claveDeSesion() && guardado[campo] !== undefined ? guardado[campo] : vacio;
+}
+function aMemoria(campo, valor) {
+  const sesion = claveDeSesion();
+  if (guardado.sesion !== sesion) guardado = { sesion };
+  guardado[campo] = valor;
+}
 
 /** Foto chica del catálogo ({id}_m.jpg, ver backend/handlers/imagenes.rs). */
 function urlMiniatura(url) {
@@ -140,13 +154,13 @@ function Tarjeta({ p, ficha, compat, precios, foto2 }) {
 }
 
 export default function Catalogo({ fichaRepuesto, compatibilidad, tresPrecios }) {
-  const [productos, setProductos] = useState(null);
-  const [categorias, setCategorias] = useState([]);
-  const [repuestos, setRepuestos] = useState(() => new Map());
-  const [compatibilidades, setCompatibilidades] = useState(() => new Map());
+  const [productos, setProductos] = useState(() => deMemoria('productos', null));
+  const [categorias, setCategorias] = useState(() => deMemoria('categorias', []));
+  const [repuestos, setRepuestos] = useState(() => deMemoria('repuestos', new Map()));
+  const [compatibilidades, setCompatibilidades] = useState(() => deMemoria('compatibilidades', new Map()));
   const { mapa: preciosExtra } = usePreciosVenta(tresPrecios);
   // producto_id -> url de su foto 2 (el Catálogo solo se ve con su módulo).
-  const [fotos2, setFotos2] = useState(() => new Map());
+  const [fotos2, setFotos2] = useState(() => deMemoria('fotos2', new Map()));
   const [error, setError] = useState('');
 
   const [busqueda, setBusqueda] = useState('');
@@ -163,8 +177,9 @@ export default function Catalogo({ fichaRepuesto, compatibilidad, tresPrecios })
   // pantalla y al volver a la pestaña.
   const leerProductos = useCallback(async () => {
     try {
-      const lista = await api.productos();
-      setProductos(lista.filter((p) => p.activo !== false && !p.carta_dia));
+      const lista = (await api.productos()).filter((p) => p.activo !== false && !p.carta_dia);
+      aMemoria('productos', lista);
+      setProductos(lista);
       setError('');
     } catch (e) {
       setError(e.message || 'No se pudieron leer los productos.');
@@ -175,14 +190,40 @@ export default function Catalogo({ fichaRepuesto, compatibilidad, tresPrecios })
     const primera = setTimeout(leerProductos, 0);
     api
       .categorias()
-      .then((c) => setCategorias(sinCategoriaCarta(c)))
+      .then((c) => {
+        const lista = sinCategoriaCarta(c);
+        aMemoria('categorias', lista);
+        setCategorias(lista);
+      })
       .catch(() => {});
     api
       .productoFotosExtra()
-      .then((l) => setFotos2(new Map(l.filter((f) => f.orden === 2).map((f) => [f.producto_id, f.url]))))
+      .then((l) => {
+        const mapa = new Map(l.filter((f) => f.orden === 2).map((f) => [f.producto_id, f.url]));
+        aMemoria('fotos2', mapa);
+        setFotos2(mapa);
+      })
       .catch(() => {});
-    if (fichaRepuesto) api.repuestosFichas().then((l) => setRepuestos(mapaPorProducto(l))).catch(() => {});
-    if (compatibilidad) api.compatibilidades().then((l) => setCompatibilidades(mapaCompatibilidades(l))).catch(() => {});
+    if (fichaRepuesto) {
+      api
+        .repuestosFichas()
+        .then((l) => {
+          const mapa = mapaPorProducto(l);
+          aMemoria('repuestos', mapa);
+          setRepuestos(mapa);
+        })
+        .catch(() => {});
+    }
+    if (compatibilidad) {
+      api
+        .compatibilidades()
+        .then((l) => {
+          const mapa = mapaCompatibilidades(l);
+          aMemoria('compatibilidades', mapa);
+          setCompatibilidades(mapa);
+        })
+        .catch(() => {});
+    }
     const t = setInterval(() => {
       if (document.visibilityState === 'visible') leerProductos();
     }, REFRESCO_MS);

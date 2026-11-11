@@ -26,6 +26,10 @@ function obtenerToken() {
   }
 }
 
+// Identifica la sesión de esta pestaña (negocio y usuario), para guardar en
+// memoria lo ya leído solo mientras siga la misma sesión (Catálogo).
+export const claveDeSesion = () => obtenerToken();
+
 // Al cambiar la contraseña o cerrar las otras sesiones, el servidor entrega
 // un token nuevo para este dispositivo (el anterior deja de servir).
 export function guardarTokenSesion(token) {
