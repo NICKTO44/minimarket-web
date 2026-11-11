@@ -276,6 +276,8 @@ export const api = {
   // Emisión directa: reenviar un comprobante PENDIENTE y avisos de plazos.
   comprobanteReenviar: (id) => request(`/comprobantes/${id}/reenviar`, { method: 'POST' }),
   sunatAvisos: () => request('/sunat/avisos'),
+  // Ingreso rápido de productos (nuevos o para reponer), sin elegir proveedor.
+  compraRapida: (data) => request('/compras/rapida', { method: 'POST', body: JSON.stringify(data) }),
   cajaAbierta: () => request('/cajas/abierta'),
   // Módulo "Varias cajas": todas las cajas abiertas (solo el administrador).
   cajasAbiertas: () => request('/cajas/abiertas'),

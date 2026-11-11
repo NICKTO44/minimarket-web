@@ -74,6 +74,8 @@ export const MODULO_COSTEO = 'COSTEO';
 export const MODULO_REPARACIONES = 'REPARACIONES';
 // Varias cajas abiertas a la vez: cada vendedor abre la suya (una por computadora).
 export const MODULO_VARIAS_CAJAS = 'VARIAS_CAJAS';
+// Ingreso rápido de productos (nuevos o para reponer) sin elegir proveedor.
+export const MODULO_INGRESO_RAPIDO = 'INGRESO_RAPIDO';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
@@ -98,7 +100,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -331,6 +333,12 @@ export const MODULOS = [
     label: 'Varias cajas',
     descripcion:
       'Para vender en dos o más computadoras a la vez: cada vendedor abre su propia caja sin cerrar la de los demás, vende solo en la suya y la cuadra al cerrar. El administrador ve todas las cajas abiertas en la pantalla Caja y puede cerrar cualquiera. Para vender, el administrador también abre la suya.',
+  },
+  {
+    valor: MODULO_INGRESO_RAPIDO,
+    label: 'Ingreso rápido de productos',
+    descripcion:
+      'Botón "Ingreso rápido" en Productos: varios productos nuevos o para reponer en un paso, sin elegir proveedor. El código se genera solo y, si viene por caja (9 botellas), calcula las unidades y el costo de cada una. Queda como una compra en Compras y en los reportes.',
   },
 ];
 

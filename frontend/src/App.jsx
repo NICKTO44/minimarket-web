@@ -87,6 +87,7 @@ import {
   MODULO_VENTA_FUERA_INVENTARIO,
   MODULO_VENTA_SIN_CONEXION,
   MODULO_VARIAS_CAJAS,
+  MODULO_INGRESO_RAPIDO,
   MODULO_COMPROBANTE_CLASICO,
   MODULO_LOGO_TICKET,
   MODULO_IMPRESION_DIRECTA,
@@ -801,6 +802,7 @@ function App() {
             equivalentes={negocio.modulos.includes(MODULO_EQUIVALENTES)}
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS)}
             catalogo={negocio.modulos.includes(MODULO_CATALOGO)}
+            ingresoRapido={negocio.modulos.includes(MODULO_INGRESO_RAPIDO)}
             verSinPrecio={productosSinPrecio}
             onSinPrecioVisto={() => setProductosSinPrecio(false)}
           />

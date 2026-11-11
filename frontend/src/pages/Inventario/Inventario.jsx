@@ -11,6 +11,7 @@ import CategoriasIgv from './CategoriasIgv';
 import FormularioModelo, { ConvertirEnModelo } from './FormularioModelo';
 import ImportarProductos from './ImportarProductos';
 import ImportarPresentaciones from './ImportarPresentaciones';
+import IngresoRapido from './IngresoRapido';
 import CargarImagenes from './CargarImagenes';
 import { TIPO_XLSX, escribirXlsx } from '../../utils/hojas';
 import { descargarArchivo } from '../../utils/pdfTicket';
@@ -174,6 +175,8 @@ export default function Inventario({
   compatibilidad = false,
   // Módulo Catálogo: una foto 2 por producto (en el Catálogo se pasa con puntitos).
   catalogo = false,
+  // Módulo "Ingreso rápido": productos nuevos o para reponer sin elegir proveedor.
+  ingresoRapido: conIngresoRapido = false,
 }) {
   const conOpcionesVenta = presentaciones || precioMayor;
   const preciosVenta = useFormPreciosVenta(tresPrecios);
@@ -195,6 +198,8 @@ export default function Inventario({
   const [fichaOriginal, setFichaOriginal] = useState(JSON.stringify(FICHA_VACIA));
   const [productos, setProductos] = useState([]);
   const [categorias, setCategorias] = useState([]);
+  // Ingreso rápido: productos nuevos o para reponer, sin elegir proveedor.
+  const [ingresoRapido, setIngresoRapido] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
   const [soloStockBajo, setSoloStockBajo] = useState(false);
@@ -1094,6 +1099,17 @@ export default function Inventario({
           <button className="inv-boton-categorias" onClick={() => setVerCategorias(true)}>
             Categorías e IGV
           </button>
+          {conIngresoRapido && (
+            <button
+              className="inv-boton-categorias"
+              onClick={() => {
+                setMensaje(null);
+                setIngresoRapido(true);
+              }}
+            >
+              ⚡ Ingreso rápido
+            </button>
+          )}
           {variantes ? (
             <>
               <button className="inv-boton-modelo" onClick={abrirNuevo}>
@@ -1335,6 +1351,21 @@ export default function Inventario({
                 r.actualizadas > 0 ? ` y ${r.actualizadas} actualizada${r.actualizadas === 1 ? '' : 's'}` : ''
               }${r.errores > 0 ? ` (${r.errores} con error no entraron)` : ''}.`,
             });
+            cargarTodo();
+          }}
+        />
+      )}
+
+      {ingresoRapido && (
+        <IngresoRapido
+          productos={productos}
+          categorias={categorias}
+          unidadesActivas={unidadesActivas}
+          presentaciones={presentaciones}
+          onCerrar={() => setIngresoRapido(false)}
+          onTerminado={(r) => {
+            setIngresoRapido(false);
+            setMensaje({ tipo: 'exito', texto: r.mensaje });
             cargarTodo();
           }}
         />
