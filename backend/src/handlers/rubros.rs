@@ -159,6 +159,10 @@ pub const MODULO_REPARACIONES: &str = "REPARACIONES";
 /// puede cerrar todas (handlers/cajas.rs). Apagado, una sola caja por
 /// negocio, como siempre. Sirve para cualquier rubro.
 pub const MODULO_VARIAS_CAJAS: &str = "VARIAS_CAJAS";
+/// Ingreso rápido de productos: nuevos o para reponer, en un paso y sin
+/// elegir proveedor; queda como compra ya recibida al proveedor "COMPRA
+/// RÁPIDA" (handlers/compra_rapida.rs). Sirve para cualquier rubro.
+pub const MODULO_INGRESO_RAPIDO: &str = "INGRESO_RAPIDO";
 
 pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
 
@@ -219,6 +223,7 @@ const MODULOS: &[&str] = &[
     MODULO_COSTEO,
     MODULO_REPARACIONES,
     MODULO_VARIAS_CAJAS,
+    MODULO_INGRESO_RAPIDO,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
