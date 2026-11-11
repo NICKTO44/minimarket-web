@@ -22,6 +22,7 @@ import {
   esRepartidor,
   etiquetaRol,
   gruposParaUsuario,
+  pantallaOculta,
   nivelAvisoSuscripcion,
   PANTALLAS_ALMACEN,
 } from '../utils/menu';
@@ -105,7 +106,7 @@ export default function NavegacionMovil({
   // El rubro o el módulo pueden renombrar Mesas ("Pedidos", "Mis entregas").
   const etiquetaMesas = typeof etiquetas.MESAS === 'string' ? etiquetas.MESAS : 'Mesas';
   const IconoMesas = etiquetas.iconos?.MESAS || UtensilsCrossed;
-  const tabsFijas = repartidor
+  const tabsDelRol = repartidor
     ? ['MESAS']
     : almacen
     ? PANTALLAS_ALMACEN
@@ -116,6 +117,9 @@ export default function NavegacionMovil({
       : restaurante
         ? TABS_RESTAURANTE
         : TABS_TIENDA;
+  // Sin las pantallas que el administrador le ocultó.
+  const ve = (id) => !pantallaOculta(usuario, id);
+  const tabsFijas = tabsDelRol.filter(ve);
   const srcLogo = logoUrl ? `${API_URL}${logoUrl}?v=${versionLogo}` : null;
   const mostrarLogo = !!srcLogo && logoFallido !== srcLogo;
 
@@ -161,24 +165,25 @@ export default function NavegacionMovil({
       <nav className={`navm-inferior${tecladoAbierto ? ' navm-oculta' : ''}`} aria-label="Navegación principal">
         {almacen ? (
           <>
-            <Tab id="PRODUCTOS" label={etiquetas.PRODUCTOS || 'Productos'} Icono={Package} pantalla={pantalla} onIr={ir} />
-            <Tab id="STOCK" label="Stock" Icono={Boxes} pantalla={pantalla} onIr={ir} />
-            <Tab id="PROVEEDORES" label="Proveedores" Icono={Truck} pantalla={pantalla} onIr={ir} />
-            <Tab id="REPORTES" label="Reportes" Icono={BarChart3} pantalla={pantalla} onIr={ir} />
+            {ve('PRODUCTOS') && <Tab id="PRODUCTOS" label={etiquetas.PRODUCTOS || 'Productos'} Icono={Package} pantalla={pantalla} onIr={ir} />}
+            {ve('STOCK') && <Tab id="STOCK" label="Stock" Icono={Boxes} pantalla={pantalla} onIr={ir} />}
+            {ve('PROVEEDORES') && <Tab id="PROVEEDORES" label="Proveedores" Icono={Truck} pantalla={pantalla} onIr={ir} />}
+            {ve('REPORTES') && <Tab id="REPORTES" label="Reportes" Icono={BarChart3} pantalla={pantalla} onIr={ir} />}
           </>
         ) : preparacion ? (
-          <Tab id="PREPARACION" label="Preparación" Icono={ChefHat} pantalla={pantalla} onIr={ir} />
+          ve('PREPARACION') && <Tab id="PREPARACION" label="Preparación" Icono={ChefHat} pantalla={pantalla} onIr={ir} />
         ) : restaurante ? (
-          <Tab id="MESAS" label={etiquetaMesas} Icono={IconoMesas} pantalla={pantalla} onIr={ir} insignia={insignias.MESAS} />
+          ve('MESAS') && <Tab id="MESAS" label={etiquetaMesas} Icono={IconoMesas} pantalla={pantalla} onIr={ir} insignia={insignias.MESAS} />
         ) : (
-          <Tab id="RESUMEN" label="Inicio" Icono={House} pantalla={pantalla} onIr={ir} />
+          ve('RESUMEN') && <Tab id="RESUMEN" label="Inicio" Icono={House} pantalla={pantalla} onIr={ir} />
         )}
         {(mesero || preparacion) && (
-          <Tab id="CARTA" label="Carta de hoy" Icono={ClipboardList} pantalla={pantalla} onIr={ir} />
+          ve('CARTA') && <Tab id="CARTA" label="Carta de hoy" Icono={ClipboardList} pantalla={pantalla} onIr={ir} />
         )}
         {!mesero && !preparacion && !almacen && !repartidor && (
           <>
-            <Tab id="CAJA" label="Caja" Icono={Wallet} pantalla={pantalla} onIr={ir} />
+            {ve('CAJA') && <Tab id="CAJA" label="Caja" Icono={Wallet} pantalla={pantalla} onIr={ir} />}
+            {ve('POS') && (
             <button
               type="button"
               className={`navm-vender${pantalla === 'POS' ? ' activo' : ''}`}
@@ -190,7 +195,8 @@ export default function NavegacionMovil({
               </span>
               Vender
             </button>
-            <Tab id="PRODUCTOS" label={etiquetas.PRODUCTOS || 'Productos'} Icono={Package} pantalla={pantalla} onIr={ir} />
+            )}
+            {ve('PRODUCTOS') && <Tab id="PRODUCTOS" label={etiquetas.PRODUCTOS || 'Productos'} Icono={Package} pantalla={pantalla} onIr={ir} />}
           </>
         )}
         <button

@@ -62,6 +62,8 @@ import {
   PANTALLAS_ALMACEN,
   PANTALLAS_MESERO,
   PANTALLAS_PREPARACION,
+  pantallaOculta,
+  gruposParaUsuario,
 } from './utils/menu';
 import {
   datosNegocio,
@@ -198,6 +200,24 @@ function App() {
   const cargarEstadoSuscripcion = () => {
     api.suscripcionEstado().then(setEstadoSuscripcion).catch(() => {});
   };
+
+  // Pantallas que el administrador le ocultó a este usuario (no al admin).
+  // Se pide al entrar: así un cambio vale desde la próxima vez que abra la app.
+  const idUsuario = usuarioActual?.id;
+  const esAdminActual = usuarioActual?.rol_id === 1;
+  useEffect(() => {
+    if (!logueado || !idUsuario || esAdminActual) return;
+    let vigente = true;
+    api
+      .misPantallas()
+      .then((lista) => {
+        if (vigente) setUsuarioActual((u) => (u && u.id === idUsuario ? { ...u, pantallas_ocultas: lista || [] } : u));
+      })
+      .catch(() => {});
+    return () => {
+      vigente = false;
+    };
+  }, [logueado, idUsuario, esAdminActual]);
 
   useEffect(() => {
     const guardado = leerGuardado(STORAGE_KEY);
@@ -593,7 +613,7 @@ function App() {
   const soloPreparacion = restaurante && esPreparacion(usuarioActual);
   // Almacén (en cualquier rubro): productos, stock, proveedores y reportes.
   const soloAlmacen = esAlmacen(usuarioActual);
-  const pantallaVisible = soloRepartidor
+  const pantallaDelRol = soloRepartidor
     ? pantalla === 'POS' && cobroDeRepartidor
       ? 'POS'
       : 'MESAS'
@@ -616,6 +636,10 @@ function App() {
         : pantalla === 'CARTA' && esCajero(usuarioActual)
           ? 'MESAS'
           : pantalla;
+  // Si el administrador le ocultó esa pantalla, la primera que sí ve.
+  const pantallaVisible = pantallaOculta(usuarioActual, pantallaDelRol)
+    ? gruposParaUsuario(usuarioActual, { restaurante, modulos: negocio.modulos })[0]?.items[0]?.id || pantallaDelRol
+    : pantallaDelRol;
 
   const irAPedido = (id) => {
     setAbrirPedido((actual) => ({ id, n: (actual?.n || 0) + 1 }));

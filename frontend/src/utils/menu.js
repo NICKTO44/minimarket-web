@@ -122,6 +122,40 @@ export function esVendedor(usuario) {
   return usuario?.rol_nombre === 'VENDEDOR';
 }
 
+/**
+ * Pantallas que el administrador puede ocultarle a un usuario
+ * (Configuración → Usuarios → Pantallas). Igual que CONFIGURABLES en
+ * backend/src/logica/pantallas.rs.
+ */
+export const PANTALLAS_CONFIGURABLES = [
+  'POS', 'RESUMEN', 'CAJA', 'HISTORIAL_CAJA', 'CLIENTES', 'COTIZACIONES', 'CREDITOS', 'GUIAS',
+  'ORDENES', 'VEHICULOS', 'ENCARGOS', 'REPARACIONES', 'MESAS', 'PREPARACION', 'CARTA',
+  'PRODUCTOS', 'CATALOGO', 'STOCK', 'PROVEEDORES', 'DEVOLUCIONES', 'PRODUCCION',
+  'COMPROBANTES', 'REPORTES',
+];
+
+/**
+ * ¿El administrador le ocultó esta pantalla? Con el Punto de venta visible,
+ * la Caja también (para vender hay que abrir la caja propia).
+ */
+export function pantallaOculta(usuario, id) {
+  const ocultas = usuario?.pantallas_ocultas || [];
+  if (usuario?.rol_id === 1 || !ocultas.includes(id)) return false;
+  if (id === 'CAJA' && !ocultas.includes('POS')) return false;
+  return true;
+}
+
+/**
+ * Pantallas que se le pueden ocultar a ese usuario: las de su rol y de los
+ * módulos encendidos, en el orden del menú, con su grupo.
+ */
+export function pantallasDelUsuario(usuario, opciones = {}) {
+  const sinOcultas = { ...usuario, pantallas_ocultas: [] };
+  return gruposParaUsuario(sinOcultas, opciones).flatMap((g) =>
+    g.items.filter((i) => PANTALLAS_CONFIGURABLES.includes(i.id)).map((i) => ({ id: i.id, label: i.label, grupo: g.titulo || g.label || '' })),
+  );
+}
+
 /** Pantallas que el vendedor no ve: solo son del administrador. */
 export const PANTALLAS_SOLO_ADMINISTRADOR = ['CONFIGURACION', 'SUSCRIPCION'];
 
@@ -180,6 +214,8 @@ export function gruposParaUsuario(usuario, { restaurante = false, etiquetas = {}
       .filter((i) => {
       if (i.soloRestaurante && !restaurante) return false;
       if (i.modulo && !modulos.includes(i.modulo)) return false;
+      // Pantallas que el administrador le ocultó a este usuario.
+      if (!esAdmin && pantallaOculta(usuario, i.id)) return false;
       if (almacen) return PANTALLAS_ALMACEN.includes(i.id);
       if (repartidor) return PANTALLAS_REPARTIDOR.includes(i.id);
       if (mesero) return PANTALLAS_MESERO.includes(i.id);

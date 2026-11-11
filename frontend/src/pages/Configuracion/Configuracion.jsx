@@ -13,6 +13,7 @@ import ConfiguracionCambios from './ConfiguracionCambios';
 import ConfiguracionImpresora from './ConfiguracionImpresora';
 import UsoPlan from '../../components/UsoPlan';
 import MiCuenta from '../../components/MiCuenta';
+import PantallasUsuario from '../../components/PantallasUsuario';
 import { etiquetaTasa, TASA_GENERAL } from '../../utils/igv';
 import { datosNegocio, MODULO_CAMBIOS, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
 import TarjetaRuc from '../../components/TarjetaRuc';
@@ -53,6 +54,8 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
   // Restablecer la contraseña de un trabajador (el usuario elegido o null).
   const [restablecer, setRestablecer] = useState(null);
+  // Usuario al que el administrador le elige las pantallas.
+  const [pantallasDe, setPantallasDe] = useState(null);
   const [claveNueva, setClaveNueva] = useState('');
   const [guardandoClave, setGuardandoClave] = useState(false);
 
@@ -552,6 +555,11 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
                             <button className="cfg-boton-clave" onClick={() => abrirRestablecer(u)}>
                               Contraseña
                             </button>
+                            {u.rol_id !== 1 && (
+                              <button className="cfg-boton-clave" onClick={() => setPantallasDe(u)}>
+                                Pantallas{u.pantallas_ocultas?.length ? ` (${u.pantallas_ocultas.length} ocultas)` : ''}
+                              </button>
+                            )}
                             <button className="cfg-boton-desactivar" onClick={() => desactivarUsuario(u)}>
                               Desactivar
                             </button>
@@ -622,6 +630,25 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
                 </div>
               </div>
             </div>
+          )}
+
+          {pantallasDe && (
+            <PantallasUsuario
+              usuario={pantallasDe}
+              restaurante={restaurante}
+              modulos={negocio.modulos}
+              onCerrar={() => setPantallasDe(null)}
+              onGuardado={(ocultas) => {
+                setUsuarios((prev) => prev.map((x) => (x.id === pantallasDe.id ? { ...x, pantallas_ocultas: ocultas } : x)));
+                setMensaje({
+                  tipo: 'exito',
+                  texto: ocultas.length
+                    ? `Listo: ${pantallasDe.nombre_completo} ya no ve ${ocultas.length} pantalla${ocultas.length === 1 ? '' : 's'}.`
+                    : `Listo: ${pantallasDe.nombre_completo} ve todas las pantallas de su rol.`,
+                });
+                setPantallasDe(null);
+              }}
+            />
           )}
 
           {restablecer && (

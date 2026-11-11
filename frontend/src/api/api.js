@@ -412,6 +412,9 @@ export const api = {
   datosNegocioGuardar: (data) => request('/configuracion/datos-negocio', { method: 'PUT', body: JSON.stringify(data) }),
   configuracionSubirLogo: (archivo) => subirImagen('/configuracion/logo', 'logo', archivo, 'Error al subir el logo'),
   usuariosListar: () => request('/usuarios'),
+  usuarioPantallas: (id, ocultas) =>
+    request(`/usuarios/${id}/pantallas`, { method: 'PUT', body: JSON.stringify({ ocultas }) }),
+  misPantallas: () => request('/mi-cuenta/pantallas'),
   usuarioCrear: (data) => request('/usuarios', { method: 'POST', body: JSON.stringify(data) }),
   usuarioDesactivar: (id) => request(`/usuarios/${id}/desactivar`, { method: 'POST' }),
   usuarioReactivar: (id) => request(`/usuarios/${id}/reactivar`, { method: 'POST' }),
