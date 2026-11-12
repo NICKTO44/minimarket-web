@@ -382,6 +382,7 @@ async fn main() {
         .route("/lotes", post(handlers::lotes::agregar_lote))
         .route("/productos/:id/lotes", get(handlers::lotes::obtener_lotes_de_producto))
         .route("/lotes/por-vencer", get(handlers::lotes::lotes_por_vencer))
+        .route("/lotes/vigentes", get(handlers::lotes::lotes_vigentes))
         .route("/lotes/mermas", get(handlers::lotes::reporte_mermas))
         .route("/lotes/:id/ventas", get(handlers::lotes::ventas_de_lote))
         .route("/lotes/:id/descartar", post(handlers::lotes::descartar_lote))

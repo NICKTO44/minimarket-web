@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
 import { api } from '../../api/api';
 import { ErrorDeArchivo, TIPO_XLSX, escribirXlsx, leerHoja } from '../../utils/hojas';
-import { armarFilas, camposImportacion, columnasDe, filaDeTitulos, sugerirCampos } from '../../utils/importacion';
+import { armarFilas, camposImportacion, columnasDe, filaDeTitulos, normalizar as normalizarTexto, sugerirCampos } from '../../utils/importacion';
 import { descargarArchivo } from '../../utils/pdfTicket';
 import { opcionesUnidad } from '../../utils/unidades';
 import './ImportarProductos.css';
 import { anchosRepuestos, titulosRepuestos } from '../../utils/excelRepuestos';
 import { aplicarEquivalentesImportados } from '../../utils/equivalentes';
 import { libroPlantilla } from '../../utils/plantillaExcel';
-import { nombrePlantilla, plantillaProductos } from '../../utils/plantillasProductos';
+import { columnasPresentacionDe, nombrePlantilla, plantillaProductos, presentacionesDeHoja } from '../../utils/plantillasProductos';
 
 // Importar productos desde el Excel o CSV de otro sistema (solo el
 // administrador). Tres pasos: subir el archivo, decir qué es cada columna y
@@ -35,6 +35,8 @@ export default function ImportarProductos({
   fichaLibro = false,
   // Repuestos: columna "Equivalentes" (códigos); al importar solo se agregan.
   equivalentes = false,
+  // Módulo Presentaciones: columnas Blíster / Caja (unidades y precio) de la plantilla.
+  presentaciones = false,
 }) {
   const CAMPOS = camposImportacion({ ficha: fichaMedicamento, repuesto: fichaRepuesto, compatibilidad, tresPrecios, libro: fichaLibro, equivalentes });
   const OBLIGATORIOS = CAMPOS.filter((c) => c.obligatorio);
@@ -62,6 +64,9 @@ export default function ImportarProductos({
   const [resultado, setResultado] = useState(null);
   // Lo que pasó con la columna "Equivalentes" (null = el archivo no la traía).
   const [resultadoEquivalentes, setResultadoEquivalentes] = useState(null);
+  // Blíster / caja de la plantilla: columnas y lo que pasó al guardarlas.
+  const [colsPresentacion, setColsPresentacion] = useState({});
+  const [resultadoPresentaciones, setResultadoPresentaciones] = useState(null);
 
   const filaTitulos = conTitulos ? (detectada >= 0 ? detectada : hoja.findIndex((f) => f.some((c) => c !== ''))) : -1;
   const columnas = useMemo(() => columnasDe(hoja, filaTitulos), [hoja, filaTitulos]);
@@ -87,12 +92,16 @@ export default function ImportarProductos({
       const datos = filas.slice(titulos + 1, titulos + 41);
       const muestras = cols.map((c) => datos.map((f) => f?.[c.indice]));
       const sugeridos = titulos >= 0 ? sugerirCampos(cols.map((c) => c.titulo), CAMPOS, muestras) : cols.map(() => '');
+      // Blíster y caja no son columnas del producto: se guardan aparte como presentaciones.
+      const deTitulos = titulos >= 0 ? columnasPresentacionDe(filas[titulos]) : {};
       const nuevoMapa = {};
       const auto = {};
       cols.forEach((c, i) => {
-        nuevoMapa[c.indice] = sugeridos[i];
-        if (sugeridos[i]) auto[c.indice] = true;
+        const esPresentacion = deTitulos[c.indice] !== undefined;
+        nuevoMapa[c.indice] = esPresentacion ? '' : sugeridos[i];
+        if (sugeridos[i] && !esPresentacion) auto[c.indice] = true;
       });
+      setColsPresentacion(presentaciones ? deTitulos : {});
       setHoja(filas);
       setNombreArchivo(archivo.name);
       setDetectada(titulos);
@@ -156,6 +165,30 @@ export default function ImportarProductos({
     setError(null);
     try {
       const respuesta = await pedir(armado.filas, false, existentes);
+      // Blíster y caja: con los productos ya guardados, como presentaciones.
+      const columnaCodigo = Number(Object.keys(mapa).find((k) => mapa[k] === 'codigo'));
+      const filasPres =
+        presentaciones && respuesta?.guardado && Object.keys(colsPresentacion).length && Number.isInteger(columnaCodigo)
+          ? presentacionesDeHoja(hoja, filaTitulos, columnaCodigo, colsPresentacion)
+          : [];
+      if (filasPres.length) {
+        try {
+          // Si el producto ya tiene su blíster o caja con otro nombre ("Blíster x10"),
+          // se actualiza ese en vez de crear otro.
+          const [lista, opciones] = await Promise.all([api.productos().catch(() => []), api.opcionesVenta().catch(() => null)]);
+          const idDe = new Map((lista || []).map((p) => [String(p.codigo).trim().toLowerCase(), p.id]));
+          const existentes = opciones?.presentaciones || [];
+          for (const f of filasPres) {
+            const id = idDe.get(f.codigo_producto.toLowerCase());
+            const clave = normalizarTexto(f.nombre);
+            const previa = existentes.find((x) => x.producto_id === id && normalizarTexto(x.nombre).startsWith(clave));
+            if (previa) f.nombre = previa.nombre;
+          }
+          setResultadoPresentaciones(await api.presentacionesImportar({ filas: filasPres, solo_revisar: false }));
+        } catch (e) {
+          setResultadoPresentaciones({ nuevas: 0, actualizadas: 0, errores: filasPres.length, mensaje: e.message });
+        }
+      }
       if (equivalentes && respuesta?.guardado) {
         try {
           setResultadoEquivalentes(await aplicarEquivalentesImportados(armado.filas));
@@ -197,7 +230,7 @@ export default function ImportarProductos({
     }
     // Los demás: plantilla con formato según el negocio (colores, soles,
     // fechas, listas e instrucciones).
-    const datos = plantillaProductos({ fichaMedicamento, fichaLibro, categorias, unidadesActivas });
+    const datos = plantillaProductos({ fichaMedicamento, fichaLibro, presentaciones, categorias, unidadesActivas });
     descargarArchivo(libroPlantilla(datos), nombrePlantilla({ fichaMedicamento, fichaLibro }), { tipo: TIPO_XLSX });
   };
 
@@ -550,6 +583,26 @@ export default function ImportarProductos({
                 <li className="imp-ok">✓ {plural(resultado.lotes_guardados, 'lote registrado', 'lotes registrados')} con su vencimiento.</li>
               )}
               {resultado.categorias_nuevas.length > 0 && <li>Categorías creadas: {resultado.categorias_nuevas.join(', ')}.</li>}
+              {resultadoPresentaciones?.nuevas + resultadoPresentaciones?.actualizadas > 0 && (
+                <li className="imp-ok">
+                  ✓ Blíster y caja: {plural(resultadoPresentaciones.nuevas, 'presentación nueva', 'presentaciones nuevas')}
+                  {resultadoPresentaciones.actualizadas > 0 ? `, ${plural(resultadoPresentaciones.actualizadas, 'actualizada', 'actualizadas')}` : ''}.
+                </li>
+              )}
+              {resultadoPresentaciones?.errores > 0 && (
+                <li className="imp-pendiente">
+                  {plural(resultadoPresentaciones.errores, 'blíster o caja no se guardó', 'blíster o cajas no se guardaron')}
+                  {resultadoPresentaciones.mensaje ? ` (${resultadoPresentaciones.mensaje})` : ''}
+                  {resultadoPresentaciones.filas?.length
+                    ? `: ${resultadoPresentaciones.filas
+                        .filter((f) => f.estado === 'ERROR')
+                        .slice(0, 4)
+                        .map((f) => `fila ${f.fila} ${f.motivo || ''}`)
+                        .join('; ')}`
+                    : ''}
+                  . Revísalos en el producto.
+                </li>
+              )}
               {resultadoEquivalentes?.actualizados > 0 && (
                 <li className="imp-ok">✓ Equivalentes agregados en {plural(resultadoEquivalentes.actualizados, 'producto', 'productos')}.</li>
               )}

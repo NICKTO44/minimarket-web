@@ -20,6 +20,8 @@ import { agruparPorModelo, etiquetaVariante, rangoPrecio } from '../../utils/var
 import OpcionesDeVenta from '../../components/OpcionesDeVenta';
 import { OPCIONES_VACIAS, formularioAOpciones, opcionesAFormulario } from '../../utils/presentaciones';
 import FichaMedicamento from './FichaMedicamento';
+import { libroPlantilla } from '../../utils/plantillaExcel';
+import { filasParaExportar, plantillaProductos } from '../../utils/plantillasProductos';
 import {
   FICHA_VACIA,
   etiquetaCondicion,
@@ -994,8 +996,30 @@ export default function Inventario({
 
   // Excel con todos los productos activos. Sirve también de plantilla: se
   // edita y se vuelve a importar (los códigos que ya existen se actualizan).
+  // Con el mismo formato de la plantilla (colores, soles, fechas, listas): se
+  // edita y se vuelve a importar. Lotes en una fila cada uno; blíster y caja.
+  const exportarConPlantilla = async () => {
+    try {
+      const [lotes, opciones] = await Promise.all([
+        productos.some((p) => p.lleva_vencimiento) ? api.lotesVigentes() : [],
+        presentaciones ? api.opcionesVenta() : null,
+      ]);
+      const flags = { fichaMedicamento, fichaLibro, presentaciones };
+      const filas = filasParaExportar(productos, { ...flags, fichas, libros: libro.mapa, lotes, opciones });
+      const datos = plantillaProductos({ ...flags, categorias, unidadesActivas });
+      descargarArchivo(libroPlantilla({ ...datos, filas }), `Productos-${hoyLima()}.xlsx`, { tipo: TIPO_XLSX });
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: `No se pudo exportar: ${e.message}` });
+    }
+  };
+
   const exportarProductos = () => {
     const conTallas = productos.some((p) => p.modelo_id != null);
+    // Sin tallas: con el formato de la plantilla del negocio.
+    if (!conTallas) {
+      exportarConPlantilla();
+      return;
+    }
     const titulos = ['Código', 'Nombre', 'Descripción', 'Categoría', 'Unidad', 'Precio de venta', 'Precio de compra', 'Stock', 'Stock mínimo'];
     if (conTallas) titulos.push('Modelo', 'Talla', 'Color');
     const filas = productos.map((p) => {
@@ -1381,6 +1405,7 @@ export default function Inventario({
           tresPrecios={tresPrecios}
           fichaLibro={fichaLibro}
           equivalentes={equivalentes}
+          presentaciones={presentaciones}
           onCerrar={() => setImportando(false)}
           onTerminado={(resultado) => {
             setImportando(false);

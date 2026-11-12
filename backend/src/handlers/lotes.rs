@@ -456,3 +456,36 @@ pub async fn ventas_de_lote(
 
     Ok(Json(VentasDeLote { lote_id, producto_nombre, numero_lote, fecha_vencimiento, disponible, ventas, total_vendido }))
 }
+
+#[derive(serde::Serialize)]
+pub struct LoteVigente {
+    pub producto_id: i64,
+    pub numero_lote: Option<String>,
+    pub fecha_vencimiento: String,
+    pub cantidad: f64,
+}
+
+/// GET /lotes/vigentes — todos los lotes con stock (activos), para exportar
+/// los productos con su lote y vencimiento (una fila por lote).
+pub async fn lotes_vigentes(Extension(tenant): Extension<Arc<TenantDb>>) -> Result<Json<Vec<LoteVigente>>, StatusCode> {
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut rows = conn
+        .query(
+            "SELECT producto_id, numero_lote, fecha_vencimiento, CAST(cantidad AS REAL)
+             FROM lotes_producto WHERE activo = 1 AND cantidad > 0
+             ORDER BY producto_id, fecha_vencimiento ASC",
+            (),
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut lotes = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
+        lotes.push(LoteVigente {
+            producto_id: row.get(0).unwrap_or_default(),
+            numero_lote: row.get::<String>(1).ok().filter(|l| !l.trim().is_empty()),
+            fecha_vencimiento: row.get(2).unwrap_or_default(),
+            cantidad: row.get(3).unwrap_or_default(),
+        });
+    }
+    Ok(Json(lotes))
+}

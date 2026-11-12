@@ -316,6 +316,7 @@ export const api = {
   productosDesactivados: () => request('/productos/desactivados'),
   productoReactivar: (id) => request(`/productos/${id}/reactivar`, { method: 'POST' }),
   lotesDeProducto: (id) => request(`/productos/${id}/lotes`),
+  lotesVigentes: () => request('/lotes/vigentes'),
   loteCrear: (data) => request('/lotes', { method: 'POST', body: JSON.stringify(data) }),
   lotesPorVencer: (dias) => request(`/lotes/por-vencer?dias=${dias}`),
   loteDescartar: (id) => request(`/lotes/${id}/descartar`, { method: 'POST' }),
