@@ -8,6 +8,7 @@ import { leerNumero, normalizar } from './importacion';
 import { claveCodigo } from './repuestos';
 import { seVendeFraccionado } from './medidas';
 import { GRUPOS_UNIDADES, etiquetaUnidad } from './unidades';
+import { convertirItems } from './conversionCompra';
 
 export const FILTROS_PEDIDO = [
   { valor: 'BAJO_MINIMO', label: 'Solo los que están en el stock mínimo o debajo' },
@@ -215,7 +216,7 @@ function preciosDeFila(texto, col, producto, actuales) {
  * cuyos P1 / P2 / P3 del Excel difieren de los actuales
  * ([{ producto_id, codigo, nombre, costo, antes, despues }]).
  */
-export function leerPedido(filas, productos, fichas, preciosActuales) {
+export function leerPedido(filas, productos, fichas, preciosActuales, presentaciones = null) {
   const inicio = filas.slice(0, 15).findIndex((f) => {
     const c = columnas(f || []);
     return c.cantidad !== undefined && (c.codigo !== undefined || c.parte !== undefined);
@@ -296,6 +297,7 @@ export function leerPedido(filas, productos, fichas, preciosActuales) {
         numero_parte: parte,
         aplicacion: texto(col.aplicacion),
         unidad,
+        unidadTexto: texto(col.unidad),
         cantidad: cantidadNueva,
         precio_compra: costoNuevo > 0 ? Math.round(costoNuevo * 10000) / 10000 : 0,
       });
@@ -329,11 +331,16 @@ export function leerPedido(filas, productos, fichas, preciosActuales) {
       nombre: producto.nombre,
       cantidad,
       precio_compra: Math.round(costo * 10000) / 10000,
+      // Como vino en el Excel ("CJ", "Caja x100"): si es una presentación, se convierte a unidades.
+      unidad: texto(col.unidad),
     });
   });
+  // Comprados por caja o blíster ("CJ"): a unidades del producto, antes de
+  // comparar el costo (el costo del producto es por unidad).
+  const { items: enUnidades, convertidos } = presentaciones ? convertirItems([...items.values()], presentaciones) : { items: [...items.values()], convertidos: 0 };
   // Productos cuyo costo sube con esta compra: el negocio revisa sus precios de venta.
   const porId = new Map(productos.map((p) => [p.id, p]));
-  const subidas = [...items.values()]
+  const subidas = enUnidades
     .filter((it) => {
       const antes = Number(porId.get(it.producto_id)?.precio_compra || 0);
       return antes > 0 && it.precio_compra - antes >= 0.005;
@@ -345,7 +352,8 @@ export function leerPedido(filas, productos, fichas, preciosActuales) {
       return { producto_id: p.id, codigo: p.codigo, nombre: p.nombre, costoAntes: Number(p.precio_compra), costoNuevo: it.precio_compra, antes, despues: { ...antes } };
     });
   return {
-    items: [...items.values()],
+    items: enUnidades,
+    convertidos,
     precios: [...cambiosPrecio.values()],
     subidas,
     nuevos: [...nuevos.values()],
@@ -374,6 +382,8 @@ export function faltaEnNuevo(n, codigosExistentes) {
   if (!n.categoria_id) falta.push('Categoría');
   if (!(Number(n.precio) > 0)) falta.push('Precio 1');
   if (!(Number(n.precio_compra) > 0)) falta.push('Costo');
+  // Se vende suelto: hace falta saber cuántas trae la caja.
+  if (n.suelto && !(Number.isInteger(Number(n.factor)) && Number(n.factor) > 1)) falta.push('Cuántas trae la caja');
   return falta;
 }
 

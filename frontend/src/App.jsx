@@ -861,6 +861,7 @@ function App() {
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS)}
             pedidosExcel={negocio.modulos.includes(MODULO_VENTA_TABLA) || negocio.modulos.includes(MODULO_COMPRA_EXCEL)}
             repuestos={negocio.modulos.includes(MODULO_FICHA_REPUESTO)}
+            presentaciones={negocio.modulos.includes(MODULO_PRESENTACIONES)}
           />
         )}
         {pantallaVisible === 'DEVOLUCIONES' && (

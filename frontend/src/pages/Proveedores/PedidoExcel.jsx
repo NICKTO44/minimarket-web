@@ -7,6 +7,7 @@ import { mapaPorProducto } from '../../utils/repuestos';
 import { mapaPrecios } from '../../utils/tresPrecios';
 import { FILTROS_PEDIDO, hojaPedido, leerPedido, productosDelPedido } from '../../utils/pedidoProveedor';
 import LeerExcelProveedor from './LeerExcelProveedor';
+import { etiquetaUnidad, opcionesUnidad } from '../../utils/unidades';
 import './PedidoExcel.css';
 
 // Módulos "Venta en tabla" y "Compras por Excel": pedido a proveedor por Excel (ver utils/pedidoProveedor.js).
@@ -125,7 +126,7 @@ export function ExportarPedido({ productos, categorias, repuestos = true, onCerr
  * ("Exportar pedido") entra directo; el de un proveedor (cualquier formato)
  * pasa por LeerExcelProveedor: columnas, productos y lo que se aprende.
  */
-export function CargarPedido({ productos, repuestos = true, proveedorId = null, onCargar }) {
+export function CargarPedido({ productos, repuestos = true, proveedorId = null, presentaciones = null, onCargar }) {
   const entrada = useRef(null);
   const [ocupado, setOcupado] = useState(false);
   const [aviso, onAviso] = useState(null);
@@ -134,7 +135,7 @@ export function CargarPedido({ productos, repuestos = true, proveedorId = null, 
 
   // Arma la compra con una hoja "como la del sistema" y muestra el resumen.
   const aplicar = (filas, fichas, precios, extra = '') => {
-    const r = leerPedido(filas, productos, fichas, precios);
+    const r = leerPedido(filas, productos, fichas, precios, presentaciones);
     if (r.error) {
       onAviso({ tipo: 'error', texto: r.error });
       return false;
@@ -146,6 +147,9 @@ export function CargarPedido({ productos, repuestos = true, proveedorId = null, 
     onCargar(r.items, r.precios, r.subidas, r.nuevos, precios.size > 0);
     const partes = [`Se cargaron ${r.items.length} producto${r.items.length === 1 ? '' : 's'}. Revisa cantidades y costos antes de guardar.`];
     if (extra) partes.push(extra);
+    if (r.convertidos > 0) {
+      partes.push(`${r.convertidos} llegaron por caja o blíster: se pasaron a unidades (míralo debajo de cada producto).`);
+    }
     if (r.subidas.length > 0) partes.push(`${r.subidas.length} subieron de costo: revisa sus precios de venta (recuadro amarillo).`);
     if (r.nuevos.length > 0) partes.push(`${r.nuevos.length} producto${r.nuevos.length === 1 ? ' nuevo' : 's nuevos'}: completa sus datos (recuadro verde).`);
     if (r.precios.length > 0) {
@@ -168,7 +172,7 @@ export function CargarPedido({ productos, repuestos = true, proveedorId = null, 
     try {
       const [filas, { fichas, precios }] = await Promise.all([leerHoja(archivo), datosExtra(repuestos)]);
       // El Excel del sistema (o uno que se reconoce entero) entra directo.
-      const directo = leerPedido(filas, productos, fichas, precios);
+      const directo = leerPedido(filas, productos, fichas, precios, presentaciones);
       if (!directo.error && directo.sinReconocer.length === 0 && directo.ambiguos.length === 0) {
         aplicar(filas, fichas, precios);
         return;
@@ -230,6 +234,9 @@ export function CargarPedido({ productos, repuestos = true, proveedorId = null, 
 }
 
 const soles = (n) => (n == null ? '—' : Number(n).toFixed(2));
+// Costo por unidad: con 4 decimales si es menor a S/ 1 (una tableta a S/ 0.095).
+const costoTexto = (n) => (n == null ? '—' : Number(n) < 1 ? Number(n).toFixed(4) : Number(n).toFixed(2));
+const plural = (t) => (/[aeiouáéíóú]$/.test(t) ? `${t}s` : /s$/.test(t) ? t : `${t}es`);
 
 /** Precio de antes -> el nuevo (en negrita si cambia). */
 function Cambio({ antes, despues }) {
@@ -359,7 +366,7 @@ export function SubioCosto({ subidas, tresPrecios, onCambio }) {
                   {s.nombre}
                 </td>
                 <td className="pedido-revisar-costo">
-                  {soles(s.costoAntes)} → <strong>{soles(s.costoNuevo)}</strong>
+                  {costoTexto(s.costoAntes)} → <strong>{costoTexto(s.costoNuevo)}</strong>
                 </td>
                 <td>
                   <CampoPrecio valor={s.despues.p1} etiqueta={`Precio 1 de ${s.nombre}`} onCambio={(n) => poner(s.producto_id, 'p1', n)} />
@@ -391,7 +398,7 @@ export function SubioCosto({ subidas, tresPrecios, onCambio }) {
  * proveedor; el dueño elige la categoría y pone sus precios de venta. Se
  * crean al registrar la compra.
  */
-export function ProductosNuevos({ nuevos, categorias, tresPrecios, repuestos = true, faltas, onCambio }) {
+export function ProductosNuevos({ nuevos, categorias, tresPrecios, repuestos = true, vendeSuelto = false, unidadesActivas = null, faltas, onCambio }) {
   if (!nuevos?.length) return null;
   const poner = (idx, campo, valor) => onCambio(nuevos.map((n, i) => (i === idx ? { ...n, [campo]: valor } : n)));
   return (
@@ -456,7 +463,7 @@ export function ProductosNuevos({ nuevos, categorias, tresPrecios, repuestos = t
                   </label>
                 )}
                 <label>
-                  P1
+                  {n.suelto ? `Precio por ${etiquetaUnidad(n.unidad_base).toLowerCase()}` : 'P1'}
                   <CampoPrecio valor={n.precio} etiqueta={`Precio 1 de ${n.nombre}`} requerido onCambio={(v) => poner(idx, 'precio', v)} />
                 </label>
                 {tresPrecios && (
@@ -472,6 +479,66 @@ export function ProductosNuevos({ nuevos, categorias, tresPrecios, repuestos = t
                   </label>
                 )}
               </div>
+              {vendeSuelto && (
+                <div className={`pedido-suelto${n.suelto ? ' activo' : ''}`}>
+                  <label className="pedido-suelto-check">
+                    <input type="checkbox" checked={!!n.suelto} onChange={(e) => poner(idx, 'suelto', e.target.checked)} />
+                    Llega por caja, pero se vende suelto (por unidad, blíster o caja)
+                  </label>
+                  {n.suelto && (
+                    <div className="pedido-nuevo-campos">
+                      <label>
+                        Se vende por
+                        <select className="pedido-campo" value={n.unidad_base || 'UNIDAD'} onChange={(e) => poner(idx, 'unidad_base', e.target.value)}>
+                          {opcionesUnidad(unidadesActivas, n.unidad_base).map((u) => (
+                            <option key={u.valor} value={u.valor}>
+                              {u.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        La caja trae
+                        <input
+                          className={`pedido-campo${falta.includes('Cuántas trae la caja') ? ' pedido-campo-falta' : ''}`}
+                          type="number"
+                          min="2"
+                          step="1"
+                          value={n.factor ?? ''}
+                          onChange={(e) => poner(idx, 'factor', parseInt(e.target.value, 10) || null)}
+                        />
+                      </label>
+                      <label>
+                        Precio de la caja
+                        <CampoPrecio valor={n.precio_caja} etiqueta={`Precio de la caja de ${n.nombre}`} onCambio={(v) => poner(idx, 'precio_caja', v)} />
+                      </label>
+                      <label>
+                        Blíster de
+                        <input
+                          className="pedido-campo"
+                          type="number"
+                          min="2"
+                          step="1"
+                          placeholder="10"
+                          value={n.blister_factor ?? ''}
+                          onChange={(e) => poner(idx, 'blister_factor', parseInt(e.target.value, 10) || null)}
+                        />
+                      </label>
+                      <label>
+                        Precio blíster
+                        <CampoPrecio valor={n.blister_precio} etiqueta={`Precio del blíster de ${n.nombre}`} onCambio={(v) => poner(idx, 'blister_precio', v)} />
+                      </label>
+                    </div>
+                  )}
+                  {n.suelto && Number(n.factor) > 1 && (
+                    <p className="pedido-suelto-resumen">
+                      Entran {Math.round(n.cantidad * n.factor * 1000) / 1000} {plural(etiquetaUnidad(n.unidad_base).toLowerCase())} a S/{' '}
+                      {(Number(n.precio_compra) / Number(n.factor)).toFixed(4)} c/u
+                      {!(Number(n.precio_caja) > 0) && Number(n.precio) > 0 ? ` · la caja se venderá a S/ ${(Number(n.precio) * Number(n.factor)).toFixed(2)}` : ''}
+                    </p>
+                  )}
+                </div>
+              )}
               {falta.length > 0 && <p className="pedido-nuevo-falta">Falta: {falta.join(', ')}</p>}
             </div>
           );

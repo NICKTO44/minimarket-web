@@ -9,6 +9,7 @@ import '../Inventario/Inventario.css';
 import './Proveedores.css';
 import { CargarPedido, ExportarPedido, PreciosNuevos, ProductosNuevos, SubioCosto } from './PedidoExcel';
 import { textoComprobanteCompra } from '../../utils/compras';
+import { adivinarSuelto, aUnidades, presentacionesPorProducto } from '../../utils/conversionCompra';
 import { codigosNuevos, faltaEnNuevo, filasDePrecios, subidasConCambio } from '../../utils/pedidoProveedor';
 import { sinCategoriaCarta } from '../../utils/categoriaCarta';
 
@@ -25,7 +26,7 @@ const MOTIVOS = [
 // modelo, eligiendo cuánto llega de cada talla y color.
 // pedidosExcel: módulo "Venta en tabla" (Lubricentro): exportar el pedido a
 // Excel y cargar la compra desde ese Excel.
-export default function Proveedores({ variantes = false, ganancias = false, pedidosExcel = false, repuestos = false }) {
+export default function Proveedores({ variantes = false, ganancias = false, pedidosExcel = false, repuestos = false, presentaciones = false }) {
   const [exportandoPedido, setExportandoPedido] = useState(false);
   // Precios de venta nuevos leídos del Excel del pedido y si se aplican al registrar la compra.
   const [preciosNuevos, setPreciosNuevos] = useState([]);
@@ -55,6 +56,10 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
   const [compraCantidad, setCompraCantidad] = useState('');
   const [compraPrecio, setCompraPrecio] = useState('');
   const [compraTipoPago, setCompraTipoPago] = useState('EFECTIVO');
+  // Módulo Presentaciones: blíster y caja de cada producto (para comprar por caja
+  // y que entre por unidad) y en qué se compra lo que se agrega a mano.
+  const [presPorProducto, setPresPorProducto] = useState(() => new Map());
+  const [compraComo, setCompraComo] = useState('');
   // Comprobante que entregó el proveedor (opcional).
   const [compraTipoComprobante, setCompraTipoComprobante] = useState('');
   const [compraNumeroComprobante, setCompraNumeroComprobante] = useState('');
@@ -125,10 +130,17 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
       .finally(() => setCargando(false));
     // Unidades activas del negocio; si fallara se usan las de siempre.
     api.unidades().then((u) => setUnidadesActivas(u.activas)).catch(() => {});
+    if (presentaciones) {
+      api
+        .opcionesVenta()
+        .then((o) => setPresPorProducto(presentacionesPorProducto(o)))
+        .catch(() => {});
+    }
   };
 
   useEffect(() => {
     cargarTodo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Con el RUC (11 dígitos) o el DNI (8) completo, trae de SUNAT/RENIEC el
@@ -199,10 +211,11 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
       return;
     }
     const producto = productos.find((p) => p.id === parseInt(compraProductoSel, 10));
-    setCompraItems((prev) => [
-      ...prev,
-      { producto_id: producto.id, codigo: producto.codigo, nombre: producto.nombre, cantidad: parseFloat(compraCantidad), precio_compra: parseFloat(compraPrecio) },
-    ]);
+    const base = { producto_id: producto.id, codigo: producto.codigo, nombre: producto.nombre, cantidad: parseFloat(compraCantidad), precio_compra: parseFloat(compraPrecio) };
+    // Comprado por caja o blíster: entra en unidades del producto.
+    const pres = (presPorProducto.get(producto.id) || []).find((x) => x.nombre === compraComo);
+    setCompraItems((prev) => [...prev, aUnidades(base, pres)]);
+    setCompraComo('');
     setCompraProductoSel('');
     setCompraCantidad('');
     setCompraPrecio('');
@@ -212,7 +225,8 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
   // Lista de la compra (con "Exportar pedido"): cantidad o costo escritos a mano.
   const cambiarItemCompra = (idx, campo, texto) => {
     const n = parseFloat(texto);
-    setCompraItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [campo]: Number.isFinite(n) && n >= 0 ? n : 0 } : it)));
+    // Al corregir a mano ya no vale "cómo se compró" (queda en unidades).
+    setCompraItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [campo]: Number.isFinite(n) && n >= 0 ? n : 0, compradoComo: undefined } : it)));
     olvidarError();
   };
 
@@ -351,9 +365,10 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
             precio: Number(n.precio),
             stock: 0,
             stock_minimo: 0,
-            unidad_medida: n.unidad || 'UNIDAD',
+            unidad_medida: (n.suelto ? n.unidad_base : n.unidad) || 'UNIDAD',
             categoria_id: parseInt(n.categoria_id, 10),
-            precio_compra: Number(n.precio_compra),
+            // Se vende suelto: el costo es por unidad (la caja entera / lo que trae).
+            precio_compra: n.suelto ? Math.round((Number(n.precio_compra) / Number(n.factor)) * 1e6) / 1e6 : Number(n.precio_compra),
           });
         } catch (e) {
           setProductosNuevos(productosNuevos.map((x, j) => (j < i ? creados[j] || x : x)));
@@ -361,6 +376,17 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
         }
         const conId = { ...n, producto_id: creado.producto_id };
         creados.push(conId);
+        // Se vende suelto: su caja (y su blíster) como presentaciones.
+        if (n.suelto) {
+          const factor = Number(n.factor);
+          const lista = [{ nombre: 'Caja', factor, precio: Number(n.precio_caja) > 0 ? Number(n.precio_caja) : Math.round(Number(n.precio) * factor * 100) / 100 }];
+          if (Number(n.blister_factor) > 1 && Number(n.blister_precio) > 0) {
+            lista.push({ nombre: 'Blíster', factor: Number(n.blister_factor), precio: Number(n.blister_precio) });
+          }
+          await api.presentacionesGuardar(creado.producto_id, { presentaciones: lista, precios_mayor: [] }).catch(() => {
+            avisoNuevos = ' Revisa en Productos la caja o el blíster de los productos nuevos.';
+          });
+        }
         // Marca y N.° de parte (ficha del repuesto) y Precio 2 / 3: si fallan, el producto ya existe y se corrige en Productos.
         if (n.marca || n.numero_parte) {
           await api.repuestoGuardar(creado.producto_id, { marca: n.marca || null, numero_parte: n.numero_parte || null, codigos: [] }).catch(() => {
@@ -374,7 +400,12 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
         }
       }
       if (creados.length) setProductosNuevos(creados);
-      const itemsNuevos = creados.map((n) => ({ producto_id: n.producto_id, cantidad: n.cantidad, precio_compra: Number(n.precio_compra) }));
+      const itemsNuevos = creados.map((n) => {
+        const it = { producto_id: n.producto_id, cantidad: n.cantidad, precio_compra: Number(n.precio_compra) };
+        if (!n.suelto) return it;
+        const enUnidades = aUnidades(it, { nombre: 'Caja', factor: Number(n.factor) });
+        return { producto_id: enUnidades.producto_id, cantidad: enUnidades.cantidad, precio_compra: enUnidades.precio_compra };
+      });
       const respuesta = await api.compraCrear({
         proveedor_id: parseInt(compraProveedorId, 10),
         fecha_compra: hoyLima(),
@@ -920,7 +951,13 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
               )}
             </div>
             <div className="prov-agregar-item">
-              <select value={compraProductoSel} onChange={(e) => setCompraProductoSel(e.target.value)}>
+              <select
+                value={compraProductoSel}
+                onChange={(e) => {
+                  setCompraProductoSel(e.target.value);
+                  setCompraComo('');
+                }}
+              >
                 <option value="">Producto existente...</option>
                 {productos.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -928,14 +965,25 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                   </option>
                 ))}
               </select>
+              {(presPorProducto.get(parseInt(compraProductoSel, 10)) || []).length > 0 && (
+                <select value={compraComo} onChange={(e) => setCompraComo(e.target.value)} aria-label="Comprado por">
+                  <option value="">Por unidad</option>
+                  {presPorProducto.get(parseInt(compraProductoSel, 10)).map((x) => (
+                    <option key={x.nombre} value={x.nombre}>
+                      Por {x.nombre} (x{x.factor})
+                    </option>
+                  ))}
+                </select>
+              )}
               <input type="number" placeholder="Cant." value={compraCantidad} onChange={(e) => setCompraCantidad(e.target.value)} />
-              <input type="number" placeholder="Precio" value={compraPrecio} onChange={(e) => setCompraPrecio(e.target.value)} />
+              <input type="number" placeholder={compraComo ? `Precio ${compraComo.toLowerCase()}` : 'Precio'} value={compraPrecio} onChange={(e) => setCompraPrecio(e.target.value)} />
               <button onClick={agregarItemCompra}>+ Agregar</button>
             </div>
             {pedidosExcel && (
               <CargarPedido
                 productos={productos}
                 repuestos={repuestos}
+                presentaciones={presentaciones ? presPorProducto : null}
                 proveedorId={compraProveedorId ? parseInt(compraProveedorId, 10) : null}
                 onCargar={(nuevos, precios, subidas, sinRegistrar, tres) => {
                   // Un producto que ya estaba en la lista toma lo del Excel.
@@ -946,7 +994,24 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                   setConTresPrecios(!!tres);
                   const codigos = codigosNuevos(productos, (sinRegistrar || []).length, [], repuestos ? 'REP' : 'PROD');
                   setProductosNuevos(
-                    (sinRegistrar || []).map((n, i) => ({ ...n, codigo: codigos[i], categoria_id: '', precio: null, precio_2: null, precio_3: null }))
+                    (sinRegistrar || []).map((n, i) => {
+                      // Farmacia: lo que llega por caja ("X 100 TAB") se vende suelto.
+                      const guess = presentaciones ? adivinarSuelto(n.nombre, n.unidadTexto) : { suelto: false };
+                      return {
+                        ...n,
+                        codigo: codigos[i],
+                        categoria_id: '',
+                        precio: null,
+                        precio_2: null,
+                        precio_3: null,
+                        suelto: guess.suelto,
+                        factor: guess.factor,
+                        unidad_base: guess.unidad || 'UNIDAD',
+                        precio_caja: null,
+                        blister_factor: null,
+                        blister_precio: null,
+                      };
+                    })
                   );
                   olvidarError();
                 }}
@@ -960,6 +1025,8 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                 categorias={categorias}
                 tresPrecios={conTresPrecios}
                 repuestos={repuestos}
+                vendeSuelto={presentaciones}
+                unidadesActivas={unidadesActivas}
                 faltas={faltasNuevos}
                 onCambio={setProductosNuevos}
               />
@@ -1050,6 +1117,12 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                   <span>
                     {it.codigo && <span className="prov-codigo">{it.codigo}</span>}
                     {it.nombre}
+                    {it.compradoComo && (
+                      <span className="prov-comprado-como">
+                        Compraste {it.compradoComo.cantidad} {it.compradoComo.nombre} (x{it.compradoComo.factor}) a S/{' '}
+                        {Number(it.compradoComo.precio).toFixed(2)} → entran {it.cantidad} unidades
+                      </span>
+                    )}
                   </span>
                   {pedidosExcel ? (
                     // Lo cargado desde Excel se revisa aquí mismo: cantidad y costo editables.
@@ -1078,7 +1151,9 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                       />
                     </span>
                   ) : (
-                    <span>{it.cantidad} x S/{it.precio_compra.toFixed(2)}</span>
+                    <span>
+                      {it.cantidad} x S/{it.precio_compra < 1 ? it.precio_compra.toFixed(4) : it.precio_compra.toFixed(2)}
+                    </span>
                   )}
                   <span>S/ {(it.cantidad * it.precio_compra).toFixed(2)}</span>
                   <button onClick={() => quitarItemCompra(idx)}>🗑</button>
