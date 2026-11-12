@@ -90,6 +90,7 @@ import {
   MODULO_VENTA_SIN_CONEXION,
   MODULO_VARIAS_CAJAS,
   MODULO_INGRESO_RAPIDO,
+  MODULO_COMPRA_EXCEL,
   MODULO_COMPROBANTE_CLASICO,
   MODULO_LOGO_TICKET,
   MODULO_IMPRESION_DIRECTA,
@@ -858,7 +859,8 @@ function App() {
           <Proveedores
             variantes={negocio.modulos.includes(MODULO_VARIANTES)}
             ganancias={negocio.modulos.includes(MODULO_GANANCIAS)}
-            pedidosExcel={negocio.modulos.includes(MODULO_VENTA_TABLA)}
+            pedidosExcel={negocio.modulos.includes(MODULO_VENTA_TABLA) || negocio.modulos.includes(MODULO_COMPRA_EXCEL)}
+            repuestos={negocio.modulos.includes(MODULO_FICHA_REPUESTO)}
           />
         )}
         {pantallaVisible === 'DEVOLUCIONES' && (

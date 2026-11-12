@@ -25,7 +25,7 @@ const MOTIVOS = [
 // modelo, eligiendo cuánto llega de cada talla y color.
 // pedidosExcel: módulo "Venta en tabla" (Lubricentro): exportar el pedido a
 // Excel y cargar la compra desde ese Excel.
-export default function Proveedores({ variantes = false, ganancias = false, pedidosExcel = false }) {
+export default function Proveedores({ variantes = false, ganancias = false, pedidosExcel = false, repuestos = false }) {
   const [exportandoPedido, setExportandoPedido] = useState(false);
   // Precios de venta nuevos leídos del Excel del pedido y si se aplican al registrar la compra.
   const [preciosNuevos, setPreciosNuevos] = useState([]);
@@ -644,7 +644,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
 
   return (
     <div className="prov-layout">
-      {exportandoPedido && <ExportarPedido productos={productos} categorias={categorias} onCerrar={() => setExportandoPedido(false)} />}
+      {exportandoPedido && <ExportarPedido productos={productos} categorias={categorias} repuestos={repuestos} onCerrar={() => setExportandoPedido(false)} />}
       <div className="prov-header">
         <h1>Proveedores</h1>
         <div className="prov-tabs">
@@ -935,6 +935,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
             {pedidosExcel && (
               <CargarPedido
                 productos={productos}
+                repuestos={repuestos}
                 onCargar={(nuevos, precios, subidas, sinRegistrar, tres) => {
                   // Un producto que ya estaba en la lista toma lo del Excel.
                   setCompraItems((prev) => [...prev.filter((i) => !nuevos.some((n) => n.producto_id === i.producto_id)), ...nuevos]);
@@ -942,7 +943,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                   setAplicarPrecios(true);
                   setSubidasCosto(subidas || []);
                   setConTresPrecios(!!tres);
-                  const codigos = codigosNuevos(productos, (sinRegistrar || []).length);
+                  const codigos = codigosNuevos(productos, (sinRegistrar || []).length, [], repuestos ? 'REP' : 'PROD');
                   setProductosNuevos(
                     (sinRegistrar || []).map((n, i) => ({ ...n, codigo: codigos[i], categoria_id: '', precio: null, precio_2: null, precio_3: null }))
                   );
@@ -957,6 +958,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                 nuevos={productosNuevos}
                 categorias={categorias}
                 tresPrecios={conTresPrecios}
+                repuestos={repuestos}
                 faltas={faltasNuevos}
                 onCambio={setProductosNuevos}
               />

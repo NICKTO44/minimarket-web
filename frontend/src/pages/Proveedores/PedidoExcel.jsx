@@ -8,20 +8,20 @@ import { mapaPrecios } from '../../utils/tresPrecios';
 import { FILTROS_PEDIDO, hojaPedido, leerPedido, productosDelPedido } from '../../utils/pedidoProveedor';
 import './PedidoExcel.css';
 
-// Módulo "Venta en tabla": pedido a proveedor por Excel (ver utils/pedidoProveedor.js).
+// Módulos "Venta en tabla" y "Compras por Excel": pedido a proveedor por Excel (ver utils/pedidoProveedor.js).
 
 // Ficha del repuesto (marca, n.° de parte) y Precio 2 / 3: si el negocio no
 // tiene esos módulos, las columnas salen vacías y el pedido funciona igual.
-async function datosExtra() {
+async function datosExtra(repuestos = true) {
   const [fichas, precios] = await Promise.all([
-    api.repuestosFichas().catch(() => []),
+    repuestos ? api.repuestosFichas().catch(() => []) : [],
     api.preciosVenta().catch(() => []),
   ]);
   return { fichas: mapaPorProducto(fichas), precios: mapaPrecios(precios) };
 }
 
 /** Ventana "Exportar pedido". */
-export function ExportarPedido({ productos, categorias, onCerrar }) {
+export function ExportarPedido({ productos, categorias, repuestos = true, onCerrar }) {
   const [filtro, setFiltro] = useState('BAJO_MINIMO');
   const [categoriaId, setCategoriaId] = useState('');
   // Con el stock del negocio (para él); sin stock, para mandárselo al proveedor.
@@ -36,9 +36,9 @@ export function ExportarPedido({ productos, categorias, onCerrar }) {
     setOcupado(true);
     setError(null);
     try {
-      const { fichas, precios } = await datosExtra();
+      const { fichas, precios } = await datosExtra(repuestos);
       // La cantidad sugerida solo con "bajo stock mínimo"; con todos o una categoría la columna va vacía.
-      const hoja = hojaPedido(lista, { completo: false, fichas, precios, sugerir: filtro === 'BAJO_MINIMO', conStock });
+      const hoja = hojaPedido(lista, { completo: false, fichas, precios, sugerir: filtro === 'BAJO_MINIMO', conStock, repuestos });
       const nombre = `Pedido-${hoyLima()}.xlsx`;
       descargarArchivo(escribirLibro([hoja]), nombre, { tipo: TIPO_XLSX });
       onCerrar();
@@ -54,9 +54,9 @@ export function ExportarPedido({ productos, categorias, onCerrar }) {
       <div className="prov-modal pedido-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="pedido-titulo">
         <h2 id="pedido-titulo">Exportar pedido</h2>
         <p className="pedido-ayuda">
-          Envíale este Excel a tu proveedor. Él lo devuelve con <strong>la cantidad</strong> y <strong>el precio unitario</strong>{' '}
-          (y abajo puede agregar productos nuevos). Luego súbelo en <strong>Nueva compra → Cargar desde Excel</strong>. No lleva tu
-          stock ni tus precios de venta.
+          Llena en este Excel <strong>la cantidad</strong> y <strong>el precio unitario</strong> de lo que compraste (o envíaselo a tu
+          proveedor para que lo llene). Abajo se pueden agregar productos nuevos. Luego súbelo en{' '}
+          <strong>Nueva compra → Cargar desde Excel</strong> y entran todos de un golpe. No lleva tus precios de venta.
         </p>
 
         <fieldset className="pedido-grupo">
@@ -122,7 +122,7 @@ export function ExportarPedido({ productos, categorias, onCerrar }) {
  * recibe los productos para la compra y los precios de venta que cambian;
  * debajo del botón queda el resumen de lo leído.
  */
-export function CargarPedido({ productos, onCargar }) {
+export function CargarPedido({ productos, repuestos = true, onCargar }) {
   const entrada = useRef(null);
   const [ocupado, setOcupado] = useState(false);
   const [aviso, onAviso] = useState(null);
@@ -132,7 +132,7 @@ export function CargarPedido({ productos, onCargar }) {
     setOcupado(true);
     onAviso(null);
     try {
-      const [filas, { fichas, precios }] = await Promise.all([leerHoja(archivo), datosExtra()]);
+      const [filas, { fichas, precios }] = await Promise.all([leerHoja(archivo), datosExtra(repuestos)]);
       const r = leerPedido(filas, productos, fichas, precios);
       if (r.error) {
         onAviso({ tipo: 'error', texto: r.error });
@@ -349,7 +349,7 @@ export function SubioCosto({ subidas, tresPrecios, onCambio }) {
  * proveedor; el dueño elige la categoría y pone sus precios de venta. Se
  * crean al registrar la compra.
  */
-export function ProductosNuevos({ nuevos, categorias, tresPrecios, faltas, onCambio }) {
+export function ProductosNuevos({ nuevos, categorias, tresPrecios, repuestos = true, faltas, onCambio }) {
   if (!nuevos?.length) return null;
   const poner = (idx, campo, valor) => onCambio(nuevos.map((n, i) => (i === idx ? { ...n, [campo]: valor } : n)));
   return (
@@ -373,8 +373,12 @@ export function ProductosNuevos({ nuevos, categorias, tresPrecios, faltas, onCam
                 </button>
               </div>
               <p className="pedido-nuevo-datos">
-                {[n.marca, n.numero_parte && `N.° parte ${n.numero_parte}`, n.aplicacion].filter(Boolean).join(' · ') || 'Sin marca ni N.° de parte'}
-                {' · '}
+                {repuestos && (
+                  <>
+                    {[n.marca, n.numero_parte && `N.° parte ${n.numero_parte}`, n.aplicacion].filter(Boolean).join(' · ') || 'Sin marca ni N.° de parte'}
+                    {' · '}
+                  </>
+                )}
                 <strong>
                   {n.cantidad} × S/ {soles(n.precio_compra)}
                 </strong>

@@ -76,6 +76,8 @@ export const MODULO_REPARACIONES = 'REPARACIONES';
 export const MODULO_VARIAS_CAJAS = 'VARIAS_CAJAS';
 // Ingreso rápido de productos (nuevos o para reponer) sin elegir proveedor.
 export const MODULO_INGRESO_RAPIDO = 'INGRESO_RAPIDO';
+// Compras por Excel: exportar la lista, llenar cantidad y costo y cargarla en Nueva compra.
+export const MODULO_COMPRA_EXCEL = 'COMPRA_EXCEL';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
@@ -100,7 +102,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -340,6 +342,12 @@ export const MODULOS = [
     descripcion:
       'Botón "Ingreso rápido" en Productos: varios productos nuevos o para reponer en un paso, sin elegir proveedor. El código se genera solo y, si viene por caja (9 botellas), calcula las unidades y el costo de cada una. Queda como una compra en Compras y en los reportes.',
   },
+  {
+    valor: MODULO_COMPRA_EXCEL,
+    label: 'Compras por Excel',
+    descripcion:
+      'En Compras, "Exportar pedido" descarga tus productos (todos, una categoría o los que están en su stock mínimo) en Excel. Llenas la cantidad y el costo (o se lo mandas a tu proveedor) y en Nueva compra lo cargas con "Cargar desde Excel": entran todos los productos de un golpe. Los que no tienes se crean ahí mismo.',
+  },
 ];
 
 /** ¿El módulo se puede encender en ese rubro? */
@@ -408,7 +416,7 @@ export const RUBROS = [
     label: 'Farmacia / Botica',
     descripcion: 'Medicamentos por principio activo, con lotes y vencimientos, venta por tableta, blíster o caja y control de recetas.',
     Icono: Pill,
-    modulos: [MODULO_FICHA_MEDICAMENTO, MODULO_RECETAS, MODULO_ALTERNATIVAS, MODULO_PRESENTACIONES],
+    modulos: [MODULO_FICHA_MEDICAMENTO, MODULO_RECETAS, MODULO_ALTERNATIVAS, MODULO_PRESENTACIONES, MODULO_COMPRA_EXCEL],
     unidades: [
       'UNIDAD', 'TABLETA', 'CAPSULA', 'BLISTER', 'CAJA', 'FRASCO', 'AMPOLLA', 'VIAL', 'SOBRE', 'TUBO',
       'SUPOSITORIO', 'OVULO', 'PARCHE', 'ML', 'GRAMO', 'PAQUETE',

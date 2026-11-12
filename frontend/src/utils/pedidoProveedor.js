@@ -1,4 +1,4 @@
-// Módulo "Venta en tabla" (Lubricentro): pedido a proveedor por Excel.
+// Módulos "Venta en tabla" (Lubricentro) y "Compras por Excel": pedido a proveedor por Excel.
 // 1) Exportar: los productos con su código interno (y, en el completo,
 //    stock, costo y P1/P2/P3) y una columna "Cantidad a pedir".
 // 2) Cargar: ese mismo Excel con las cantidades llena la "Nueva compra".
@@ -54,7 +54,9 @@ const COLUMNAS_COMPLETO = [
  * P1/P2/P3 (para el negocio); si no, solo lo que necesita el proveedor.
  * fichas: Map producto_id -> ficha del repuesto; precios: Map -> { precio_2, precio_3 }.
  */
-export function hojaPedido(lista, { completo, fichas, precios, sugerir, conStock = false }) {
+export function hojaPedido(lista, { completo, fichas, precios, sugerir, conStock = false, repuestos = true }) {
+  // Sin la ficha del repuesto (farmacia, bodega…): sin N.° de parte, Marca ni Aplicación.
+  if (!completo && !repuestos) return hojaSimple(lista, { sugerir, conStock });
   const numero = (n) => (Number(n) > 0 ? Number(n) : '');
   const filas = lista.map((p) => {
     const ficha = fichas?.get(p.id);
@@ -91,6 +93,26 @@ export function hojaPedido(lista, { completo, fichas, precios, sugerir, conStock
     : conStock
       ? { nombre: 'Pedido', filas: [columnas, ...filas], anchos: [14, 15, 14, 42, 38, 10, 13, 16, 15], soles: [8] }
       : { nombre: 'Pedido', filas: [columnas, ...filas], anchos: [14, 15, 14, 42, 38, 10, 16, 15], soles: [7] };
+}
+
+const COLUMNAS_SIMPLE = ['Código', 'Producto', 'Unidad', 'Cantidad a pedir', 'Precio unitario'];
+
+/** El pedido sin datos de repuestos: Código, Producto, Unidad, (Stock actual), Cantidad, Precio. */
+function hojaSimple(lista, { sugerir, conStock }) {
+  const columnas = conStock ? [...COLUMNAS_SIMPLE.slice(0, 3), 'Stock actual', ...COLUMNAS_SIMPLE.slice(3)] : COLUMNAS_SIMPLE;
+  const filas = lista.map((p) => [
+    String(p.codigo || ''),
+    p.nombre,
+    etiquetaUnidad(p.unidad_medida),
+    ...(conStock ? [controlaStock(p) ? Number(p.stock) : ''] : []),
+    sugerir && estaBajoMinimo(p) ? cantidadSugerida(p) : '',
+    '',
+  ]);
+  filas.push(columnas.map(() => ''));
+  filas.push(columnas.map((_, i) => (i === 1 ? TITULO_NUEVOS : '')));
+  return conStock
+    ? { nombre: 'Pedido', filas: [columnas, ...filas], anchos: [14, 46, 10, 13, 16, 15], soles: [5] }
+    : { nombre: 'Pedido', filas: [columnas, ...filas], anchos: [14, 46, 10, 16, 15], soles: [4] };
 }
 
 // Títulos que se reconocen al cargar (ya normalizados).
@@ -137,20 +159,21 @@ export function unidadDesdeTexto(texto) {
 }
 
 /**
- * Códigos internos para los productos nuevos: REP-0001, REP-0002… siguiendo
- * al mayor REP- que ya exista (y sin repetir los ya usados en esta compra).
+ * Códigos internos para los productos nuevos: REP-0001, REP-0002… (o con
+ * otro prefijo, PROD- fuera de repuestos) siguiendo al mayor que ya exista
+ * (y sin repetir los ya usados en esta compra).
  */
-export function codigosNuevos(productos, cantidad, usados = []) {
+export function codigosNuevos(productos, cantidad, usados = [], prefijo = 'REP') {
   const ocupados = new Set([...productos.map((p) => String(p.codigo || '').toUpperCase()), ...usados.map((c) => String(c).toUpperCase())]);
   let n = 0;
   for (const c of ocupados) {
-    const m = /^REP-(\d+)$/.exec(c);
+    const m = new RegExp(`^${prefijo}-(\\d+)$`).exec(c);
     if (m) n = Math.max(n, parseInt(m[1], 10));
   }
   const lista = [];
   while (lista.length < cantidad) {
     n += 1;
-    const codigo = `REP-${String(n).padStart(4, '0')}`;
+    const codigo = `${prefijo}-${String(n).padStart(4, '0')}`;
     if (!ocupados.has(codigo)) lista.push(codigo);
   }
   return lista;

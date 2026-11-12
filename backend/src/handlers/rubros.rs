@@ -163,6 +163,11 @@ pub const MODULO_VARIAS_CAJAS: &str = "VARIAS_CAJAS";
 /// elegir proveedor; queda como compra ya recibida al proveedor "COMPRA
 /// RÁPIDA" (handlers/compra_rapida.rs). Sirve para cualquier rubro.
 pub const MODULO_INGRESO_RAPIDO: &str = "INGRESO_RAPIDO";
+/// Compras por Excel: exportar la lista de productos (o los que están en su
+/// stock mínimo), llenar cantidad y costo, y cargarla en Nueva compra de un
+/// golpe. Solo es de pantalla (la compra se registra como siempre). Viene
+/// encendido en Farmacia; sirve para cualquier rubro.
+pub const MODULO_COMPRA_EXCEL: &str = "COMPRA_EXCEL";
 
 pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
 
@@ -224,6 +229,7 @@ const MODULOS: &[&str] = &[
     MODULO_REPARACIONES,
     MODULO_VARIAS_CAJAS,
     MODULO_INGRESO_RAPIDO,
+    MODULO_COMPRA_EXCEL,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
@@ -258,7 +264,7 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
     ),
     (
         "FARMACIA",
-        &[MODULO_FICHA_MEDICAMENTO, MODULO_RECETAS, MODULO_ALTERNATIVAS, MODULO_PRESENTACIONES],
+        &[MODULO_FICHA_MEDICAMENTO, MODULO_RECETAS, MODULO_ALTERNATIVAS, MODULO_PRESENTACIONES, MODULO_COMPRA_EXCEL],
         &[
             "UNIDAD", "TABLETA", "CAPSULA", "BLISTER", "CAJA", "FRASCO", "AMPOLLA", "VIAL", "SOBRE", "TUBO",
             "SUPOSITORIO", "OVULO", "PARCHE", "ML", "GRAMO", "PAQUETE",
