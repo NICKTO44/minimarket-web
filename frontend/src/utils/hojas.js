@@ -278,7 +278,7 @@ function crc32(bytes) {
 }
 
 /** ZIP sin comprimir (Excel lo abre igual). archivos: [[nombre, texto]] */
-function zip(archivos) {
+export function zip(archivos) {
   const codificar = new TextEncoder();
   const partes = [];
   const central = [];
@@ -327,7 +327,7 @@ function zip(archivos) {
   return salida;
 }
 
-const escapar = (texto) =>
+export const escapar = (texto) =>
   String(texto)
     // Caracteres de control que XML no admite
     // eslint-disable-next-line no-control-regex
@@ -337,7 +337,7 @@ const escapar = (texto) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-function letraColumna(indice) {
+export function letraColumna(indice) {
   let letras = '';
   for (let n = indice + 1; n > 0; n = Math.floor((n - 1) / 26)) letras = String.fromCharCode(65 + ((n - 1) % 26)) + letras;
   return letras;

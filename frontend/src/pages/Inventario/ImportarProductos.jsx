@@ -7,6 +7,8 @@ import { opcionesUnidad } from '../../utils/unidades';
 import './ImportarProductos.css';
 import { anchosRepuestos, titulosRepuestos } from '../../utils/excelRepuestos';
 import { aplicarEquivalentesImportados } from '../../utils/equivalentes';
+import { libroPlantilla } from '../../utils/plantillaExcel';
+import { nombrePlantilla, plantillaProductos } from '../../utils/plantillasProductos';
 
 // Importar productos desde el Excel o CSV de otro sistema (solo el
 // administrador). Tres pasos: subir el archivo, decir qué es cada columna y
@@ -15,15 +17,6 @@ import { aplicarEquivalentesImportados } from '../../utils/equivalentes';
 
 const MAXIMO_FILAS = 5000;
 const FILAS_A_LA_VISTA = 200;
-const TITULOS_PLANTILLA = ['Código', 'Nombre', 'Descripción', 'Categoría', 'Unidad', 'Precio de venta', 'Precio de compra', 'Stock', 'Stock mínimo', 'Lote', 'Vencimiento'];
-// Farmacia: columnas de la ficha del medicamento al final de la plantilla.
-const TITULOS_FICHA = ['Principio activo', 'Concentración', 'Forma farmacéutica', 'Laboratorio', 'Registro sanitario', 'Condición de venta', 'Genérico'];
-// Lubricentro: ficha del repuesto y vehículos compatibles.
-const TITULOS_REPUESTO = ['Marca', 'N.° de parte', 'Códigos alternos', 'Ubicación', 'Garantía (días)'];
-const TITULOS_COMPATIBILIDAD = ['Compatible con'];
-// Librería: ficha del libro (el ISBN va en la columna Código).
-const TITULOS_LIBRO = ['Autor', 'Editorial', 'Serie', 'Año', 'Edición'];
-
 const soles = (n) => (n == null ? '—' : `S/ ${n.toFixed(2)}`);
 // "2027-12-31" -> "31/12/2027"
 const fechaCorta = (iso) => (iso ? iso.split('-').reverse().join('/') : '—');
@@ -202,21 +195,10 @@ export default function ImportarProductos({
       });
       return;
     }
-    const titulos = [
-      ...TITULOS_PLANTILLA,
-      ...(fichaMedicamento ? TITULOS_FICHA : []),
-      ...(fichaRepuesto ? TITULOS_REPUESTO : []),
-      ...(compatibilidad ? TITULOS_COMPATIBILIDAD : []),
-      ...(fichaLibro ? TITULOS_LIBRO : []),
-    ];
-    const anchos = [
-      16, 36, 30, 18, 12, 15, 16, 10, 13, 12, 14,
-      ...(fichaMedicamento ? [24, 14, 20, 20, 18, 22, 11] : []),
-      ...(fichaRepuesto ? [16, 18, 30, 16, 14] : []),
-      ...(compatibilidad ? [44] : []),
-      ...(fichaLibro ? [30, 20, 20, 8, 16] : []),
-    ];
-    descargarArchivo(escribirXlsx([titulos], { anchos }), 'Plantilla-productos.xlsx', { tipo: TIPO_XLSX });
+    // Los demás: plantilla con formato según el negocio (colores, soles,
+    // fechas, listas e instrucciones).
+    const datos = plantillaProductos({ fichaMedicamento, fichaLibro, categorias, unidadesActivas });
+    descargarArchivo(libroPlantilla(datos), nombrePlantilla({ fichaMedicamento, fichaLibro }), { tipo: TIPO_XLSX });
   };
 
   const descargarErrores = () => {
