@@ -479,6 +479,10 @@ export function ProductosNuevos({ nuevos, categorias, tresPrecios, repuestos = t
                   </label>
                 )}
               </div>
+              <label className="pedido-vence">
+                <input type="checkbox" checked={!!n.lleva_vencimiento} onChange={(e) => poner(idx, 'lleva_vencimiento', e.target.checked)} />
+                Tiene vencimiento (al recibir se pide el lote y la fecha)
+              </label>
               {vendeSuelto && (
                 <div className={`pedido-suelto${n.suelto ? ' activo' : ''}`}>
                   <label className="pedido-suelto-check">

@@ -26,7 +26,7 @@ const MOTIVOS = [
 // modelo, eligiendo cuánto llega de cada talla y color.
 // pedidosExcel: módulo "Venta en tabla" (Lubricentro): exportar el pedido a
 // Excel y cargar la compra desde ese Excel.
-export default function Proveedores({ variantes = false, ganancias = false, pedidosExcel = false, repuestos = false, presentaciones = false }) {
+export default function Proveedores({ variantes = false, ganancias = false, pedidosExcel = false, repuestos = false, presentaciones = false, farmacia = false }) {
   const [exportandoPedido, setExportandoPedido] = useState(false);
   // Precios de venta nuevos leídos del Excel del pedido y si se aplican al registrar la compra.
   const [preciosNuevos, setPreciosNuevos] = useState([]);
@@ -366,6 +366,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
             stock: 0,
             stock_minimo: 0,
             unidad_medida: (n.suelto ? n.unidad_base : n.unidad) || 'UNIDAD',
+            lleva_vencimiento: !!n.lleva_vencimiento,
             categoria_id: parseInt(n.categoria_id, 10),
             // Se vende suelto: el costo es por unidad (la caja entera / lo que trae).
             precio_compra: n.suelto ? Math.round((Number(n.precio_compra) / Number(n.factor)) * 1e6) / 1e6 : Number(n.precio_compra),
@@ -1005,6 +1006,8 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                         precio_2: null,
                         precio_3: null,
                         suelto: guess.suelto,
+                        // Farmacia: los medicamentos vencen (al recibir se pide lote y vencimiento).
+                        lleva_vencimiento: farmacia,
                         factor: guess.factor,
                         unidad_base: guess.unidad || 'UNIDAD',
                         precio_caja: null,
