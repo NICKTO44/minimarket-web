@@ -168,6 +168,14 @@ pub const MODULO_INGRESO_RAPIDO: &str = "INGRESO_RAPIDO";
 /// golpe. Solo es de pantalla (la compra se registra como siempre). Viene
 /// encendido en Farmacia; sirve para cualquier rubro.
 pub const MODULO_COMPRA_EXCEL: &str = "COMPRA_EXCEL";
+/// Al revés: encendido = NO pedir "con cuánto paga" en efectivo (se cobra el
+/// total exacto). En Configuración se muestra como "Pedir con cuánto paga"
+/// encendido para todos; solo se guarda cuando el negocio lo apaga.
+pub const MODULO_SIN_VUELTO: &str = "SIN_VUELTO";
+/// Créditos por cliente: pestaña con lo que debe cada cliente (sumando sus
+/// boletas) y su estado de cuenta para cobrarle todo junto. Necesita CREDITO.
+/// Viene encendido en Lavandería; cualquier rubro lo puede encender.
+pub const MODULO_CREDITOS_POR_CLIENTE: &str = "CREDITOS_POR_CLIENTE";
 
 pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
 
@@ -186,6 +194,7 @@ const DEPENDENCIAS: &[(&str, &str)] = &[
     (MODULO_ORDENES_SERVICIO, MODULO_VEHICULOS),
     (MODULO_INSUMOS, MODULO_PRODUCCION),
     (MODULO_DELIVERY, MODULO_MESAS),
+    (MODULO_CREDITOS_POR_CLIENTE, MODULO_CREDITO),
 ];
 
 const MODULOS: &[&str] = &[
@@ -230,6 +239,8 @@ const MODULOS: &[&str] = &[
     MODULO_VARIAS_CAJAS,
     MODULO_INGRESO_RAPIDO,
     MODULO_COMPRA_EXCEL,
+    MODULO_SIN_VUELTO,
+    MODULO_CREDITOS_POR_CLIENTE,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
@@ -295,7 +306,7 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
     ),
     (
         "LAVANDERIA",
-        &[MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_ENCARGOS, MODULO_CREDITO],
+        &[MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_ENCARGOS, MODULO_CREDITO, MODULO_CREDITOS_POR_CLIENTE],
         &["UNIDAD", "KG", "PRENDA", "PAR", "JUEGO", "PIEZA"],
     ),
     (

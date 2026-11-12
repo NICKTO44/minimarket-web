@@ -111,7 +111,7 @@ async fn texto(t: &Arc<TenantDb>, sql: &str) -> String {
 #[test]
 fn catalogo_del_rubro() {
     assert!(rubros::rubro_valido("LAVANDERIA"));
-    assert_eq!(rubros::modulos_del_rubro("LAVANDERIA"), vec!["SERVICIOS", "MEDIDAS", "ENCARGOS", "CREDITO"]);
+    assert_eq!(rubros::modulos_del_rubro("LAVANDERIA"), vec!["SERVICIOS", "MEDIDAS", "ENCARGOS", "CREDITO", "CREDITOS_POR_CLIENTE"]);
     let unidades_rubro = rubros::unidades_del_rubro("LAVANDERIA").unwrap();
     for u in ["UNIDAD", "KG", "PRENDA"] {
         assert!(unidades_rubro.split(',').any(|x| x == u), "{u}");

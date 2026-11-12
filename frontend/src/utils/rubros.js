@@ -78,6 +78,10 @@ export const MODULO_VARIAS_CAJAS = 'VARIAS_CAJAS';
 export const MODULO_INGRESO_RAPIDO = 'INGRESO_RAPIDO';
 // Compras por Excel: exportar la lista, llenar cantidad y costo y cargarla en Nueva compra.
 export const MODULO_COMPRA_EXCEL = 'COMPRA_EXCEL';
+// Al revés: si está en la lista, en efectivo NO se pide "con cuánto paga".
+export const MODULO_SIN_VUELTO = 'SIN_VUELTO';
+// Créditos: lo que debe cada cliente y su estado de cuenta para cobrarle todo junto.
+export const MODULO_CREDITOS_POR_CLIENTE = 'CREDITOS_POR_CLIENTE';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
@@ -85,6 +89,7 @@ export const DEPENDENCIAS = {
   [MODULO_ORDENES_SERVICIO]: MODULO_VEHICULOS,
   [MODULO_INSUMOS]: MODULO_PRODUCCION,
   [MODULO_DELIVERY]: MODULO_MESAS,
+  [MODULO_CREDITOS_POR_CLIENTE]: MODULO_CREDITO,
 };
 
 /**
@@ -102,7 +107,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -343,6 +348,20 @@ export const MODULOS = [
       'Botón "Ingreso rápido" en Productos: varios productos nuevos o para reponer en un paso, sin elegir proveedor. El código se genera solo y, si viene por caja (9 botellas), calcula las unidades y el costo de cada una. Queda como una compra en Compras y en los reportes.',
   },
   {
+    valor: MODULO_SIN_VUELTO,
+    // Se muestra al revés: encendido mientras el negocio NO lo tenga en su lista.
+    invertido: true,
+    label: 'Pedir con cuánto paga (vuelto)',
+    descripcion:
+      'Al cobrar en efectivo, se escribe con cuánto paga el cliente y el sistema calcula el vuelto. Si lo apagas, el cobro en efectivo es directo por el total, sin escribir nada (útil si a tu personal se le complica).',
+  },
+  {
+    valor: MODULO_CREDITOS_POR_CLIENTE,
+    label: 'Créditos por cliente',
+    descripcion:
+      'En Créditos, la pestaña "Por cliente" muestra cuánto debe cada cliente sumando todas sus boletas, y su estado de cuenta permite cobrarle todo junto (el pago se reparte entre sus deudas, de la más antigua a la más nueva).',
+  },
+  {
     valor: MODULO_COMPRA_EXCEL,
     label: 'Compras por Excel',
     descripcion:
@@ -461,7 +480,7 @@ export const RUBROS = [
     descripcion:
       'Órdenes de lavado por kilo o por prenda (tipo de prenda, tela y precio al recibirla), con adelanto opcional, recojo o delivery, aviso por WhatsApp cuando está lista, clientes a cuenta con cierre de mes y boleta o nota de venta al entregar.',
     Icono: WashingMachine,
-    modulos: [MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_ENCARGOS, MODULO_CREDITO],
+    modulos: [MODULO_SERVICIOS, MODULO_MEDIDAS, MODULO_ENCARGOS, MODULO_CREDITO, MODULO_CREDITOS_POR_CLIENTE],
     unidades: ['UNIDAD', 'KG', 'PRENDA', 'PAR', 'JUEGO', 'PIEZA'],
     etiquetas: {
       PRODUCTOS: 'Servicios',

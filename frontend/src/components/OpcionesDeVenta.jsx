@@ -63,7 +63,7 @@ export default function OpcionesDeVenta({ opciones, onCambiar, unidad, precioNor
                   // Precio por mayor de la presentación: desde 3 cajas, cada caja a S/ 100.
                   <div className="odv-mayor-pres">
                     <label className="odv-campo">
-                      <span>Por mayor desde (cant.)</span>
+                      <span>Por mayor desde (cuántas {f.nombre.trim() ? f.nombre.trim().toLowerCase() : 'presentaciones'})</span>
                       <input
                         inputMode="numeric"
                         placeholder="3"
@@ -72,7 +72,7 @@ export default function OpcionesDeVenta({ opciones, onCambiar, unidad, precioNor
                       />
                     </label>
                     <label className="odv-campo">
-                      <span>Precio c/u por mayor S/</span>
+                      <span>Precio de c/{f.nombre.trim() ? f.nombre.trim().toLowerCase() : 'presentación'} por mayor S/</span>
                       <input
                         inputMode="decimal"
                         placeholder="Opcional"
@@ -98,10 +98,16 @@ export default function OpcionesDeVenta({ opciones, onCambiar, unidad, precioNor
 
       {conPrecioMayor && (
         <section className="odv-seccion">
-          <h3>Precio por mayor</h3>
+          <h3>Precio por mayor por {abrev} (suelto)</h3>
           <p className="odv-ayuda">
-            Precio por {abrev} cuando el cliente lleva esa cantidad o más
+            Precio por {abrev} cuando el cliente lleva esa cantidad o más de {abrev} sueltas
             {precioNormal > 0 ? ` (el normal es S/ ${formatoPrecio(precioNormal)})` : ''}. Se aplica solo al vender.
+            {conPresentaciones && (
+              <>
+                {' '}
+                <strong>¿Por mayor por caja o six pack?</strong> Ponlo arriba, debajo de la presentación, en "Por mayor desde".
+              </>
+            )}
           </p>
           {opciones.precios_mayor.map((f, i) => (
             <div className="odv-fila odv-fila-mayor" key={i}>

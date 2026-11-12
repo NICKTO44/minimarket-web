@@ -360,6 +360,8 @@ export default function POS({
   // y se sube al volver la conexión (utils/sinConexion.js). Apagado, la venta
   // es la de siempre.
   sinConexion = false,
+  // Módulo SIN_VUELTO: en efectivo no se pide "con cuánto paga" (se cobra el total exacto).
+  sinVuelto = false,
   // Lubricentro: placa y kilometraje en la venta, paquetes y el cobro de
   // una orden de servicio (viene de Órdenes de servicio).
   vehiculos = false,
@@ -1575,10 +1577,11 @@ export default function POS({
       .catch(() => setDeudaCliente(null));
   }, [clienteIdCredito]);
   const deudaActual = esCredito && cliente && deudaCliente?.cliente_id === cliente.id ? deudaCliente : null;
-  const recibidoNum = parseFloat(montoRecibido) || 0;
   const mixtoOtro = redondear2(parseFloat(mixtoMontoOtro) || 0);
   // La parte del segundo medio (se llama "efectivo" porque antes siempre lo era).
   const mixtoEfectivo = redondear2(Math.max(0, total - mixtoOtro));
+  // Sin vuelto: el efectivo del pago mixto se toma exacto.
+  const recibidoNum = sinVuelto ? mixtoEfectivo : parseFloat(montoRecibido) || 0;
   const segundoEsEfectivo = mixtoSegundoMetodo === 'EFECTIVO';
   const mixtoConEfectivo = esMixto && segundoEsEfectivo;
 
@@ -1604,7 +1607,7 @@ export default function POS({
     }
     // Sin efectivo (p. ej. Yape + Plin) no hay efectivo que recibir ni vuelto.
     if (!segundoEsEfectivo) return { listo: true, error: null };
-    if (montoRecibido === '') return { listo: false, error: null };
+    if (montoRecibido === '' && !sinVuelto) return { listo: false, error: null };
     if (recibidoNum + 0.005 < mixtoEfectivo) {
       return { listo: false, error: `Faltan S/ ${(mixtoEfectivo - recibidoNum).toFixed(2)} en efectivo para completar el pago.` };
     }
@@ -1625,7 +1628,7 @@ export default function POS({
     carrito.length > 0 &&
     !procesando &&
     (!clienteEsObligatorio || cliente) &&
-    (metodoPago !== 'EFECTIVO' || ((enCambio || adelantoEncargo > 0) && aCobrar === 0) || parseFloat(montoRecibido) >= aCobrar) &&
+    (metodoPago !== 'EFECTIVO' || sinVuelto || ((enCambio || adelantoEncargo > 0) && aCobrar === 0) || parseFloat(montoRecibido) >= aCobrar) &&
     !totalMenorQueAdelanto &&
     (!encargoEnVenta || !esMixto) &&
     (!esCredito || adelantoValido) &&
@@ -1806,7 +1809,7 @@ export default function POS({
             }
           : {}),
         monto_recibido:
-          metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || aCobrar : mixtoConEfectivo ? recibidoNum : null,
+          metodoPago === 'EFECTIVO' ? (sinVuelto ? aCobrar : parseFloat(montoRecibido) || aCobrar) : mixtoConEfectivo ? recibidoNum : null,
         cambio: metodoPago === 'EFECTIVO' || mixtoConEfectivo ? cambio : null,
         usuario_id: usuario.id,
         cliente_id: clienteVenta?.id || null,
@@ -1874,7 +1877,7 @@ export default function POS({
           folio: resultado.folio,
           total,
           montoRecibido:
-            metodoPago === 'EFECTIVO' ? parseFloat(montoRecibido) || aCobrar : mixtoConEfectivo ? recibidoNum : null,
+            metodoPago === 'EFECTIVO' ? (sinVuelto ? aCobrar : parseFloat(montoRecibido) || aCobrar) : mixtoConEfectivo ? recibidoNum : null,
           cambio: metodoPago === 'EFECTIVO' || mixtoConEfectivo ? cambio : null,
           metodoPago,
           // Cambio de prenda: lo devuelto, lo que valía y la diferencia.
@@ -3212,7 +3215,7 @@ export default function POS({
                 <strong>S/ {mixtoEfectivo.toFixed(2)}</strong>
               </div>
 
-              {segundoEsEfectivo && (
+              {segundoEsEfectivo && !sinVuelto && (
                 <div className="pos-mixto-paso">
                   <span className="pos-mixto-label">
                     <span>4. Efectivo que entregó el cliente</span>
@@ -3273,7 +3276,7 @@ export default function POS({
             </div>
           )}
 
-          {metodoPago === 'EFECTIVO' && !(enCambio && (aCobrar === 0 || carrito.length === 0)) && !(adelantoEncargo > 0 && aCobrar === 0) && (
+          {metodoPago === 'EFECTIVO' && !sinVuelto && !(enCambio && (aCobrar === 0 || carrito.length === 0)) && !(adelantoEncargo > 0 && aCobrar === 0) && (
             <div className="pos-efectivo">
               <input
                 type="number"

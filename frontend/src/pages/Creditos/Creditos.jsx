@@ -104,7 +104,9 @@ function CreditoImprimible({ credito, nombreTienda, direccion, telefono, ruc }) 
  * cada cliente y se registran los abonos. Un abono en efectivo entra a la
  * caja abierta como ingreso.
  */
-export default function Creditos({ nombreTienda, direccion, telefono, ruc, cierreMes = false }) {
+export default function Creditos({ nombreTienda, direccion, telefono, ruc, cierreMes = false, porCliente: conPorCliente = false }) {
+  // "Por cliente" y el estado de cuenta: con el cierre de mes (lavandería) o el módulo Créditos por cliente.
+  const verPorCliente = cierreMes || conPorCliente;
   const [filtro, setFiltro] = useState('PENDIENTE');
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState(null);
@@ -192,7 +194,7 @@ export default function Creditos({ nombreTienda, direccion, telefono, ruc, cierr
           <p className="pm-subtitulo">Lo que te deben tus clientes. Para vender al crédito, elige “Crédito” al cobrar en el punto de venta.</p>
         </div>
         <div className="pm-filtros" role="tablist">
-          {FILTROS.filter((f) => cierreMes || !f.soloCierreMes).map((f) => (
+          {FILTROS.filter((f) => verPorCliente || !f.soloCierreMes).map((f) => (
             <button key={f.valor} role="tab" aria-selected={filtro === f.valor} className={filtro === f.valor ? 'activo' : ''} onClick={() => setFiltro(f.valor)}>
               {f.label}
             </button>
@@ -372,7 +374,7 @@ export default function Creditos({ nombreTienda, direccion, telefono, ruc, cierr
               </table>
             </div>
             <div className="pm-modal-pie">
-              {cierreMes && (
+              {verPorCliente && (
                 <button
                   className="pm-boton-secundario"
                   onClick={() => {

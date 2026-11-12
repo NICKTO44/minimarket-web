@@ -31,7 +31,9 @@ export default function ConfiguracionNegocio({ rubro, rubroFijo = false, modulos
   // La lista de módulos es larga: se abre solo cuando se quiere cambiar algo,
   // para que no empuje hacia abajo los datos del negocio.
   const [verModulos, setVerModulos] = useState(false);
-  const encendidos = MODULOS.filter((m) => modulos.includes(m.valor));
+  // "invertido": encendido mientras NO esté en la lista (p. ej. Pedir con cuánto paga).
+  const estaEncendido = (m) => (m.invertido ? !modulos.includes(m.valor) : modulos.includes(m.valor));
+  const encendidos = MODULOS.filter((m) => !m.invertido && estaEncendido(m));
 
   const guardar = async (nuevoRubro, nuevosModulos, textoExito) => {
     setGuardando(true);
@@ -62,7 +64,7 @@ export default function ConfiguracionNegocio({ rubro, rubroFijo = false, modulos
 
   const alternarModulo = async (modulo) => {
     if (guardando) return;
-    const encender = !modulos.includes(modulo.valor);
+    const encender = !estaEncendido(modulo);
     if (modulo.valor === MODULO_MESAS) {
       const ok = await confirmar({
         titulo: encender ? '¿Activar atención en mesas?' : '¿Desactivar atención en mesas?',
@@ -103,7 +105,7 @@ export default function ConfiguracionNegocio({ rubro, rubroFijo = false, modulos
     // apagar uno apaga los que dependen de él: se avisa cuáles.
     const nuevos = alternarConDependencias(modulos, modulo.valor);
     const arrastrados = MODULOS.filter(
-      (m) => m.valor !== modulo.valor && modulos.includes(m.valor) !== nuevos.includes(m.valor)
+      (m) => !m.invertido && m.valor !== modulo.valor && modulos.includes(m.valor) !== nuevos.includes(m.valor)
     ).map((m) => m.label);
     guardar(
       rubro,
@@ -179,7 +181,7 @@ export default function ConfiguracionNegocio({ rubro, rubroFijo = false, modulos
       </p>
       <div className="neg-modulos">
         {MODULOS.filter((m) => moduloDisponible(m, rubro)).map((m) => {
-          const encendido = modulos.includes(m.valor);
+          const encendido = estaEncendido(m);
           return (
             <button
               key={m.valor}

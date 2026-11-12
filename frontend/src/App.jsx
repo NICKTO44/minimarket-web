@@ -91,6 +91,8 @@ import {
   MODULO_VARIAS_CAJAS,
   MODULO_INGRESO_RAPIDO,
   MODULO_COMPRA_EXCEL,
+  MODULO_SIN_VUELTO,
+  MODULO_CREDITOS_POR_CLIENTE,
   MODULO_COMPROBANTE_CLASICO,
   MODULO_LOGO_TICKET,
   MODULO_IMPRESION_DIRECTA,
@@ -789,6 +791,7 @@ function App() {
               equivalentes={negocio.modulos.includes(MODULO_EQUIVALENTES)}
               fueraInventario={negocio.modulos.includes(MODULO_VENTA_FUERA_INVENTARIO)}
               sinConexion={negocio.modulos.includes(MODULO_VENTA_SIN_CONEXION)}
+              sinVuelto={negocio.modulos.includes(MODULO_SIN_VUELTO)}
               vehiculos={negocio.modulos.includes(MODULO_VEHICULOS)}
               paquetes={negocio.modulos.includes(MODULO_PAQUETES)}
               ordenACargar={negocio.modulos.includes(MODULO_ORDENES_SERVICIO) ? ordenACargar : null}
@@ -946,6 +949,7 @@ function App() {
         {pantallaVisible === 'CREDITOS' && (
           <Creditos
             cierreMes={!!etiquetas.cierreMes}
+            porCliente={negocio.modulos.includes(MODULO_CREDITOS_POR_CLIENTE)}
             nombreTienda={nombreTienda}
             direccion={direccionFiscal}
             telefono={configuracionTienda?.telefono}
