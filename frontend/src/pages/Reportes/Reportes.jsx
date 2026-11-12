@@ -65,6 +65,9 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
   // Filtros de "Ventas del período" y la venta con sus productos abiertos.
   const [metodoFiltro, setMetodoFiltro] = useState(metodoInicial || 'TODOS');
   const [cajeroFiltro, setCajeroFiltro] = useState('TODOS');
+  // Usuarios activos del negocio: el filtro Cajero sale aunque alguno
+  // todavía no haya vendido en el período.
+  const [usuariosActivos, setUsuariosActivos] = useState([]);
   const [ventaAbierta, setVentaAbierta] = useState(null);
   // Venta cuyo comprobante se está viendo (solo lectura).
   const [comprobanteDe, setComprobanteDe] = useState(null);
@@ -97,12 +100,25 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fechaInicio, fechaFin]);
 
+  useEffect(() => {
+    let vivo = true;
+    api
+      .usuariosListar()
+      .then((lista) => {
+        if (vivo) setUsuariosActivos((lista || []).filter((u) => u.activo).map((u) => u.nombre_completo).filter(Boolean));
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
   // Ventas que tocan el medio elegido (un mixto aparece en sus dos medios)
   // y lo que entró por ese medio en cada una.
   const metodos = ['TODOS', ...new Set([...(estadisticas?.por_metodo || []).map((m) => m.metodo), metodoFiltro])].filter(
     (m, i, lista) => lista.indexOf(m) === i
   );
-  const cajeros = [...new Set(ventas.map((v) => v.cajero).filter(Boolean))].sort();
+  const cajeros = [...new Set([...ventas.map((v) => v.cajero), ...usuariosActivos].filter(Boolean))].sort();
   const cobradoDe = (v) =>
     metodoFiltro === 'TODOS'
       ? Number(v.total) || 0
@@ -356,7 +372,7 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
                   </button>
                 ))}
               </div>
-              {cajeros.length > 1 && (
+              {cajeros.length > 0 && (
                 <div className="rep-filtro" role="group" aria-label="Filtrar por cajero">
                   <span className="rep-filtro-titulo">Cajero</span>
                   {['TODOS', ...cajeros].map((c) => (

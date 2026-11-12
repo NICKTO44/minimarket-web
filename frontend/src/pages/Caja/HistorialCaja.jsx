@@ -27,6 +27,8 @@ export default function HistorialCaja() {
   const [mensaje, setMensaje] = useState(null);
   // Caja abierta en la ventana de detalle.
   const [detalleId, setDetalleId] = useState(null);
+  // Cajero elegido para ver solo sus turnos ('TODOS' = todos).
+  const [cajeroFiltro, setCajeroFiltro] = useState('TODOS');
   const cerrarDetalle = useCallback(() => setDetalleId(null), []);
 
   const cargar = () => {
@@ -58,9 +60,45 @@ export default function HistorialCaja() {
     setAnio(nuevoAnio);
   };
 
-  const totalMes = cajas.reduce((sum, c) => sum + c.total_ventas, 0);
-  const netoMes = cajas.reduce((sum, c) => sum + (c.total_ventas - c.devoluciones_monto), 0);
-  const diasConCaja = cajas.length;
+  // Yape y Plin de un turno. Cajas de antes de separarlos: lo cobrado por
+  // billetera va junto en Yape/Plin.
+  const yapeDe = (c) => Number(c.ventas_yape) || 0;
+  const plinDe = (c) => Number(c.ventas_plin) || 0;
+  const juntoDe = (c) => Number(c.ventas_yape_plin) || 0;
+  const efectivoDe = (c) => Number(c.ventas_efectivo) || 0;
+  const otrosDe = (c) =>
+    Math.max(0, (Number(c.total_ventas) || 0) - efectivoDe(c) - yapeDe(c) - plinDe(c) - juntoDe(c));
+
+  const cajeros = [...new Set(cajas.map((c) => c.usuario_nombre).filter(Boolean))].sort();
+  const cajasVisibles = cajeroFiltro === 'TODOS' ? cajas : cajas.filter((c) => c.usuario_nombre === cajeroFiltro);
+
+  const totalMes = cajasVisibles.reduce((sum, c) => sum + c.total_ventas, 0);
+  const netoMes = cajasVisibles.reduce((sum, c) => sum + (c.total_ventas - c.devoluciones_monto), 0);
+  const diasConCaja = cajasVisibles.length;
+
+  // Resumen por cajero para comparar sus turnos del mes.
+  const porCajero = cajeros.map((nombre) => {
+    const suyas = cajas.filter((c) => c.usuario_nombre === nombre);
+    const cerradas = suyas.filter((c) => c.diferencia !== null && c.diferencia !== undefined);
+    const vendido = suyas.reduce((s, c) => s + (Number(c.total_ventas) || 0), 0);
+    return {
+      nombre,
+      turnos: suyas.length,
+      abiertas: suyas.length - cerradas.length,
+      vendido,
+      promedio: suyas.length ? vendido / suyas.length : 0,
+      efectivo: suyas.reduce((s, c) => s + efectivoDe(c), 0),
+      yape: suyas.reduce((s, c) => s + yapeDe(c), 0),
+      plin: suyas.reduce((s, c) => s + plinDe(c), 0),
+      junto: suyas.reduce((s, c) => s + juntoDe(c), 0),
+      otros: suyas.reduce((s, c) => s + otrosDe(c), 0),
+      diferencia: cerradas.reduce((s, c) => s + (Number(c.diferencia) || 0), 0),
+      conDiferencia: cerradas.filter((c) => Math.abs(Number(c.diferencia) || 0) >= 0.01).length,
+    };
+  });
+  const hayJunto = cajasVisibles.some((c) => juntoDe(c) > 0.004);
+  const hayOtros = cajasVisibles.some((c) => otrosDe(c) > 0.004);
+  const soles = (n) => `S/ ${(Number(n) || 0).toFixed(2)}`;
 
   const estadoDiferencia = (dif) => {
     if (dif === null || dif === undefined) return 'sin-cerrar';
@@ -95,6 +133,80 @@ export default function HistorialCaja() {
         </div>
       </div>
 
+      {cajeros.length > 0 && (
+        <div className="hcaja-filtro" role="group" aria-label="Filtrar por cajero">
+          <span className="hcaja-filtro-titulo">Cajero</span>
+          {['TODOS', ...cajeros].map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={`hcaja-chip${cajeroFiltro === n ? ' activo' : ''}`}
+              aria-pressed={cajeroFiltro === n}
+              onClick={() => setCajeroFiltro(n)}
+            >
+              {n === 'TODOS' ? 'Todos' : n}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {porCajero.length > 0 && (
+        <div className="hcaja-por-cajero">
+          <h3>Resumen por cajero</h3>
+          <div className="hcaja-tabla-wrapper">
+            <table className="hcaja-tabla">
+              <thead>
+                <tr>
+                  <th>Cajero</th>
+                  <th>Turnos</th>
+                  <th>Vendido</th>
+                  <th>Promedio por turno</th>
+                  <th>Efectivo</th>
+                  <th>Yape</th>
+                  <th>Plin</th>
+                  {porCajero.some((r) => r.junto > 0.004) && <th>Yape/Plin</th>}
+                  {porCajero.some((r) => r.otros > 0.004) && <th>Tarjeta / Transf.</th>}
+                  <th>Diferencias</th>
+                </tr>
+              </thead>
+              <tbody>
+                {porCajero.map((r) => (
+                  <tr
+                    key={r.nombre}
+                    className={`hcaja-fila-cajero${cajeroFiltro === r.nombre ? ' activo' : ''}`}
+                    onClick={() => setCajeroFiltro(cajeroFiltro === r.nombre ? 'TODOS' : r.nombre)}
+                    title="Ver solo sus turnos"
+                  >
+                    <td><strong>{r.nombre}</strong></td>
+                    <td>
+                      {r.turnos}
+                      {r.abiertas > 0 && <span className="hcaja-hora">{r.abiertas} sin cerrar</span>}
+                    </td>
+                    <td>{soles(r.vendido)}</td>
+                    <td>{soles(r.promedio)}</td>
+                    <td>{soles(r.efectivo)}</td>
+                    <td>{soles(r.yape)}</td>
+                    <td>{soles(r.plin)}</td>
+                    {porCajero.some((x) => x.junto > 0.004) && <td>{soles(r.junto)}</td>}
+                    {porCajero.some((x) => x.otros > 0.004) && <td>{soles(r.otros)}</td>}
+                    <td>
+                      <span className={`hcaja-diferencia hcaja-diferencia-${estadoDiferencia(r.turnos - r.abiertas > 0 ? r.diferencia : null)}`}>
+                        {r.turnos - r.abiertas > 0 ? textoDiferencia(r.diferencia) : '—'}
+                      </span>
+                      {r.conDiferencia > 0 && (
+                        <span className="hcaja-hora">
+                          {r.conDiferencia} {r.conDiferencia === 1 ? 'turno descuadrado' : 'turnos descuadrados'}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {mensaje && <p className="hcaja-mensaje">{mensaje}</p>}
 
       {cargando ? (
@@ -104,25 +216,46 @@ export default function HistorialCaja() {
           <table className="hcaja-tabla">
             <thead>
               <tr>
-                <th>Fecha</th>
+                <th>Apertura</th>
+                <th>Cierre</th>
                 <th>Cajero</th>
                 <th>Monto inicial</th>
                 <th>Ventas</th>
+                <th>Efectivo</th>
+                <th>Yape</th>
+                <th>Plin</th>
+                {hayJunto && <th>Yape/Plin</th>}
+                {hayOtros && <th>Tarjeta / Transf.</th>}
                 <th>Diferencia</th>
                 <th>Estado</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {cajas.map((c) => (
+              {cajasVisibles.map((c) => (
                 <tr key={c.id}>
                   <td>
                     {diaLima(c.fecha_apertura, { day: '2-digit', month: 'short' })}
                     <span className="hcaja-hora">{horaLima(c.fecha_apertura, { hour: '2-digit', minute: '2-digit' })}</span>
                   </td>
+                  <td>
+                    {c.fecha_cierre ? (
+                      <>
+                        {diaLima(c.fecha_cierre, { day: '2-digit', month: 'short' })}
+                        <span className="hcaja-hora">{horaLima(c.fecha_cierre, { hour: '2-digit', minute: '2-digit' })}</span>
+                      </>
+                    ) : (
+                      <span className="hcaja-hora">En turno</span>
+                    )}
+                  </td>
                   <td>{c.usuario_nombre}</td>
                   <td>S/ {c.monto_inicial.toFixed(2)}</td>
                   <td>S/ {c.total_ventas.toFixed(2)} <span className="hcaja-transacciones">({c.numero_transacciones})</span></td>
+                  <td>{soles(efectivoDe(c))}</td>
+                  <td>{soles(yapeDe(c))}</td>
+                  <td>{soles(plinDe(c))}</td>
+                  {hayJunto && <td>{soles(juntoDe(c))}</td>}
+                  {hayOtros && <td>{soles(otrosDe(c))}</td>}
                   <td>
                     {c.diferencia !== null && c.diferencia !== undefined ? (
                       <span className={`hcaja-diferencia hcaja-diferencia-${estadoDiferencia(c.diferencia)}`}>
@@ -142,10 +275,12 @@ export default function HistorialCaja() {
                   </td>
                 </tr>
               ))}
-              {cajas.length === 0 && (
+              {cajasVisibles.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="hcaja-sin-resultados">
-                    No hubo ninguna caja abierta en {MESES[mes]} {anio}.
+                  <td colSpan={11 + (hayJunto ? 1 : 0) + (hayOtros ? 1 : 0)} className="hcaja-sin-resultados">
+                    {cajeroFiltro === 'TODOS'
+                      ? `No hubo ninguna caja abierta en ${MESES[mes]} ${anio}.`
+                      : `${cajeroFiltro} no abrió caja en ${MESES[mes]} ${anio}.`}
                   </td>
                 </tr>
               )}
