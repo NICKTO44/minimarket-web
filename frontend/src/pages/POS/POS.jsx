@@ -2933,20 +2933,10 @@ export default function POS({
                     · −S/ {item.descuentoMonto.toFixed(2)}
                   </span>
                 )}
-                {descuentos && !item.paquete && !enCambio && !cobrandoPedido && (
-                  editandoDescuento === claveDe(item) ? (
-                    <EditorDescuento
-                      actual={item.descPropio}
-                      maximo={subtotalLinea(item.precio, item.cantidad)}
-                      onAplicar={(d) => fijarDescuentoLinea(claveDe(item), d)}
-                      onQuitar={() => fijarDescuentoLinea(claveDe(item), null)}
-                      onCerrar={() => setEditandoDescuento(null)}
-                    />
-                  ) : (
-                    <button type="button" className="pos-descuento-boton" onClick={() => setEditandoDescuento(claveDe(item))}>
-                      🏷 {item.descPropio ? 'Cambiar descuento' : 'Descuento'}
-                    </button>
-                  )
+                {descuentos && !item.paquete && !enCambio && !cobrandoPedido && editandoDescuento !== claveDe(item) && (
+                  <button type="button" className="pos-descuento-boton" onClick={() => setEditandoDescuento(claveDe(item))}>
+                    🏷 {item.descPropio ? 'Cambiar descuento' : 'Descuento'}
+                  </button>
                 )}
                 {alternativas &&
                   !esFueraInventario(item) &&
@@ -3070,6 +3060,18 @@ export default function POS({
                     <button className="pos-quitar" onClick={() => quitarDelCarrito(claveDe(item))}>🗑</button>
                   </div>
                 ))}
+              {/* El editor del descuento va a todo lo ancho, debajo del producto. */}
+              {descuentos && editandoDescuento === claveDe(item) && (
+                <div className="pos-carrito-item-descuento">
+                  <EditorDescuento
+                    actual={item.descPropio}
+                    maximo={subtotalLinea(item.precio, item.cantidad)}
+                    onAplicar={(d) => fijarDescuentoLinea(claveDe(item), d)}
+                    onQuitar={() => fijarDescuentoLinea(claveDe(item), null)}
+                    onCerrar={() => setEditandoDescuento(null)}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>

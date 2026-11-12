@@ -21,7 +21,7 @@
 }
 
 .desc-editor-tipos button {
-  padding: 5px 9px;
+  padding: 7px 12px;
   border: none;
   background: #fff;
   font-weight: 700;
@@ -36,15 +36,15 @@
 
 .desc-editor-fila input {
   flex: 1;
-  min-width: 0;
-  padding: 5px 8px;
+  min-width: 90px;
+  padding: 7px 10px;
   border: 1px solid #c9ced8;
   border-radius: 6px;
   font-size: 14px;
 }
 
 .desc-editor-aplicar {
-  padding: 5px 10px;
+  padding: 7px 14px;
   border: none;
   border-radius: 6px;
   background: var(--color-primario, #2563eb);
@@ -114,4 +114,24 @@
 .pos-desglose-desc {
   color: #b45309;
   font-weight: 600;
+}
+
+/* En el carrito, el editor ocupa todo el ancho de la línea. */
+.pos-carrito-item-descuento {
+  grid-column: 1 / -1;
+}
+
+.pos-carrito-item-descuento .desc-editor {
+  margin-top: 0;
+}
+
+.desc-editor-fila input::-webkit-outer-spin-button,
+.desc-editor-fila input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.desc-editor-fila input[type='number'] {
+  -moz-appearance: textfield;
+  font-size: 16px;
 }
