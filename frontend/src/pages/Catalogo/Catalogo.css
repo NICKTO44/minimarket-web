@@ -80,10 +80,11 @@
 }
 
 .cat-grilla {
-  /* Dos productos por fila: fotos grandes. En pantallas muy anchas no
-     pasa de ~1160 px para que las tarjetas no crezcan sin fin. */
+  /* Cuatro productos por fila en computadora (fotos un poco más grandes
+     que al inicio, sin quedar enormes). En pantallas muy anchas no pasa
+     de ~1160 px para que las tarjetas no crezcan sin fin. */
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   max-width: 1160px;
   margin: 0 auto;
@@ -299,7 +300,9 @@
     padding: 14px 12px 40px;
   }
 
+  /* Celular y tablet: dos por fila (cuatro no entran). */
   .cat-grilla {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 

@@ -13,9 +13,10 @@ import './MenuArriba.css';
 const ESPACIO = 2; // gap entre opciones (px), igual que en el CSS
 
 // En la barra van primero las pantallas de todos los días (en una laptop
-// solo entran unas 9); el resto sigue en el orden del menú y, si no cabe,
+// solo entran unas 9; Catálogo va junto a Productos y solo aparece con
+// su módulo encendido); el resto sigue en el orden del menú y, si no cabe,
 // queda en "Más".
-const PRIMERO = ['MESAS', 'POS', 'PRODUCTOS', 'CLIENTES', 'CAJA', 'COMPROBANTES', 'PROVEEDORES', 'STOCK', 'RESUMEN'];
+const PRIMERO = ['MESAS', 'POS', 'PRODUCTOS', 'CATALOGO', 'CLIENTES', 'CAJA', 'COMPROBANTES', 'PROVEEDORES', 'STOCK', 'RESUMEN'];
 const orden = (id) => (PRIMERO.includes(id) ? PRIMERO.indexOf(id) : PRIMERO.length);
 
 export default function MenuArriba({
