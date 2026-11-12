@@ -8,6 +8,11 @@
   max-width: 640px;
 }
 
+/* Usuarios: la tabla con sus botones necesita más ancho (en computadora). */
+.cfg-layout.cfg-layout-ancho {
+  max-width: 980px;
+}
+
 .cfg-header {
   display: flex;
   align-items: center;
@@ -201,11 +206,29 @@
   color: #9ca3af;
 }
 
-/* Contraseña + Desactivar en la fila de un usuario */
+/* Contraseña + Pantallas + Desactivar en la fila de un usuario: en una
+   sola línea en computadora (en celular se acomodan, ver abajo). */
 .cfg-acciones-usuario {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 6px;
+}
+
+.cfg-acciones-usuario button {
+  white-space: nowrap;
+}
+
+/* "3 ocultas" dentro del botón Pantallas. */
+.cfg-chip-ocultas {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .cfg-boton-clave {
@@ -548,10 +571,11 @@
   .cfg-tabla tr {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
+    /* Los botones van en su propia línea: así el nombre nunca se aprieta. */
     grid-template-areas:
       'nombre estado'
-      'usuario accion'
-      'rol accion';
+      'usuario rol'
+      'accion accion';
     align-items: center;
     gap: 4px 10px;
     padding: 12px 14px;
@@ -595,8 +619,9 @@
 
   .cfg-tabla td:nth-child(5) {
     grid-area: accion;
-    justify-self: end;
-    align-self: end;
+    justify-self: stretch;
+    white-space: normal;
+    margin-top: 4px;
   }
 
   .cfg-boton-desactivar,
@@ -604,6 +629,12 @@
   .cfg-boton-clave {
     padding: 9px 14px;
     font-size: 13px;
+  }
+
+  .cfg-acciones-usuario {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 }
 

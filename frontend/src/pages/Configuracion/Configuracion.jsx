@@ -14,6 +14,7 @@ import ConfiguracionImpresora from './ConfiguracionImpresora';
 import UsoPlan from '../../components/UsoPlan';
 import MiCuenta from '../../components/MiCuenta';
 import PantallasUsuario from '../../components/PantallasUsuario';
+import { etiquetaRol } from '../../utils/menu';
 import { etiquetaTasa, TASA_GENERAL } from '../../utils/igv';
 import { datosNegocio, MODULO_CAMBIOS, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
 import TarjetaRuc from '../../components/TarjetaRuc';
@@ -312,7 +313,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
   }
 
   return (
-    <div className="cfg-layout">
+    <div className={`cfg-layout${vista === 'USUARIOS' ? ' cfg-layout-ancho' : ''}`}>
       <div className="cfg-header">
         <h1>Configuración</h1>
         <div className="cfg-tabs">
@@ -543,7 +544,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
                     <tr key={u.id}>
                       <td>{u.username}</td>
                       <td>{u.nombre_completo}</td>
-                      <td>{u.rol_nombre === 'INVENTARIO' ? 'ALMACÉN' : u.rol_nombre}</td>
+                      <td>{etiquetaRol(u)}</td>
                       <td>
                         <span className={`cfg-badge ${u.activo ? 'cfg-badge-activo' : 'cfg-badge-inactivo'}`}>
                           {u.activo ? 'Activo' : 'Inactivo'}
@@ -557,7 +558,12 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
                             </button>
                             {u.rol_id !== 1 && (
                               <button className="cfg-boton-clave" onClick={() => setPantallasDe(u)}>
-                                Pantallas{u.pantallas_ocultas?.length ? ` (${u.pantallas_ocultas.length} ocultas)` : ''}
+                                Pantallas
+                                {u.pantallas_ocultas?.length > 0 && (
+                                  <span className="cfg-chip-ocultas" title="Pantallas que no ve">
+                                    {u.pantallas_ocultas.length} oculta{u.pantallas_ocultas.length === 1 ? '' : 's'}
+                                  </span>
+                                )}
                               </button>
                             )}
                             <button className="cfg-boton-desactivar" onClick={() => desactivarUsuario(u)}>

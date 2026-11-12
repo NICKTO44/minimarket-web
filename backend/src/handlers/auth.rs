@@ -24,6 +24,9 @@ pub struct UsuarioSesion {
     /// Nombre del rol (ADMIN, CAJERO, MESERO...): el id del Mesero puede
     /// variar entre negocios, el nombre no.
     pub rol_nombre: Option<String>,
+    /// Pantallas que el administrador le ocultó (vacío = ve lo de su rol).
+    /// Vienen en el login para que el menú salga bien desde el inicio.
+    pub pantallas_ocultas: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -183,6 +186,12 @@ pub async fn login(
         Err(_) => None,
     };
 
+    let pantallas_ocultas = if rol_id == crate::middleware_auth::ROL_ADMIN {
+        Vec::new()
+    } else {
+        crate::handlers::configuracion::pantallas_ocultas_de(&conn, id).await
+    };
+
     let claims = Claims {
         sub: id,
         username: payload.usuario.clone(),
@@ -205,6 +214,7 @@ pub async fn login(
             nombre_completo,
             rol_id,
             rol_nombre,
+            pantallas_ocultas,
         },
         tienda: TiendaSesion {
             slug: direccion_de(&state, &tienda.identificador).await,

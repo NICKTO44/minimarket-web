@@ -14,6 +14,15 @@
   border-radius: 8px;
   padding: 8px 12px 10px;
   margin: 0 0 10px;
+  /* Dos columnas de casillas; en celular, una. */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 12px;
+}
+@media (max-width: 520px) {
+  .pantallas-grupo {
+    grid-template-columns: 1fr;
+  }
 }
 .pantallas-grupo legend {
   font-size: 12px;
@@ -34,6 +43,9 @@
 .pantallas-opcion input {
   width: 18px;
   height: 18px;
+}
+.pantallas-amarrada {
+  grid-column: 1 / -1;
 }
 .pantallas-opcion small {
   flex-basis: 100%;

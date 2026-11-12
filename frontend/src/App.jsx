@@ -211,7 +211,19 @@ function App() {
     api
       .misPantallas()
       .then((lista) => {
-        if (vigente) setUsuarioActual((u) => (u && u.id === idUsuario ? { ...u, pantallas_ocultas: lista || [] } : u));
+        if (!vigente) return;
+        const ocultas = lista || [];
+        setUsuarioActual((u) => (u && u.id === idUsuario ? { ...u, pantallas_ocultas: ocultas } : u));
+        // Se guardan con la sesión: al recargar, el menú sale bien desde el
+        // primer momento (sin mostrar unos segundos lo que no ve).
+        try {
+          const sesion = JSON.parse(leerGuardado(STORAGE_KEY) || 'null');
+          if (sesion?.usuario?.id === idUsuario) {
+            guardarEnPestana(STORAGE_KEY, JSON.stringify({ ...sesion, usuario: { ...sesion.usuario, pantallas_ocultas: ocultas } }));
+          }
+        } catch {
+          // Sin almacenamiento: igual queda en memoria.
+        }
       })
       .catch(() => {});
     return () => {
