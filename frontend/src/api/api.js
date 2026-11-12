@@ -398,6 +398,9 @@ export const api = {
   compras: () => request('/compras'),
   compraDetalle: (id) => request(`/compras/${id}`),
   compraCrear: (data) => request('/compras', { method: 'POST', body: JSON.stringify(data) }),
+  // Compras por Excel: lo aprendido del Excel de cada proveedor.
+  compraExcelProveedor: (id) => request(`/compras/excel/proveedor/${id}`),
+  compraExcelAprender: (id, datos) => request(`/compras/excel/proveedor/${id}`, { method: 'POST', body: JSON.stringify(datos) }),
   compraRecibir: (data) => request('/compras/recibir', { method: 'POST', body: JSON.stringify(data) }),
   devolucionProveedorRegistrar: (data) => request('/devoluciones-proveedor', { method: 'POST', body: JSON.stringify(data) }),
   devolucionesProveedorListar: () => request('/devoluciones-proveedor'),

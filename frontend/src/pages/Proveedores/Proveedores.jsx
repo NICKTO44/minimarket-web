@@ -936,6 +936,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
               <CargarPedido
                 productos={productos}
                 repuestos={repuestos}
+                proveedorId={compraProveedorId ? parseInt(compraProveedorId, 10) : null}
                 onCargar={(nuevos, precios, subidas, sinRegistrar, tres) => {
                   // Un producto que ya estaba en la lista toma lo del Excel.
                   setCompraItems((prev) => [...prev.filter((i) => !nuevos.some((n) => n.producto_id === i.producto_id)), ...nuevos]);

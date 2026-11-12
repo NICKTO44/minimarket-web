@@ -6,6 +6,7 @@ import { hoyLima } from '../../utils/formato';
 import { mapaPorProducto } from '../../utils/repuestos';
 import { mapaPrecios } from '../../utils/tresPrecios';
 import { FILTROS_PEDIDO, hojaPedido, leerPedido, productosDelPedido } from '../../utils/pedidoProveedor';
+import LeerExcelProveedor from './LeerExcelProveedor';
 import './PedidoExcel.css';
 
 // Módulos "Venta en tabla" y "Compras por Excel": pedido a proveedor por Excel (ver utils/pedidoProveedor.js).
@@ -120,41 +121,66 @@ export function ExportarPedido({ productos, categorias, repuestos = true, onCerr
 /**
  * Botón "Cargar desde Excel" dentro de Nueva compra. onCargar(items, precios)
  * recibe los productos para la compra y los precios de venta que cambian;
- * debajo del botón queda el resumen de lo leído.
+ * debajo del botón queda el resumen de lo leído. El Excel del sistema
+ * ("Exportar pedido") entra directo; el de un proveedor (cualquier formato)
+ * pasa por LeerExcelProveedor: columnas, productos y lo que se aprende.
  */
-export function CargarPedido({ productos, repuestos = true, onCargar }) {
+export function CargarPedido({ productos, repuestos = true, proveedorId = null, onCargar }) {
   const entrada = useRef(null);
   const [ocupado, setOcupado] = useState(false);
   const [aviso, onAviso] = useState(null);
+  // Excel de un proveedor en revisión: { filas, fichas, precios }.
+  const [enRevision, setEnRevision] = useState(null);
+
+  // Arma la compra con una hoja "como la del sistema" y muestra el resumen.
+  const aplicar = (filas, fichas, precios, extra = '') => {
+    const r = leerPedido(filas, productos, fichas, precios);
+    if (r.error) {
+      onAviso({ tipo: 'error', texto: r.error });
+      return false;
+    }
+    if (r.items.length === 0 && r.nuevos.length === 0 && r.precios.length === 0 && r.sinReconocer.length === 0 && r.ambiguos.length === 0 && r.malas.length === 0) {
+      onAviso({ tipo: 'error', texto: 'El Excel no tiene ninguna fila con cantidad.' });
+      return false;
+    }
+    onCargar(r.items, r.precios, r.subidas, r.nuevos, precios.size > 0);
+    const partes = [`Se cargaron ${r.items.length} producto${r.items.length === 1 ? '' : 's'}. Revisa cantidades y costos antes de guardar.`];
+    if (extra) partes.push(extra);
+    if (r.subidas.length > 0) partes.push(`${r.subidas.length} subieron de costo: revisa sus precios de venta (recuadro amarillo).`);
+    if (r.nuevos.length > 0) partes.push(`${r.nuevos.length} producto${r.nuevos.length === 1 ? ' nuevo' : 's nuevos'}: completa sus datos (recuadro verde).`);
+    if (r.precios.length > 0) {
+      partes.push(`${r.precios.length} producto${r.precios.length === 1 ? '' : 's'} con precio de venta nuevo (ver abajo).`);
+    }
+    if (r.sinCosto > 0) partes.push(`${r.sinCosto} sin costo: escríbelo en la lista.`);
+    const lista = (xs) => xs.slice(0, 6).map((x) => `fila ${x.fila} (${x.texto})`).join(', ') + (xs.length > 6 ? `… y ${xs.length - 6} más` : '');
+    if (r.sinReconocer.length) partes.push(`No se reconocieron: ${lista(r.sinReconocer)}.`);
+    if (r.ambiguos.length) partes.push(`N.° de parte en más de un producto (agrégalos a mano): ${lista(r.ambiguos)}.`);
+    if (r.malas.length) partes.push(`Con error: ${lista(r.malas)}.`);
+    onAviso({ tipo: r.sinReconocer.length || r.ambiguos.length || r.malas.length || r.sinCosto ? 'error' : 'exito', texto: partes.join(' ') });
+    return true;
+  };
 
   const cargar = async (archivo) => {
     if (!archivo) return;
     setOcupado(true);
     onAviso(null);
+    setEnRevision(null);
     try {
       const [filas, { fichas, precios }] = await Promise.all([leerHoja(archivo), datosExtra(repuestos)]);
-      const r = leerPedido(filas, productos, fichas, precios);
-      if (r.error) {
-        onAviso({ tipo: 'error', texto: r.error });
+      // El Excel del sistema (o uno que se reconoce entero) entra directo.
+      const directo = leerPedido(filas, productos, fichas, precios);
+      if (!directo.error && directo.sinReconocer.length === 0 && directo.ambiguos.length === 0) {
+        aplicar(filas, fichas, precios);
         return;
       }
-      if (r.items.length === 0 && r.nuevos.length === 0 && r.precios.length === 0 && r.sinReconocer.length === 0 && r.ambiguos.length === 0 && r.malas.length === 0) {
-        onAviso({ tipo: 'error', texto: 'El Excel no tiene ninguna fila con "Cantidad a pedir".' });
+      if (!proveedorId) {
+        onAviso({
+          tipo: 'error',
+          texto: 'Este Excel no es el del sistema. Elige primero el proveedor de la compra: así el sistema lee su Excel y lo recuerda para la próxima vez.',
+        });
         return;
       }
-      onCargar(r.items, r.precios, r.subidas, r.nuevos, precios.size > 0);
-      const partes = [`Se cargaron ${r.items.length} producto${r.items.length === 1 ? '' : 's'}. Revisa cantidades y costos antes de guardar.`];
-      if (r.subidas.length > 0) partes.push(`${r.subidas.length} subieron de costo: revisa sus precios de venta (recuadro amarillo).`);
-      if (r.nuevos.length > 0) partes.push(`${r.nuevos.length} producto${r.nuevos.length === 1 ? ' nuevo' : 's nuevos'}: completa sus datos (recuadro verde).`);
-      if (r.precios.length > 0) {
-        partes.push(`${r.precios.length} producto${r.precios.length === 1 ? '' : 's'} con precio de venta nuevo (ver abajo).`);
-      }
-      if (r.sinCosto > 0) partes.push(`${r.sinCosto} sin costo: escríbelo en la lista.`);
-      const lista = (xs) => xs.slice(0, 6).map((x) => `fila ${x.fila} (${x.texto})`).join(', ') + (xs.length > 6 ? `… y ${xs.length - 6} más` : '');
-      if (r.sinReconocer.length) partes.push(`No se reconocieron: ${lista(r.sinReconocer)}.`);
-      if (r.ambiguos.length) partes.push(`N.° de parte en más de un producto (agrégalos a mano): ${lista(r.ambiguos)}.`);
-      if (r.malas.length) partes.push(`Con error: ${lista(r.malas)}.`);
-      onAviso({ tipo: r.sinReconocer.length || r.ambiguos.length || r.malas.length || r.sinCosto ? 'error' : 'exito', texto: partes.join(' ') });
+      setEnRevision({ filas, fichas, precios });
     } catch (e) {
       onAviso({
         tipo: 'error',
@@ -178,6 +204,22 @@ export function CargarPedido({ productos, repuestos = true, onCargar }) {
         hidden
         onChange={(e) => cargar(e.target.files?.[0])}
       />
+      {enRevision && (
+        <LeerExcelProveedor
+          filas={enRevision.filas}
+          productos={productos}
+          fichas={enRevision.fichas}
+          proveedorId={proveedorId}
+          onCancelar={() => setEnRevision(null)}
+          onListo={({ hoja, enlaces, columnas, aprendidos }) => {
+            const { fichas, precios } = enRevision;
+            if (aplicar(hoja, fichas, precios, aprendidos > 0 ? `El sistema recordará ${aprendidos} producto${aprendidos === 1 ? '' : 's'} de este proveedor.` : '')) {
+              setEnRevision(null);
+              api.compraExcelAprender(proveedorId, { columnas, enlaces }).catch(() => {});
+            }
+          }}
+        />
+      )}
       {aviso && (
         <p className={`pedido-aviso pedido-aviso-${aviso.tipo}`} role="status">
           {aviso.texto}

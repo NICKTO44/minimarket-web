@@ -1,0 +1,226 @@
+.lep {
+  margin-top: 10px;
+  border: 1.5px solid #c7d2fe;
+  background: #f8faff;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.lep-cabeza {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #1e1b4b;
+}
+
+.lep-cerrar {
+  border: none;
+  background: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.lep-ayuda {
+  font-size: 12.5px;
+  color: #4b5563;
+  margin: 4px 0 8px;
+}
+
+.lep-resumen {
+  font-size: 13px;
+  color: #374151;
+  margin: 2px 0 8px;
+}
+
+.lep-por-revisar {
+  color: #b45309;
+}
+
+.lep-falta {
+  font-size: 12.5px;
+  color: #b91c1c;
+  font-weight: 600;
+  margin: 6px 0;
+}
+
+.lep-columnas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.lep-columna {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.lep-columna span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lep-columna em {
+  font-weight: 400;
+  color: #9ca3af;
+  font-style: normal;
+}
+
+.lep-columna select,
+.lep-pendiente select,
+.lep-buscar {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: white;
+  min-width: 0;
+}
+
+.lep-reconocidas {
+  font-size: 12.5px;
+  margin-bottom: 8px;
+}
+
+.lep-reconocidas summary {
+  cursor: pointer;
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.lep-reconocidas ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.lep-reconocidas em {
+  color: #9ca3af;
+  font-style: normal;
+}
+
+.lep-excel {
+  color: #6b7280;
+}
+
+.lep-pendientes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.lep-pendiente {
+  background: white;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lep-decidida {
+  border-color: #bbf7d0;
+  border-left-color: #16a34a;
+}
+
+.lep-pendiente-excel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.lep-fila {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.lep-codigo {
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.lep-cant {
+  margin-left: auto;
+  color: #374151;
+  font-size: 12.5px;
+}
+
+.lep-sin-decidir {
+  border-color: #f59e0b !important;
+}
+
+.lep-enlace {
+  border: none;
+  background: none;
+  color: #4338ca;
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  margin-top: 6px;
+}
+
+.lep-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.lep-boton,
+.lep-boton-sec {
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lep-boton {
+  border: none;
+  background: var(--color-primario, #16a34a);
+  color: white;
+}
+
+.lep-boton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lep-boton-sec {
+  border: 1.5px solid #e4e6eb;
+  background: white;
+  color: #374151;
+}
+
+@media (max-width: 640px) {
+  .lep-columnas {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lep-sugerida {
+  font-size: 11.5px;
+  color: #92400e;
+}

@@ -407,6 +407,10 @@ async fn main() {
         .route("/compras/recibir", post(handlers::proveedores::recibir_mercaderia))
         // Ingreso rápido de productos: compra ya recibida, sin elegir proveedor.
         .route("/compras/rapida", post(handlers::compra_rapida::ingreso_rapido))
+        .route(
+            "/compras/excel/proveedor/:id",
+            get(handlers::compra_excel::obtener).post(handlers::compra_excel::aprender),
+        )
         .route("/devoluciones-proveedor", post(handlers::devoluciones_proveedor::registrar_devolucion))
         .route("/devoluciones-proveedor", get(handlers::devoluciones_proveedor::listar_devoluciones))
         .route("/devoluciones-proveedor/:id/resolver", post(handlers::devoluciones_proveedor::resolver_devolucion))
