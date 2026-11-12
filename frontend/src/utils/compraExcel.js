@@ -164,11 +164,25 @@ function palabras(texto) {
     .filter((p) => p.length >= 2 || /\d/.test(p));
 }
 
-/** Qué tanto se parecen dos nombres (0 a 1). Los números (500mg, x100) pesan más. */
+// Palabras que no distinguen un producto de otro (presentación, unidades…).
+const GENERICAS = new Set([
+  'tab', 'tabs', 'tableta', 'tabletas', 'comp', 'comprimido', 'comprimidos', 'cap', 'caps', 'capsula', 'capsulas', 'caja', 'cajas', 'cj', 'cja',
+  'und', 'unid', 'unidad', 'unidades', 'frasco', 'fco', 'jarabe', 'jbe', 'sobre', 'sobres', 'blister', 'ampolla', 'ampollas', 'amp', 'vial',
+  'tubo', 'crema', 'gotas', 'susp', 'suspension', 'solucion', 'sol', 'inyectable', 'iny', 'oral', 'mg', 'ml', 'gr', 'kg', 'lt', 'mcg', 'ui',
+  'por', 'con', 'sin', 'de', 'del', 'la', 'el', 'en', 'para', 'pack', 'paquete', 'pqt', 'bolsa', 'botella', 'lata', 'docena', 'par',
+]);
+const distintiva = (p) => !/\d/.test(p) && p.length >= 3 && !GENERICAS.has(p);
+
+/**
+ * Qué tanto se parecen dos nombres (0 a 1). Los números (500mg, x100) pesan
+ * más, pero sin una palabra propia en común (el principio activo, la marca…)
+ * no se parecen: "Cetirizina 10mg x 100" no es "Loratadina 10mg x 100".
+ */
 export function parecidoNombres(a, b) {
   const pa = palabras(a);
   const pb = new Set(palabras(b));
   if (pa.length === 0 || pb.size === 0) return 0;
+  if (!pa.some((p) => distintiva(p) && pb.has(p))) return 0;
   let comun = 0;
   let total = 0;
   const vistas = new Set();
