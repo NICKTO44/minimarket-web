@@ -63,3 +63,14 @@ async fn licoreria_apaga_el_vuelto_y_enciende_creditos_por_cliente() {
     let e = guardar(&t, "BODEGA", &["CREDITOS_POR_CLIENTE"]).await.unwrap_err();
     assert!(e.contains("CREDITO"), "{}", e);
 }
+
+#[tokio::test]
+async fn descuento_en_la_venta_se_enciende_en_cualquier_rubro() {
+    // Ningún rubro lo trae; cualquiera lo puede encender y se guarda.
+    for rubro in ["BODEGA", "FARMACIA", "LUBRICENTRO"] {
+        assert!(!rubros::modulos_del_rubro(rubro).iter().any(|x| x == "DESCUENTO_VENTA"), "{}", rubro);
+        let t = base(rubro).await;
+        let m = guardar(&t, rubro, &["DESCUENTO_VENTA"]).await.expect("guardar");
+        assert!(m.iter().any(|x| x == "DESCUENTO_VENTA"), "{}", rubro);
+    }
+}

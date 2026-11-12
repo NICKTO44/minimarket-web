@@ -92,6 +92,7 @@ import {
   MODULO_INGRESO_RAPIDO,
   MODULO_COMPRA_EXCEL,
   MODULO_SIN_VUELTO,
+  MODULO_DESCUENTO_VENTA,
   MODULO_CREDITOS_POR_CLIENTE,
   MODULO_COMPROBANTE_CLASICO,
   MODULO_LOGO_TICKET,
@@ -792,6 +793,7 @@ function App() {
               fueraInventario={negocio.modulos.includes(MODULO_VENTA_FUERA_INVENTARIO)}
               sinConexion={negocio.modulos.includes(MODULO_VENTA_SIN_CONEXION)}
               sinVuelto={negocio.modulos.includes(MODULO_SIN_VUELTO)}
+              descuentos={negocio.modulos.includes(MODULO_DESCUENTO_VENTA)}
               vehiculos={negocio.modulos.includes(MODULO_VEHICULOS)}
               paquetes={negocio.modulos.includes(MODULO_PAQUETES)}
               ordenACargar={negocio.modulos.includes(MODULO_ORDENES_SERVICIO) ? ordenACargar : null}

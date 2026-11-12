@@ -82,6 +82,8 @@ export const MODULO_COMPRA_EXCEL = 'COMPRA_EXCEL';
 export const MODULO_SIN_VUELTO = 'SIN_VUELTO';
 // Créditos: lo que debe cada cliente y su estado de cuenta para cobrarle todo junto.
 export const MODULO_CREDITOS_POR_CLIENTE = 'CREDITOS_POR_CLIENTE';
+// Descuento en la venta: en % o en soles, a un producto o al total.
+export const MODULO_DESCUENTO_VENTA = 'DESCUENTO_VENTA';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
@@ -107,7 +109,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE, MODULO_DESCUENTO_VENTA];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -354,6 +356,12 @@ export const MODULOS = [
     label: 'Pedir con cuánto paga (vuelto)',
     descripcion:
       'Al cobrar en efectivo, se escribe con cuánto paga el cliente y el sistema calcula el vuelto. Si lo apagas, el cobro en efectivo es directo por el total, sin escribir nada (útil si a tu personal se le complica).',
+  },
+  {
+    valor: MODULO_DESCUENTO_VENTA,
+    label: 'Descuento en la venta',
+    descripcion:
+      'Al vender, botón "Descuento" en cada producto del carrito y "Descuento al total" junto al total. Se pone en porcentaje (10%) o en soles (S/ 5.00). El descuento sale debajo de cada producto en el ticket y la boleta o factura se emite con el precio ya descontado.',
   },
   {
     valor: MODULO_CREDITOS_POR_CLIENTE,

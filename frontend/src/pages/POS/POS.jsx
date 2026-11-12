@@ -22,6 +22,8 @@ import { METODOS_DE_ABONO, METODOS_DE_COBRO, METODOS_OTRO_MIXTO, METODOS_SEGUNDO
 import { tituloPedido } from '../../utils/mesas';
 import { abreviaturaUnidad, etiquetaUnidad } from '../../utils/unidades';
 import { UNIDAD_PIE_TABLAR, formatoCantidad, formatoPrecio, leerCantidad, seVendeFraccionado, subtotalLinea } from '../../utils/medidas';
+import { aplicarDescuentos, textoDescuento } from '../../utils/descuentoVenta';
+import EditorDescuento from '../../components/DescuentoVenta';
 import CalculadoraPieTablar from '../../components/CalculadoraPieTablar';
 import CantidadFraccionada from '../../components/CantidadFraccionada';
 import ElegirPresentacion from '../../components/ElegirPresentacion';
@@ -362,6 +364,9 @@ export default function POS({
   sinConexion = false,
   // Módulo SIN_VUELTO: en efectivo no se pide "con cuánto paga" (se cobra el total exacto).
   sinVuelto = false,
+  // Módulo "Descuento en la venta": descuento en % o en soles a un producto
+  // del carrito o al total.
+  descuentos = false,
   // Lubricentro: placa y kilometraje en la venta, paquetes y el cobro de
   // una orden de servicio (viene de Órdenes de servicio).
   vehiculos = false,
@@ -429,16 +434,40 @@ export default function POS({
   const [productoConPresentaciones, setProductoConPresentaciones] = useState(null);
   // Todo cambio del carrito pasa por aquí: con "Precio por mayor" se ajusta
   // el precio de cada línea a su cantidad. Sin el módulo, es el de siempre.
+  // Módulo "Descuento en la venta": descuento al total ({ tipo, valor }).
+  // Se reparte entre las líneas cada vez que cambia el carrito.
+  const [descTotal, setDescTotalCrudo] = useState(null);
+  const descTotalRef = useRef(null);
+  // Qué descuento se está editando: la clave de una línea o 'TOTAL'.
+  const [editandoDescuento, setEditandoDescuento] = useState(null);
   const setCarrito = useCallback(
     (cambio) =>
       setCarritoCrudo((prev) => {
         const nuevo = typeof cambio === 'function' ? cambio(prev) : cambio;
-        return precioMayor || presentaciones
-          ? conPrecioPorMayor(nuevo, opcionesRef.current, { mayor: precioMayor, presentaciones })
-          : nuevo;
+        const conMayor =
+          precioMayor || presentaciones
+            ? conPrecioPorMayor(nuevo, opcionesRef.current, { mayor: precioMayor, presentaciones })
+            : nuevo;
+        if (!descuentos) return conMayor;
+        // Carrito vacío (venta cobrada o cancelada): se va el descuento al total.
+        if (conMayor.length === 0) descTotalRef.current = null;
+        return aplicarDescuentos(conMayor, descTotalRef.current);
       }),
-    [precioMayor, presentaciones]
+    [precioMayor, presentaciones, descuentos]
   );
+  const fijarDescuentoTotal = (desc) => {
+    descTotalRef.current = desc;
+    setDescTotalCrudo(desc);
+    setCarrito((prev) => prev);
+    setEditandoDescuento(null);
+  };
+  const fijarDescuentoLinea = (clave, desc) => {
+    setCarrito((prev) => prev.map((i) => (claveDe(i) === clave ? { ...i, descPropio: desc } : i)));
+    setEditandoDescuento(null);
+  };
+  // El descuento al total vale mientras alguna línea tenga su parte (al
+  // vaciarse el carrito se olvida, ver setCarrito).
+  const descTotalActivo = carrito.some((i) => i.descTotalParte > 0) ? descTotal : null;
   const recargarOpcionesVenta = useCallback(() => {
     if (!presentaciones && !precioMayor) return;
     api
@@ -1535,6 +1564,23 @@ export default function POS({
     () => redondear2(carrito.reduce((sum, i) => sum + subtotalLinea(i.precio, i.cantidad) - (i.descuentoMonto || 0), 0)),
     [carrito]
   );
+  // Descuentos de la venta (sin contar los de paquetes, que ya vienen en su precio).
+  const descuentoVenta = useMemo(
+    () => redondear2(carrito.reduce((sum, i) => sum + (i.paquete ? 0 : i.descuentoMonto || 0), 0)),
+    [carrito]
+  );
+  // Lo que queda para el descuento al total (ya restados los de cada producto).
+  const subtotalSinDescuentoTotal = useMemo(
+    () =>
+      redondear2(
+        carrito.reduce(
+          (sum, i) =>
+            i.paquete ? sum : sum + subtotalLinea(i.precio, i.cantidad) - (i.descuentoMonto || 0) + (i.descTotalParte || 0),
+          0
+        )
+      ),
+    [carrito]
+  );
 
   // Factura sujeta a detracción: negocio con el módulo listo y total mayor
   // al mínimo. La boleta nunca la lleva.
@@ -1924,7 +1970,7 @@ export default function POS({
           cantidad: i.cantidad,
           precio: i.precio,
           // Solo las líneas con descuento (p. ej. de un paquete) lo muestran.
-          ...(i.descuentoMonto > 0 ? { descuento: i.descuentoMonto, motivoDescuento: i.paquete ? `Desc. ${i.paquete.nombre}` : null } : {}),
+          ...(i.descuentoMonto > 0 ? { descuento: i.descuentoMonto, motivoDescuento: i.paquete ? `Desc. ${i.paquete.nombre}` : i.descPropio ? `Desc. ${textoDescuento(i.descPropio)}` : null } : {}),
           // Venta en tabla: código interno y precio sin IGV (de lo cobrado) en el ticket y la hoja.
           ...(ventaTabla
             ? {
@@ -2877,9 +2923,30 @@ export default function POS({
                 {item.detalle && <span className="pos-carrito-item-detalle">{item.detalle}</span>}
                 {item.descuentoMonto > 0 && (
                   <span className="pos-carrito-item-detalle">
-                    {item.paquete ? `Paquete ${item.paquete.nombre}` : 'Descuento'} · −S/{' '}
-                    {item.descuentoMonto.toFixed(2)}
+                    {item.paquete
+                      ? `Paquete ${item.paquete.nombre}`
+                      : item.descPropio
+                        ? `Descuento ${textoDescuento(item.descPropio)}${item.descTotalParte > 0 ? ' + al total' : ''}`
+                        : item.descTotalParte > 0 && item.descuentoMonto === item.descTotalParte
+                          ? 'Descuento al total'
+                          : 'Descuento'}{' '}
+                    · −S/ {item.descuentoMonto.toFixed(2)}
                   </span>
+                )}
+                {descuentos && !item.paquete && !enCambio && !cobrandoPedido && (
+                  editandoDescuento === claveDe(item) ? (
+                    <EditorDescuento
+                      actual={item.descPropio}
+                      maximo={subtotalLinea(item.precio, item.cantidad)}
+                      onAplicar={(d) => fijarDescuentoLinea(claveDe(item), d)}
+                      onQuitar={() => fijarDescuentoLinea(claveDe(item), null)}
+                      onCerrar={() => setEditandoDescuento(null)}
+                    />
+                  ) : (
+                    <button type="button" className="pos-descuento-boton" onClick={() => setEditandoDescuento(claveDe(item))}>
+                      🏷 {item.descPropio ? 'Cambiar descuento' : 'Descuento'}
+                    </button>
+                  )
                 )}
                 {alternativas &&
                   !esFueraInventario(item) &&
@@ -3044,10 +3111,41 @@ export default function POS({
               )}
             </div>
           ) : (
-            <div className="pos-total-row">
-              <span>Total</span>
-              <span className="pos-total-monto">S/ {total.toFixed(2)}</span>
-            </div>
+            <>
+              {descuentos && carrito.length > 0 && !cobrandoPedido && (
+                <div className="pos-descuento-total">
+                  {editandoDescuento === 'TOTAL' ? (
+                    <EditorDescuento
+                      actual={descTotalActivo}
+                      maximo={subtotalSinDescuentoTotal}
+                      onAplicar={fijarDescuentoTotal}
+                      onQuitar={() => fijarDescuentoTotal(null)}
+                      onCerrar={() => setEditandoDescuento(null)}
+                    />
+                  ) : (
+                    <button type="button" className="pos-descuento-boton" onClick={() => setEditandoDescuento('TOTAL')}>
+                      🏷 {descTotalActivo ? 'Cambiar descuento al total' : 'Descuento al total'}
+                    </button>
+                  )}
+                </div>
+              )}
+              {descuentos && descuentoVenta > 0 && (
+                <>
+                  <div className="pos-desglose">
+                    <span>Subtotal</span>
+                    <span>S/ {(total + descuentoVenta).toFixed(2)}</span>
+                  </div>
+                  <div className="pos-desglose pos-desglose-desc">
+                    <span>Descuento{descTotalActivo ? ` (incluye ${textoDescuento(descTotalActivo)} al total)` : ''}</span>
+                    <span>− S/ {descuentoVenta.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
+              <div className="pos-total-row">
+                <span>Total</span>
+                <span className="pos-total-monto">S/ {total.toFixed(2)}</span>
+              </div>
+            </>
           )}
 
           <div className="pos-metodo-pago">

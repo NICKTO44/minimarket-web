@@ -176,6 +176,10 @@ pub const MODULO_SIN_VUELTO: &str = "SIN_VUELTO";
 /// boletas) y su estado de cuenta para cobrarle todo junto. Necesita CREDITO.
 /// Viene encendido en Lavandería; cualquier rubro lo puede encender.
 pub const MODULO_CREDITOS_POR_CLIENTE: &str = "CREDITOS_POR_CLIENTE";
+/// Descuento en la venta: en % o en soles, a un producto o al total (el
+/// total se reparte entre las líneas). Solo es de pantalla: el servidor ya
+/// acepta el descuento de cada línea. Cualquier rubro lo puede encender.
+pub const MODULO_DESCUENTO_VENTA: &str = "DESCUENTO_VENTA";
 
 pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
 
@@ -241,6 +245,7 @@ const MODULOS: &[&str] = &[
     MODULO_COMPRA_EXCEL,
     MODULO_SIN_VUELTO,
     MODULO_CREDITOS_POR_CLIENTE,
+    MODULO_DESCUENTO_VENTA,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
