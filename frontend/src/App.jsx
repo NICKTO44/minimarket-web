@@ -283,6 +283,9 @@ function App() {
       username: data.usuario.username,
       rol_id: data.usuario.rol_id,
       rol_nombre: data.usuario.rol_nombre || null,
+      // Las que el administrador le ocultó: así el menú sale bien desde el
+      // primer momento al entrar (antes llegaban unos segundos después).
+      pantallas_ocultas: data.usuario.pantallas_ocultas || [],
     };
     // En una cafetería/restaurante se entra directo al mapa de mesas.
     // Almacén entra a Productos, que es lo suyo.
