@@ -398,7 +398,9 @@ export function SubioCosto({ subidas, tresPrecios, onCambio }) {
  * proveedor; el dueño elige la categoría y pone sus precios de venta. Se
  * crean al registrar la compra.
  */
-export function ProductosNuevos({ nuevos, categorias, tresPrecios, repuestos = true, vendeSuelto = false, unidadesActivas = null, faltas, onCambio }) {
+export function ProductosNuevos({ nuevos, categorias, tresPrecios, repuestos = true, vendeSuelto = false, unidadesActivas = null, faltas, onCambio, onCategoriaCreada }) {
+  // Categoría nueva escrita ahí mismo: { idx, nombre, ocupado, error }.
+  const [nuevaCat, setNuevaCat] = useState(null);
   if (!nuevos?.length) return null;
   const poner = (idx, campo, valor) => onCambio(nuevos.map((n, i) => (i === idx ? { ...n, [campo]: valor } : n)));
   return (
@@ -445,8 +447,15 @@ export function ProductosNuevos({ nuevos, categorias, tresPrecios, repuestos = t
                   Categoría
                   <select
                     className={`pedido-campo${falta.includes('Categoría') ? ' pedido-campo-falta' : ''}`}
-                    value={n.categoria_id}
-                    onChange={(e) => poner(idx, 'categoria_id', e.target.value)}
+                    value={nuevaCat?.idx === idx ? '__NUEVA__' : n.categoria_id}
+                    onChange={(e) => {
+                      if (e.target.value === '__NUEVA__') {
+                        setNuevaCat({ idx, nombre: '', ocupado: false, error: null });
+                        return;
+                      }
+                      if (nuevaCat?.idx === idx) setNuevaCat(null);
+                      poner(idx, 'categoria_id', e.target.value);
+                    }}
                   >
                     <option value="">Elige…</option>
                     {categorias.map((c) => (
@@ -454,7 +463,37 @@ export function ProductosNuevos({ nuevos, categorias, tresPrecios, repuestos = t
                         {c.nombre}
                       </option>
                     ))}
+                    {onCategoriaCreada && <option value="__NUEVA__">➕ Nueva categoría…</option>}
                   </select>
+                  {nuevaCat?.idx === idx && (
+                    <span className="pedido-nueva-cat">
+                      <input
+                        className="pedido-campo"
+                        autoFocus
+                        placeholder="Nombre de la categoría"
+                        value={nuevaCat.nombre}
+                        onChange={(e) => setNuevaCat({ ...nuevaCat, nombre: e.target.value, error: null })}
+                      />
+                      <button
+                        type="button"
+                        disabled={!nuevaCat.nombre.trim() || nuevaCat.ocupado}
+                        onClick={async () => {
+                          setNuevaCat({ ...nuevaCat, ocupado: true });
+                          try {
+                            const creada = await api.categoriaCrear({ nombre: nuevaCat.nombre.trim() });
+                            onCategoriaCreada({ id: creada.id, nombre: creada.nombre || nuevaCat.nombre.trim() });
+                            poner(idx, 'categoria_id', String(creada.id));
+                            setNuevaCat(null);
+                          } catch (e) {
+                            setNuevaCat({ ...nuevaCat, ocupado: false, error: e.message });
+                          }
+                        }}
+                      >
+                        {nuevaCat.ocupado ? 'Creando…' : 'Crear'}
+                      </button>
+                      {nuevaCat.error && <em className="pedido-nueva-cat-error">{nuevaCat.error}</em>}
+                    </span>
+                  )}
                 </label>
                 {!(Number(n.precio_compra) > 0) && (
                   <label>

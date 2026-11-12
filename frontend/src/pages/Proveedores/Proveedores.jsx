@@ -1029,6 +1029,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                 tresPrecios={conTresPrecios}
                 repuestos={repuestos}
                 vendeSuelto={presentaciones}
+                onCategoriaCreada={(c) => setCategorias((prev) => (prev.some((x) => x.id === c.id) ? prev : [...prev, c]))}
                 unidadesActivas={unidadesActivas}
                 faltas={faltasNuevos}
                 onCambio={setProductosNuevos}

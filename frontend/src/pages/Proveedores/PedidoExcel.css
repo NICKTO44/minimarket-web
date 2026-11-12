@@ -387,3 +387,29 @@
   font-weight: 600;
   color: #9a3412;
 }
+
+.pedido-nueva-cat {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.pedido-nueva-cat button {
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: #16a34a;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pedido-nueva-cat button:disabled {
+  opacity: 0.5;
+}
+
+.pedido-nueva-cat-error {
+  color: #b91c1c;
+  font-size: 11.5px;
+}
