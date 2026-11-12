@@ -341,6 +341,7 @@ pub async fn ingreso_rapido(
         tipo_pago: ingreso.tipo_pago.clone(),
         fecha_vencimiento_pago: None,
         factura_numero: None,
+        tipo_comprobante: None,
         notas: Some(ingreso.notas.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| "Ingreso rápido".to_string())),
         usuario_id: claims.sub,
     };

@@ -543,6 +543,7 @@ export const api = {
   reportesVentas: (inicio, fin) => request(`/reportes/ventas?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   reportesProductosVendidos: (inicio, fin) => request(`/reportes/productos-vendidos?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   reportesEstadisticas: (inicio, fin) => request(`/reportes/estadisticas?fecha_inicio=${inicio}&fecha_fin=${fin}`),
+  reportesCompras: (inicio, fin) => request(`/reportes/compras?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   // Módulo "Reporte de ganancias" (solo administrador). mes: "2026-10".
   reportesGanancias: (mes) => request(`/reportes/ganancias${mes ? `?mes=${mes}` : ''}`),
   // Costo promedio de cada producto: [{ producto_id, costo_promedio }]

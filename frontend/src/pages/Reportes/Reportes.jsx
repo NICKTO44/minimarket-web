@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { textoComprobanteCompra } from '../../utils/compras';
 import { api } from '../../api/api';
 import './Reportes.css';
 import { nombreMetodo, partesDelPago } from '../../utils/metodoPago';
@@ -68,6 +69,8 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
   // Usuarios activos del negocio: el filtro Cajero sale aunque alguno
   // todavía no haya vendido en el período.
   const [usuariosActivos, setUsuariosActivos] = useState([]);
+  // Compras del período: solo el administrador (null = no se muestran).
+  const [compras, setCompras] = useState(null);
   const [ventaAbierta, setVentaAbierta] = useState(null);
   // Venta cuyo comprobante se está viendo (solo lectura).
   const [comprobanteDe, setComprobanteDe] = useState(null);
@@ -98,6 +101,21 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
   useEffect(() => {
     cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fechaInicio, fechaFin]);
+
+  useEffect(() => {
+    let vivo = true;
+    api
+      .reportesCompras(fechaInicio, fechaFin)
+      .then((lista) => {
+        if (vivo) setCompras(lista || []);
+      })
+      .catch(() => {
+        if (vivo) setCompras(null);
+      });
+    return () => {
+      vivo = false;
+    };
   }, [fechaInicio, fechaFin]);
 
   useEffect(() => {
@@ -507,11 +525,82 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
               toda la venta.
             </p>
           </div>
+
+          {compras && <ComprasDelPeriodo compras={compras} />}
         </>
       )}
     </div>
   );
 }
+const PAGO_COMPRA = { EFECTIVO: 'Efectivo', TRANSFERENCIA: 'Transferencia', CREDITO: 'Crédito', MIXTO: 'Mixto' };
+
+/** Compras del período (solo el administrador): proveedor, comprobante y pago. */
+function ComprasDelPeriodo({ compras }) {
+  const vigentes = compras.filter((c) => c.estado !== 'CANCELADA');
+  const total = vigentes.reduce((s, c) => s + (Number(c.total) || 0), 0);
+  const porPagar = vigentes.reduce((s, c) => s + (Number(c.saldo_pendiente) || 0), 0);
+  return (
+    <div className="rep-seccion">
+      <h2>Compras del período ({vigentes.length})</h2>
+      <div className="rep-tabla-wrapper">
+        <table className="rep-tabla">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Folio</th>
+              <th>Proveedor</th>
+              <th>Comprobante</th>
+              <th>Pago</th>
+              <th>Estado</th>
+              <th>Registró</th>
+              <th className="num">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {compras.map((c) => (
+              <tr key={c.id}>
+                <td>{c.fecha_compra}</td>
+                <td>{c.folio}</td>
+                <td>
+                  {c.proveedor}
+                  {c.proveedor_documento && <span className="rep-sub">{c.proveedor_documento}</span>}
+                </td>
+                <td>{textoComprobanteCompra(c)}</td>
+                <td>
+                  {PAGO_COMPRA[c.tipo_pago] || c.tipo_pago}
+                  {c.saldo_pendiente > 0.004 && <span className="rep-sub">Debe {soles(c.saldo_pendiente)}</span>}
+                </td>
+                <td>{c.estado}</td>
+                <td>{c.registrado_por}</td>
+                <td className="num">{soles(c.total)}</td>
+              </tr>
+            ))}
+            {compras.length === 0 && (
+              <tr>
+                <td colSpan={8} className="rep-sin-resultados">
+                  No hay compras en este período.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {compras.length > 0 && (
+        <p className="rep-nota">
+          Total comprado: <strong>{soles(total)}</strong>
+          {porPagar > 0.004 && (
+            <>
+              {' '}
+              · Por pagar a proveedores: <strong>{soles(porPagar)}</strong>
+            </>
+          )}
+          . No cuenta las compras canceladas.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** "Cómo pagó": cada parte del pago; con un filtro, resalta la de ese medio. */
 function ComoPago({ partes, metodoFiltro }) {
   const mixto = partes.length > 1;

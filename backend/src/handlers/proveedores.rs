@@ -84,6 +84,21 @@ pub async fn crear_compra(
     if payload.items.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "Agrega al menos un producto a la compra.".into()));
     }
+    let tipo_comprobante = payload
+        .tipo_comprobante
+        .as_deref()
+        .map(|t| t.trim().to_ascii_uppercase())
+        .filter(|t| !t.is_empty());
+    if let Some(t) = &tipo_comprobante {
+        if !["FACTURA", "BOLETA", "NOTA_VENTA"].contains(&t.as_str()) {
+            return Err((StatusCode::BAD_REQUEST, "Tipo de comprobante no válido.".into()));
+        }
+    }
+    let factura_numero = payload
+        .factura_numero
+        .as_deref()
+        .map(|n| n.trim().to_ascii_uppercase())
+        .filter(|n| !n.is_empty());
     if payload.items.iter().any(|i| !(i.cantidad > 0.0) || !(i.precio_compra >= 0.0)) {
         return Err((StatusCode::BAD_REQUEST, "Cada producto necesita una cantidad mayor a 0 y un precio que no sea negativo.".into()));
     }
@@ -182,13 +197,14 @@ pub async fn crear_compra(
     let guardado: Result<(i64, String), (StatusCode, String)> = async {
         tx.execute(
             "INSERT INTO compras (folio, proveedor_id, fecha_compra, subtotal, descuento, credito_aplicado, total,
-                tipo_pago, monto_pagado, saldo_pendiente, fecha_vencimiento_pago, estado, estado_pago, usuario_id, factura_numero, notas)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'PENDIENTE',?12,?13,?14,?15)",
+                tipo_pago, monto_pagado, saldo_pendiente, fecha_vencimiento_pago, estado, estado_pago, usuario_id, factura_numero, notas,
+                tipo_comprobante)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'PENDIENTE',?12,?13,?14,?15,?16)",
             libsql::params![
                 folio.clone(), payload.proveedor_id, payload.fecha_compra.clone(), subtotal, descuento,
                 credito_aplicado, total, tipo_pago.clone(), monto_pagado, saldo_pendiente,
                 payload.fecha_vencimiento_pago.clone(), estado_pago, claims.sub,
-                payload.factura_numero.clone(), payload.notas.clone()
+                factura_numero.clone(), payload.notas.clone(), tipo_comprobante.clone()
             ],
         ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al crear compra: {}", e)))?;
 
@@ -448,7 +464,8 @@ pub async fn listar_compras(
                     COALESCE((SELECT SUM(ddp.cantidad_devuelta) FROM detalles_devolucion_proveedor ddp
                               JOIN devoluciones_proveedor dp ON ddp.devolucion_proveedor_id = dp.id
                               WHERE dp.compra_id = c.id), 0.0) as ya_devueltos,
-                    COALESCE((SELECT SUM(dc.cantidad - dc.cantidad_recibida) FROM detalles_compra dc WHERE dc.compra_id = c.id), 0.0) as faltantes
+                    COALESCE((SELECT SUM(dc.cantidad - dc.cantidad_recibida) FROM detalles_compra dc WHERE dc.compra_id = c.id), 0.0) as faltantes,
+                    c.tipo_comprobante, c.factura_numero
              FROM compras c JOIN proveedores p ON c.proveedor_id = p.id
              ORDER BY c.fecha_creacion DESC LIMIT 50",
             (),
@@ -469,6 +486,8 @@ pub async fn listar_compras(
             unidades_danadas: row.get(7).unwrap_or(0.0),
             unidades_ya_devueltas: row.get(8).unwrap_or(0.0),
             unidades_faltantes: row.get(9).unwrap_or(0.0),
+            tipo_comprobante: row.get::<String>(10).ok().filter(|t| !t.is_empty()),
+            factura_numero: row.get::<String>(11).ok().filter(|n| !n.trim().is_empty()),
         });
     }
 

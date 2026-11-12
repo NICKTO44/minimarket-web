@@ -43,6 +43,9 @@ pub struct NuevaCompraRequest {
     pub tipo_pago: String, // EFECTIVO | TRANSFERENCIA | CREDITO | MIXTO
     pub fecha_vencimiento_pago: Option<String>,
     pub factura_numero: Option<String>,
+    /// FACTURA | BOLETA | NOTA_VENTA; vacío = sin comprobante.
+    #[serde(default)]
+    pub tipo_comprobante: Option<String>,
     pub notas: Option<String>,
     pub usuario_id: i64,
 }
@@ -82,6 +85,8 @@ pub struct CompraResumen {
     pub total: f64,
     pub estado: String,
     pub estado_pago: String,
+    pub tipo_comprobante: Option<String>,
+    pub factura_numero: Option<String>,
     pub unidades_danadas: f64,
     pub unidades_ya_devueltas: f64,
     pub unidades_faltantes: f64,

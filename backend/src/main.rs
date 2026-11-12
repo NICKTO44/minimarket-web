@@ -417,6 +417,7 @@ async fn main() {
         .route("/reportes/ventas", get(handlers::reportes::ventas_por_rango))
         .route("/reportes/productos-vendidos", get(handlers::reportes::productos_mas_vendidos))
         .route("/reportes/estadisticas", get(handlers::reportes::estadisticas_completas))
+        .route("/reportes/compras", get(handlers::reportes::compras_por_rango))
         .route("/reportes/ganancias", get(handlers::ganancias::reporte))
         .route("/ganancias/costos", get(handlers::ganancias::costos))
         .route("/ganancias/inventario", get(handlers::ganancias::inventario))

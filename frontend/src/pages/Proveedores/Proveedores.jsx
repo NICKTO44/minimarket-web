@@ -8,6 +8,7 @@ import FormularioModelo from '../Inventario/FormularioModelo';
 import '../Inventario/Inventario.css';
 import './Proveedores.css';
 import { CargarPedido, ExportarPedido, PreciosNuevos, ProductosNuevos, SubioCosto } from './PedidoExcel';
+import { textoComprobanteCompra } from '../../utils/compras';
 import { codigosNuevos, faltaEnNuevo, filasDePrecios, subidasConCambio } from '../../utils/pedidoProveedor';
 import { sinCategoriaCarta } from '../../utils/categoriaCarta';
 
@@ -44,7 +45,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
   const [mensaje, setMensaje] = useState(null);
 
   const [mostrarNuevoProveedor, setMostrarNuevoProveedor] = useState(false);
-  const [formProveedor, setFormProveedor] = useState({ nombre: '', telefono: '', tipo_documento: 'RUC', numero_documento: '' });
+  const [formProveedor, setFormProveedor] = useState({ nombre: '', telefono: '', direccion: '', tipo_documento: 'RUC', numero_documento: '' });
   const [guardandoProveedor, setGuardandoProveedor] = useState(false);
 
   const [mostrarNuevaCompra, setMostrarNuevaCompra] = useState(false);
@@ -54,6 +55,9 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
   const [compraCantidad, setCompraCantidad] = useState('');
   const [compraPrecio, setCompraPrecio] = useState('');
   const [compraTipoPago, setCompraTipoPago] = useState('EFECTIVO');
+  // Comprobante que entregó el proveedor (opcional).
+  const [compraTipoComprobante, setCompraTipoComprobante] = useState('');
+  const [compraNumeroComprobante, setCompraNumeroComprobante] = useState('');
   const [guardandoCompra, setGuardandoCompra] = useState(false);
 
   const [compraSeleccionada, setCompraSeleccionada] = useState(null);
@@ -127,6 +131,46 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
     cargarTodo();
   }, []);
 
+  // Con el RUC (11 dígitos) o el DNI (8) completo, trae de SUNAT/RENIEC el
+  // nombre y la dirección. Si la consulta falla, no pasa nada: se escribe a mano.
+  const [consultandoProveedor, setConsultandoProveedor] = useState(false);
+  const [proveedorEncontrado, setProveedorEncontrado] = useState(null);
+  const tipoDocProveedor = formProveedor.tipo_documento;
+  const numeroDocProveedor = formProveedor.numero_documento;
+  useEffect(() => {
+    const tipo = tipoDocProveedor;
+    const numero = numeroDocProveedor;
+    const largo = tipo === 'RUC' ? 11 : 8;
+    if (!mostrarNuevoProveedor || numero.length !== largo) return undefined;
+    let cancelado = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setConsultandoProveedor(true);
+    api
+      .documentoConsultar(tipo, numero)
+      .then((r) => {
+        if (cancelado) return;
+        if (r.existe === true && r.nombre) {
+          setFormProveedor((f) => ({ ...f, nombre: r.nombre, direccion: r.direccion || f.direccion }));
+          setProveedorEncontrado(true);
+        } else if (r.existe === false) {
+          setProveedorEncontrado(false);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelado) setConsultandoProveedor(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [tipoDocProveedor, numeroDocProveedor, mostrarNuevoProveedor]);
+
+  const cambiarDocumentoProveedor = (valor) => {
+    const largo = formProveedor.tipo_documento === 'RUC' ? 11 : 8;
+    setProveedorEncontrado(null);
+    setFormProveedor({ ...formProveedor, numero_documento: valor.replace(/\D/g, '').slice(0, largo) });
+  };
+
   const guardarProveedor = async () => {
     if (!formProveedor.nombre.trim()) {
       setMensaje({ tipo: 'error', texto: 'El nombre del proveedor es obligatorio.' });
@@ -136,7 +180,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
     try {
       await api.proveedorCrear(formProveedor);
       setMostrarNuevoProveedor(false);
-      setFormProveedor({ nombre: '', telefono: '', tipo_documento: 'RUC', numero_documento: '' });
+      setFormProveedor({ nombre: '', telefono: '', direccion: '', tipo_documento: 'RUC', numero_documento: '' });
       setMensaje({ tipo: 'exito', texto: 'Proveedor registrado.' });
       cargarTodo();
     } catch (e) {
@@ -256,6 +300,8 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
     // del cierre ya lo descuenta); sin caja, efectivo de otro lado.
     setCajaAbierta(null);
     setCompraTipoPago('EFECTIVO');
+    setCompraTipoComprobante('');
+    setCompraNumeroComprobante('');
     api
       .cajaAbierta()
       .then((caja) => {
@@ -337,6 +383,8 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
           ...itemsNuevos,
         ],
         tipo_pago: compraTipoPago,
+        tipo_comprobante: compraTipoComprobante || null,
+        factura_numero: compraTipoComprobante ? compraNumeroComprobante.trim() || null : null,
         credito_aplicado: parseFloat(compraCreditoAplicado) || 0,
         usuario_id: 1,
       });
@@ -629,7 +677,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
           <table className="prov-tabla">
             <thead>
               <tr>
-                <th>Folio</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Pago</th><th></th>
+                <th>Folio</th><th>Proveedor</th><th>Comprobante</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Pago</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -637,6 +685,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                 <tr key={c.id}>
                   <td>{c.folio}</td>
                   <td>{c.proveedor_nombre}</td>
+                  <td>{textoComprobanteCompra(c)}</td>
                   <td>{c.fecha_compra}</td>
                   <td>S/ {c.total.toFixed(2)}</td>
                  <td>
@@ -733,26 +782,49 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
         <div className="prov-modal-overlay" onClick={() => setMostrarNuevoProveedor(false)}>
           <div className="prov-modal" onClick={(e) => e.stopPropagation()}>
             <h2>Nuevo proveedor</h2>
-            <div className="prov-campo">
-              <label>Nombre</label>
-              <input value={formProveedor.nombre} onChange={(e) => setFormProveedor({ ...formProveedor, nombre: e.target.value })} />
-            </div>
-            <div className="prov-campo">
-              <label>Teléfono</label>
-              <input value={formProveedor.telefono} onChange={(e) => setFormProveedor({ ...formProveedor, telefono: e.target.value })} />
-            </div>
             <div className="prov-campo-fila">
               <div className="prov-campo">
                 <label>Tipo</label>
-                <select value={formProveedor.tipo_documento} onChange={(e) => setFormProveedor({ ...formProveedor, tipo_documento: e.target.value })}>
+                <select
+                  value={formProveedor.tipo_documento}
+                  onChange={(e) => {
+                    setProveedorEncontrado(null);
+                    setFormProveedor({ ...formProveedor, tipo_documento: e.target.value, numero_documento: '' });
+                  }}
+                >
                   <option value="RUC">RUC</option>
                   <option value="DNI">DNI</option>
                 </select>
               </div>
               <div className="prov-campo">
                 <label>Número</label>
-                <input value={formProveedor.numero_documento} onChange={(e) => setFormProveedor({ ...formProveedor, numero_documento: e.target.value })} />
+                <input
+                  value={formProveedor.numero_documento}
+                  inputMode="numeric"
+                  placeholder={formProveedor.tipo_documento === 'RUC' ? '11 dígitos' : '8 dígitos'}
+                  onChange={(e) => cambiarDocumentoProveedor(e.target.value)}
+                  autoFocus
+                />
               </div>
+            </div>
+            {consultandoProveedor && <p className="prov-ayuda-doc">Buscando en SUNAT…</p>}
+            {!consultandoProveedor && proveedorEncontrado === true && (
+              <p className="prov-ayuda-doc prov-ayuda-ok">✓ Datos traídos de SUNAT. Puedes corregirlos.</p>
+            )}
+            {!consultandoProveedor && proveedorEncontrado === false && (
+              <p className="prov-ayuda-doc">No se encontró ese número. Escribe los datos a mano.</p>
+            )}
+            <div className="prov-campo">
+              <label>Nombre o razón social</label>
+              <input value={formProveedor.nombre} onChange={(e) => setFormProveedor({ ...formProveedor, nombre: e.target.value })} />
+            </div>
+            <div className="prov-campo">
+              <label>Dirección</label>
+              <input value={formProveedor.direccion} onChange={(e) => setFormProveedor({ ...formProveedor, direccion: e.target.value })} />
+            </div>
+            <div className="prov-campo">
+              <label>Teléfono</label>
+              <input value={formProveedor.telefono} onChange={(e) => setFormProveedor({ ...formProveedor, telefono: e.target.value })} />
             </div>
             {errorEnVentana}
             <div className="prov-modal-acciones">
@@ -799,6 +871,27 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                 </div>
               );
             })()}
+            <div className="prov-campo-fila">
+              <div className="prov-campo">
+                <label>Comprobante del proveedor</label>
+                <select value={compraTipoComprobante} onChange={(e) => setCompraTipoComprobante(e.target.value)}>
+                  <option value="">Sin comprobante</option>
+                  <option value="FACTURA">Factura</option>
+                  <option value="BOLETA">Boleta</option>
+                  <option value="NOTA_VENTA">Nota de venta</option>
+                </select>
+              </div>
+              {compraTipoComprobante && (
+                <div className="prov-campo">
+                  <label>Serie y número</label>
+                  <input
+                    value={compraNumeroComprobante}
+                    placeholder={compraTipoComprobante === 'FACTURA' ? 'F001-00001234' : compraTipoComprobante === 'BOLETA' ? 'B001-00001234' : 'N.° de la nota'}
+                    onChange={(e) => setCompraNumeroComprobante(e.target.value.toUpperCase())}
+                  />
+                </div>
+              )}
+            </div>
             <div className="prov-campo">
               <label>Forma de pago</label>
               <select
@@ -1036,6 +1129,10 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
               <div>
                 <span>Proveedor</span>
                 <strong>{compraVista.compra.proveedor_nombre}</strong>
+              </div>
+              <div>
+                <span>Comprobante</span>
+                <strong>{textoComprobanteCompra(compraVista.compra)}</strong>
               </div>
               <div>
                 <span>Fecha</span>

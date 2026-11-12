@@ -311,3 +311,69 @@ async fn pagos_por_metodo(conn: &libsql::Connection, rango: &RangoFechas) -> Vec
     }
     lista
 }
+
+#[derive(serde::Serialize)]
+pub struct CompraDelPeriodo {
+    pub id: i64,
+    pub folio: String,
+    pub fecha_compra: String,
+    pub proveedor: String,
+    pub proveedor_documento: Option<String>,
+    pub tipo_comprobante: Option<String>,
+    pub factura_numero: Option<String>,
+    pub total: f64,
+    pub tipo_pago: String,
+    pub estado: String,
+    pub estado_pago: String,
+    pub saldo_pendiente: f64,
+    pub registrado_por: String,
+}
+
+/// GET /reportes/compras — las compras del período (por fecha de compra),
+/// con su comprobante y cómo se pagaron. Solo el administrador.
+pub async fn compras_por_rango(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<crate::models::auth::Claims>,
+    Query(rango): Query<RangoFechas>,
+) -> Result<Json<Vec<CompraDelPeriodo>>, (StatusCode, String)> {
+    if !crate::middleware_auth::es_admin(&claims) {
+        return Err((StatusCode::FORBIDDEN, "Solo el administrador ve las compras en Reportes.".into()));
+    }
+    let e500 = |e: libsql::Error| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    let conn = tenant.0.connect().map_err(e500)?;
+    let mut filas = conn
+        .query(
+            "SELECT c.id, c.folio, c.fecha_compra, COALESCE(p.nombre, ''), p.numero_documento,
+                    c.tipo_comprobante, c.factura_numero, CAST(COALESCE(c.total, 0) AS REAL),
+                    COALESCE(c.tipo_pago, ''), COALESCE(c.estado, ''), COALESCE(c.estado_pago, ''),
+                    CAST(COALESCE(c.saldo_pendiente, 0) AS REAL), COALESCE(u.nombre_completo, '')
+             FROM compras c
+             LEFT JOIN proveedores p ON p.id = c.proveedor_id
+             LEFT JOIN usuarios u ON u.id = c.usuario_id
+             WHERE substr(c.fecha_compra, 1, 10) BETWEEN ?1 AND ?2
+             ORDER BY c.fecha_compra DESC, c.id DESC",
+            libsql::params![rango.fecha_inicio, rango.fecha_fin],
+        )
+        .await
+        .map_err(e500)?;
+    let mut compras = Vec::new();
+    while let Some(f) = filas.next().await.map_err(e500)? {
+        let texto = |i: i32| f.get::<String>(i).ok().map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+        compras.push(CompraDelPeriodo {
+            id: f.get(0).unwrap_or_default(),
+            folio: f.get(1).unwrap_or_default(),
+            fecha_compra: f.get(2).unwrap_or_default(),
+            proveedor: f.get(3).unwrap_or_default(),
+            proveedor_documento: texto(4),
+            tipo_comprobante: texto(5),
+            factura_numero: texto(6),
+            total: f.get(7).unwrap_or_default(),
+            tipo_pago: f.get(8).unwrap_or_default(),
+            estado: f.get(9).unwrap_or_default(),
+            estado_pago: f.get(10).unwrap_or_default(),
+            saldo_pendiente: f.get(11).unwrap_or_default(),
+            registrado_por: f.get(12).unwrap_or_default(),
+        });
+    }
+    Ok(Json(compras))
+}
