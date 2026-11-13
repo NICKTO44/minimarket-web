@@ -84,6 +84,8 @@ export const MODULO_SIN_VUELTO = 'SIN_VUELTO';
 export const MODULO_CREDITOS_POR_CLIENTE = 'CREDITOS_POR_CLIENTE';
 // Descuento en la venta: en % o en soles, a un producto o al total.
 export const MODULO_DESCUENTO_VENTA = 'DESCUENTO_VENTA';
+// Códigos de barras: tandas de códigos aleatorios para imprimir en etiquetas (solo pantalla).
+export const MODULO_CODIGOS_BARRAS = 'CODIGOS_BARRAS';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
@@ -109,7 +111,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE, MODULO_DESCUENTO_VENTA];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE, MODULO_DESCUENTO_VENTA, MODULO_CODIGOS_BARRAS];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -273,6 +275,12 @@ export const MODULOS = [
     label: 'Catálogo de productos',
     descripcion:
       'Una pantalla con tus productos en tarjetas con foto: marca, nombre, N.° de parte, aplicación, precios, stock, código y unidad. Es solo para mirar (no vende ni edita) y sirve para que tus vendedores revisen rápido. El stock se actualiza solo según tu inventario. Las fotos se suben desde Productos.',
+  },
+  {
+    valor: MODULO_CODIGOS_BARRAS,
+    label: 'Códigos de barras',
+    descripcion:
+      'Una pantalla para crear códigos de barras en tandas (25, 50, 100 o los que quieras) y pegarlos en tus productos. Son aleatorios y no se repiten: ni entre tandas ni con los códigos de tus productos. Se imprimen en hoja A4, en etiquetadora de rollo o en la ticketera, y se descargan en Excel listos para Importar productos. No se guarda nada en el sistema.',
   },
   {
     valor: MODULO_FICHA_LIBRO,

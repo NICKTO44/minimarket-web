@@ -1,0 +1,77 @@
+/* Módulo "Códigos de barras". Las etiquetas (.ce-*) tienen su CSS en
+   utils/codigosBarras.js, el mismo para la vista previa y para imprimir. */
+
+.cb-panel {
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.cb-campos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 14px;
+}
+
+.cb-campos .pm-campo {
+  flex: 1 1 210px;
+}
+
+.cb-campos .pm-campo.cb-corto {
+  flex: 0 1 130px;
+}
+
+.cb-cantidad {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cb-cantidad input {
+  width: 90px;
+  flex: none;
+}
+
+.cb-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 11px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cb-nota {
+  margin: 12px 0 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--pm-tenue);
+}
+
+.cb-confirmar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.cb-confirmar span {
+  flex: 1 1 260px;
+}
+
+.cb-mensaje {
+  margin: 12px 0 0;
+}
+
+/* Vista previa: el tamaño real de cada etiqueta, con su contorno. */
+.cb-vista {
+  padding: 4mm;
+  overflow-x: auto;
+}
+
+.cb-vista .ce-eti {
+  outline: 1px dashed #cfd5db;
+  outline-offset: -1px;
+}

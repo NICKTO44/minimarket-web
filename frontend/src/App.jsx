@@ -43,6 +43,7 @@ import Ordenes from './pages/Ordenes/Ordenes';
 import Encargos from './pages/Encargos/Encargos';
 import Reparaciones from './pages/Reparaciones/Reparaciones';
 import Catalogo from './pages/Catalogo/Catalogo';
+import CodigosBarras from './pages/CodigosBarras/CodigosBarras';
 import Produccion from './pages/Produccion/Produccion';
 import Paquetes from './pages/Paquetes/Paquetes';
 import AvisosListos from './components/AvisosListos';
@@ -98,6 +99,7 @@ import {
   MODULO_LOGO_TICKET,
   MODULO_IMPRESION_DIRECTA,
   MODULO_CATALOGO,
+  MODULO_CODIGOS_BARRAS,
   MODULO_VEHICULOS,
   MODULO_ORDENES_SERVICIO,
   MODULO_PAQUETES,
@@ -141,6 +143,7 @@ const MODULO_DE_PANTALLA = {
   REPARACIONES: MODULO_REPARACIONES,
   PRODUCCION: MODULO_PRODUCCION,
   CATALOGO: MODULO_CATALOGO,
+  CODIGOS_BARRAS: MODULO_CODIGOS_BARRAS,
 };
 
 function App() {
@@ -859,6 +862,9 @@ function App() {
             compatibilidad={negocio.modulos.includes(MODULO_COMPATIBILIDAD)}
             tresPrecios={negocio.modulos.includes(MODULO_TRES_PRECIOS)}
           />
+        )}
+        {pantallaVisible === 'CODIGOS_BARRAS' && (
+          <CodigosBarras nombreTienda={nombreTienda} identificadorNegocio={tiendaRecordada?.identificador} />
         )}
         {pantallaVisible === 'PROVEEDORES' && (
           <Proveedores

@@ -30,6 +30,7 @@ import {
   Wheat,
   Smartphone,
   Images,
+  Barcode,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
@@ -62,6 +63,7 @@ export const GRUPOS_MENU = [
     items: [
       { id: 'PRODUCTOS', label: 'Productos', icono: Package },
       { id: 'CATALOGO', label: 'Catálogo', icono: Images, modulo: 'CATALOGO' },
+      { id: 'CODIGOS_BARRAS', label: 'Códigos de barras', icono: Barcode, modulo: 'CODIGOS_BARRAS' },
       { id: 'STOCK', label: 'Stock y Lotes', icono: Boxes },
       { id: 'PROVEEDORES', label: 'Proveedores', icono: Truck },
       { id: 'DEVOLUCIONES', label: 'Devoluciones', icono: Undo2 },
@@ -130,7 +132,7 @@ export function esVendedor(usuario) {
 export const PANTALLAS_CONFIGURABLES = [
   'POS', 'RESUMEN', 'CAJA', 'HISTORIAL_CAJA', 'CLIENTES', 'COTIZACIONES', 'CREDITOS', 'GUIAS',
   'ORDENES', 'VEHICULOS', 'ENCARGOS', 'REPARACIONES', 'MESAS', 'PREPARACION', 'CARTA',
-  'PRODUCTOS', 'CATALOGO', 'STOCK', 'PROVEEDORES', 'DEVOLUCIONES', 'PRODUCCION',
+  'PRODUCTOS', 'CATALOGO', 'CODIGOS_BARRAS', 'STOCK', 'PROVEEDORES', 'DEVOLUCIONES', 'PRODUCCION',
   'COMPROBANTES', 'REPORTES',
 ];
 
@@ -173,7 +175,7 @@ export const PANTALLAS_MESERO = ['MESAS', 'CARTA'];
 export const PANTALLAS_REPARTIDOR = ['MESAS'];
 export const PANTALLAS_PREPARACION = ['PREPARACION', 'CARTA'];
 /** Pantallas de Almacén, en cualquier rubro (el backend bloquea el resto). */
-export const PANTALLAS_ALMACEN = ['PRODUCTOS', 'CATALOGO', 'STOCK', 'PROVEEDORES', 'REPORTES', 'PRODUCCION'];
+export const PANTALLAS_ALMACEN = ['PRODUCTOS', 'CATALOGO', 'CODIGOS_BARRAS', 'STOCK', 'PROVEEDORES', 'REPORTES', 'PRODUCCION'];
 
 /** Nombre del rol para mostrar en el menú. */
 export function etiquetaRol(usuario) {

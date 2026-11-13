@@ -180,6 +180,11 @@ pub const MODULO_CREDITOS_POR_CLIENTE: &str = "CREDITOS_POR_CLIENTE";
 /// total se reparte entre las líneas). Solo es de pantalla: el servidor ya
 /// acepta el descuento de cada línea. Cualquier rubro lo puede encender.
 pub const MODULO_DESCUENTO_VENTA: &str = "DESCUENTO_VENTA";
+/// Códigos de barras: genera tandas de códigos aleatorios (EAN-13 o Code 128)
+/// y los imprime en etiquetas. Solo es una pantalla del frontend: no guarda
+/// nada en el servidor (solo lee los productos para no repetir códigos).
+/// Viene apagado; sirve para cualquier rubro.
+pub const MODULO_CODIGOS_BARRAS: &str = "CODIGOS_BARRAS";
 
 pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
 
@@ -246,6 +251,7 @@ const MODULOS: &[&str] = &[
     MODULO_SIN_VUELTO,
     MODULO_CREDITOS_POR_CLIENTE,
     MODULO_DESCUENTO_VENTA,
+    MODULO_CODIGOS_BARRAS,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
