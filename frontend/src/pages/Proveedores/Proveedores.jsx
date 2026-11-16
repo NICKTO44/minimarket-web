@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import BuscadorProducto from '../../components/BuscadorProducto';
 import { api } from '../../api/api';
 import { opcionesUnidad } from '../../utils/unidades';
 import { formatoCantidad } from '../../utils/medidas';
@@ -53,6 +54,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
   const [compraProveedorId, setCompraProveedorId] = useState('');
   const [compraItems, setCompraItems] = useState([]);
   const [compraProductoSel, setCompraProductoSel] = useState('');
+  const cantidadCompraRef = useRef(null);
   const [compraCantidad, setCompraCantidad] = useState('');
   const [compraPrecio, setCompraPrecio] = useState('');
   const [compraTipoPago, setCompraTipoPago] = useState('EFECTIVO');
@@ -952,20 +954,16 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
               )}
             </div>
             <div className="prov-agregar-item">
-              <select
-                value={compraProductoSel}
-                onChange={(e) => {
-                  setCompraProductoSel(e.target.value);
+              <BuscadorProducto
+                productos={productos}
+                valor={compraProductoSel}
+                onElegir={(id) => {
+                  setCompraProductoSel(id);
                   setCompraComo('');
+                  // Elegido el producto, se sigue con la cantidad.
+                  if (id) setTimeout(() => cantidadCompraRef.current?.focus(), 0);
                 }}
-              >
-                <option value="">Producto existente...</option>
-                {productos.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.codigo ? `${p.codigo} — ${p.nombre}` : p.nombre}
-                  </option>
-                ))}
-              </select>
+              />
               {(presPorProducto.get(parseInt(compraProductoSel, 10)) || []).length > 0 && (
                 <select value={compraComo} onChange={(e) => setCompraComo(e.target.value)} aria-label="Comprado por">
                   <option value="">Por unidad</option>
@@ -976,7 +974,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                   ))}
                 </select>
               )}
-              <input type="number" placeholder="Cant." value={compraCantidad} onChange={(e) => setCompraCantidad(e.target.value)} />
+              <input ref={cantidadCompraRef} type="number" placeholder="Cant." value={compraCantidad} onChange={(e) => setCompraCantidad(e.target.value)} />
               <input type="number" placeholder={compraComo ? `Precio ${compraComo.toLowerCase()}` : 'Precio'} value={compraPrecio} onChange={(e) => setCompraPrecio(e.target.value)} />
               <button onClick={agregarItemCompra}>+ Agregar</button>
             </div>
