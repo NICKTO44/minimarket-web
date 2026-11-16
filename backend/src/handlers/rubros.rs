@@ -185,6 +185,10 @@ pub const MODULO_DESCUENTO_VENTA: &str = "DESCUENTO_VENTA";
 /// nada en el servidor (solo lee los productos para no repetir códigos).
 /// Viene apagado; sirve para cualquier rubro.
 pub const MODULO_CODIGOS_BARRAS: &str = "CODIGOS_BARRAS";
+/// Ajustes y Kárdex: ajuste de inventario después de contar (por producto
+/// o por lote) y el kárdex de cada producto. Lo trae Farmacia; cualquier
+/// rubro lo puede encender.
+pub const MODULO_AJUSTES_KARDEX: &str = "AJUSTES_KARDEX";
 
 pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
 
@@ -252,6 +256,7 @@ const MODULOS: &[&str] = &[
     MODULO_CREDITOS_POR_CLIENTE,
     MODULO_DESCUENTO_VENTA,
     MODULO_CODIGOS_BARRAS,
+    MODULO_AJUSTES_KARDEX,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.
@@ -286,7 +291,7 @@ const RUBROS: &[(&str, &[&str], &[&str])] = &[
     ),
     (
         "FARMACIA",
-        &[MODULO_FICHA_MEDICAMENTO, MODULO_RECETAS, MODULO_ALTERNATIVAS, MODULO_PRESENTACIONES, MODULO_COMPRA_EXCEL],
+        &[MODULO_FICHA_MEDICAMENTO, MODULO_RECETAS, MODULO_ALTERNATIVAS, MODULO_PRESENTACIONES, MODULO_COMPRA_EXCEL, MODULO_AJUSTES_KARDEX],
         &[
             "UNIDAD", "TABLETA", "CAPSULA", "BLISTER", "CAJA", "FRASCO", "AMPOLLA", "VIAL", "SOBRE", "TUBO",
             "SUPOSITORIO", "OVULO", "PARCHE", "ML", "GRAMO", "PAQUETE",

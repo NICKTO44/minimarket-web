@@ -412,6 +412,9 @@ async fn main() {
             "/compras/excel/proveedor/:id",
             get(handlers::compra_excel::obtener).post(handlers::compra_excel::aprender),
         )
+        // Ajustes y Kárdex (módulo AJUSTES_KARDEX).
+        .route("/kardex/:producto_id", get(handlers::kardex::ver))
+        .route("/inventario/ajustes", post(handlers::kardex::ajustar))
         .route("/devoluciones-proveedor", post(handlers::devoluciones_proveedor::registrar_devolucion))
         .route("/devoluciones-proveedor", get(handlers::devoluciones_proveedor::listar_devoluciones))
         .route("/devoluciones-proveedor/:id/resolver", post(handlers::devoluciones_proveedor::resolver_devolucion))

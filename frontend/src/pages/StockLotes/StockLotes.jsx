@@ -3,6 +3,8 @@ import { api } from '../../api/api';
 import './StockLotes.css';
 import { confirmar } from '../../utils/confirmar';
 import ReporteVencidos from './ReporteVencidos';
+import AjusteInventario from './AjusteInventario';
+import Kardex from './Kardex';
 
 const HORIZONTES = [
   { dias: 7, label: '7 días' },
@@ -10,8 +12,9 @@ const HORIZONTES = [
   { dias: 30, label: '30 días' },
 ];
 
-export default function StockLotes({ esAdmin = false }) {
-  // 'alertas' = lotes por vencer; 'reporte' = reporte de vencidos (solo admin).
+export default function StockLotes({ esAdmin = false, kardex = false }) {
+  // 'alertas' = lotes por vencer; 'reporte' = reporte de vencidos (solo admin);
+  // 'ajuste' y 'kardex' = módulo Ajustes y Kárdex (solo admin).
   const [vista, setVista] = useState('alertas');
   const [horizonte, setHorizonte] = useState(15);
   const [lotes, setLotes] = useState([]);
@@ -86,10 +89,24 @@ export default function StockLotes({ esAdmin = false }) {
           <button type="button" role="tab" aria-selected={vista === 'reporte'} className={vista === 'reporte' ? 'activo' : ''} onClick={() => setVista('reporte')}>
             Reporte de vencidos
           </button>
+          {kardex && (
+            <>
+              <button type="button" role="tab" aria-selected={vista === 'ajuste'} className={vista === 'ajuste' ? 'activo' : ''} onClick={() => setVista('ajuste')}>
+                Ajuste de inventario
+              </button>
+              <button type="button" role="tab" aria-selected={vista === 'kardex'} className={vista === 'kardex' ? 'activo' : ''} onClick={() => setVista('kardex')}>
+                Kárdex
+              </button>
+            </>
+          )}
         </div>
       )}
 
-      {vista === 'reporte' && esAdmin ? (
+      {vista === 'ajuste' && esAdmin && kardex ? (
+        <AjusteInventario onAjustado={cargar} />
+      ) : vista === 'kardex' && esAdmin && kardex ? (
+        <Kardex />
+      ) : vista === 'reporte' && esAdmin ? (
         <ReporteVencidos />
       ) : (
       <>

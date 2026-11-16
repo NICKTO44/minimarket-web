@@ -996,6 +996,9 @@ pub async fn procesar_venta(
                 .await
                 .map_err(|e| (StatusCode::BAD_REQUEST, format!("Error al descontar stock: {}", e)))?;
             }
+            // Kárdex: una salida por producto, con el stock como quedó. Si la
+            // anotación falla, la venta sigue (el kárdex es solo informativo).
+            crate::handlers::kardex::anotar_venta(conn, venta_id, &folio, usuario_id, a_descontar.iter().chain(perecibles.iter())).await;
 
             // Detalles: un INSERT de varias filas (por tandas, por el límite de
             // parámetros de SQLite).

@@ -94,6 +94,7 @@ import {
   MODULO_COMPRA_EXCEL,
   MODULO_SIN_VUELTO,
   MODULO_DESCUENTO_VENTA,
+  MODULO_AJUSTES_KARDEX,
   MODULO_CREDITOS_POR_CLIENTE,
   MODULO_COMPROBANTE_CLASICO,
   MODULO_LOGO_TICKET,
@@ -855,7 +856,9 @@ function App() {
             onSinPrecioVisto={() => setProductosSinPrecio(false)}
           />
         )}
-        {pantallaVisible === 'STOCK' && <StockLotes esAdmin={conPermisosDeAdmin(usuarioActual)} />}
+        {pantallaVisible === 'STOCK' && (
+          <StockLotes esAdmin={conPermisosDeAdmin(usuarioActual)} kardex={negocio.modulos.includes(MODULO_AJUSTES_KARDEX)} />
+        )}
         {pantallaVisible === 'CATALOGO' && (
           <Catalogo
             fichaRepuesto={negocio.modulos.includes(MODULO_FICHA_REPUESTO)}

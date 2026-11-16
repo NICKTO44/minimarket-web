@@ -86,6 +86,8 @@ export const MODULO_CREDITOS_POR_CLIENTE = 'CREDITOS_POR_CLIENTE';
 export const MODULO_DESCUENTO_VENTA = 'DESCUENTO_VENTA';
 // Códigos de barras: tandas de códigos aleatorios para imprimir en etiquetas (solo pantalla).
 export const MODULO_CODIGOS_BARRAS = 'CODIGOS_BARRAS';
+// Ajustes y Kárdex: ajuste de inventario tras contar y kárdex por producto.
+export const MODULO_AJUSTES_KARDEX = 'AJUSTES_KARDEX';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
@@ -111,7 +113,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE, MODULO_DESCUENTO_VENTA, MODULO_CODIGOS_BARRAS];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE, MODULO_DESCUENTO_VENTA, MODULO_CODIGOS_BARRAS, MODULO_AJUSTES_KARDEX];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -366,6 +368,12 @@ export const MODULOS = [
       'Al cobrar en efectivo, se escribe con cuánto paga el cliente y el sistema calcula el vuelto. Si lo apagas, el cobro en efectivo es directo por el total, sin escribir nada (útil si a tu personal se le complica).',
   },
   {
+    valor: MODULO_AJUSTES_KARDEX,
+    label: 'Ajustes y Kárdex',
+    descripcion:
+      'En Stock y Lotes: "Ajuste de inventario" para corregir el stock después de contar (producto por producto o subiendo el Excel de Productos → Exportar con lo contado), con su motivo y quién lo hizo; y "Kárdex" con todas las entradas y salidas de cada producto y el saldo. Solo el administrador.',
+  },
+  {
     valor: MODULO_DESCUENTO_VENTA,
     label: 'Descuento en la venta',
     descripcion:
@@ -451,7 +459,7 @@ export const RUBROS = [
     label: 'Farmacia / Botica',
     descripcion: 'Medicamentos por principio activo, con lotes y vencimientos, venta por tableta, blíster o caja y control de recetas.',
     Icono: Pill,
-    modulos: [MODULO_FICHA_MEDICAMENTO, MODULO_RECETAS, MODULO_ALTERNATIVAS, MODULO_PRESENTACIONES, MODULO_COMPRA_EXCEL],
+    modulos: [MODULO_FICHA_MEDICAMENTO, MODULO_RECETAS, MODULO_ALTERNATIVAS, MODULO_PRESENTACIONES, MODULO_COMPRA_EXCEL, MODULO_AJUSTES_KARDEX],
     unidades: [
       'UNIDAD', 'TABLETA', 'CAPSULA', 'BLISTER', 'CAJA', 'FRASCO', 'AMPOLLA', 'VIAL', 'SOBRE', 'TUBO',
       'SUPOSITORIO', 'OVULO', 'PARCHE', 'ML', 'GRAMO', 'PAQUETE',

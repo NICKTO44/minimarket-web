@@ -320,6 +320,14 @@ export const api = {
   loteCrear: (data) => request('/lotes', { method: 'POST', body: JSON.stringify(data) }),
   lotesPorVencer: (dias) => request(`/lotes/por-vencer?dias=${dias}`),
   loteDescartar: (id) => request(`/lotes/${id}/descartar`, { method: 'POST' }),
+  // Ajustes y Kárdex
+  kardex: (productoId, desde, hasta) => {
+    const q = new URLSearchParams();
+    if (desde) q.set('desde', desde);
+    if (hasta) q.set('hasta', hasta);
+    return request(`/kardex/${productoId}${q.toString() ? `?${q}` : ''}`);
+  },
+  inventarioAjustar: (data) => request('/inventario/ajustes', { method: 'POST', body: JSON.stringify(data) }),
   lotesVentas: (id) => request(`/lotes/${id}/ventas`),
   medicamentosFichas: () => request('/medicamentos/fichas'),
   recetasLibro: (desde, hasta) => request(`/recetas?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`),

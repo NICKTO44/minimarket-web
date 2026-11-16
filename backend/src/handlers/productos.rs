@@ -366,6 +366,7 @@ pub async fn agregar_producto(
 // con productos de variantes en actualizar_producto.
 pub async fn actualizar_producto(
     Extension(tenant): Extension<Arc<TenantDb>>,
+    claims: Option<Extension<crate::models::auth::Claims>>,
     Path(id): Path<i64>,
     Json(payload): Json<ActualizarProducto>,
 ) -> Result<Json<ProductoResponse>, (StatusCode, String)> {
@@ -442,6 +443,14 @@ pub async fn actualizar_producto(
             "UPDATE productos SET controla_stock = ?1 WHERE id = ?2",
             libsql::params![controla as i64, id],
         ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    // Kárdex: el stock cambiado a mano al editar el producto.
+    if !lleva_vencimiento && (stock_a_guardar - stock_actual).abs() > 0.000_001 {
+        crate::handlers::kardex::anotar(
+            &conn, id, "AJUSTE", stock_a_guardar - stock_actual, stock_actual, stock_a_guardar,
+            claims.map(|c| c.0.sub), None, "Stock cambiado al editar el producto",
+        ).await;
     }
 
     if let Some(antes) = &antes_ganancias {

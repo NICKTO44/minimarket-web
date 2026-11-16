@@ -11,9 +11,11 @@ use crate::middleware_auth::exigir_admin;
 
 pub async fn agregar_lote(
     Extension(tenant): Extension<Arc<TenantDb>>,
+    claims: Option<Extension<Claims>>,
     Json(payload): Json<NuevoLote>,
 ) -> Result<Json<Lote>, StatusCode> {
     let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let stock_antes = crate::handlers::kardex::stock_de(&conn, payload.producto_id).await;
 
     // Reporte de ganancias encendido: el lote es mercadería que entra al
     // precio de compra del producto. Apagado, nada de esto se ejecuta.
@@ -38,6 +40,14 @@ pub async fn agregar_lote(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let id = conn.last_insert_rowid();
+    // Kárdex: lote agregado a mano (el trigger ya subió el stock).
+    let stock_despues = crate::handlers::kardex::stock_de(&conn, payload.producto_id).await;
+    crate::handlers::kardex::anotar(
+        &conn, payload.producto_id, "ENTRADA", stock_despues - stock_antes, stock_antes, stock_despues,
+        claims.map(|c| c.0.sub),
+        Some(numero_lote.clone().map(|n| format!("Lote {}", n)).unwrap_or_else(|| format!("Lote #{}", id))),
+        "Lote agregado a mano",
+    ).await;
 
     if let Some(antes) = &antes_ganancias {
         ganancias::conciliar(&conn, antes, &donde_ganancias, "LOTE", Some(id), false).await;
@@ -459,6 +469,8 @@ pub async fn ventas_de_lote(
 
 #[derive(serde::Serialize)]
 pub struct LoteVigente {
+    /// Para ajustar ese lote (Ajustes y Kárdex).
+    pub lote_id: i64,
     pub producto_id: i64,
     pub numero_lote: Option<String>,
     pub fecha_vencimiento: String,
@@ -471,7 +483,7 @@ pub async fn lotes_vigentes(Extension(tenant): Extension<Arc<TenantDb>>) -> Resu
     let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut rows = conn
         .query(
-            "SELECT producto_id, numero_lote, fecha_vencimiento, CAST(cantidad AS REAL)
+            "SELECT producto_id, numero_lote, fecha_vencimiento, CAST(cantidad AS REAL), id
              FROM lotes_producto WHERE activo = 1 AND cantidad > 0
              ORDER BY producto_id, fecha_vencimiento ASC",
             (),
@@ -481,6 +493,7 @@ pub async fn lotes_vigentes(Extension(tenant): Extension<Arc<TenantDb>>) -> Resu
     let mut lotes = Vec::new();
     while let Some(row) = rows.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
         lotes.push(LoteVigente {
+            lote_id: row.get(4).unwrap_or_default(),
             producto_id: row.get(0).unwrap_or_default(),
             numero_lote: row.get::<String>(1).ok().filter(|l| !l.trim().is_empty()),
             fecha_vencimiento: row.get(2).unwrap_or_default(),
