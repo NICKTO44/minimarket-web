@@ -74,8 +74,16 @@ export default function BuscadorProducto({ productos, valor, onElegir, placehold
             setAbierto(true);
             setActivo(0);
           }}
+          onClick={() => setAbierto(true)}
           onChange={(e) => {
-            setTexto(e.target.value);
+            // Con un producto ya elegido el campo muestra su nombre: lo que se
+            // escribe es una búsqueda nueva, no se pega al nombre.
+            let valorNuevo = e.target.value;
+            if (!abierto && elegido) {
+              const nombre = nombreDe(elegido);
+              valorNuevo = valorNuevo.startsWith(nombre) ? valorNuevo.slice(nombre.length) : valorNuevo.replace(nombre, '');
+            }
+            setTexto(valorNuevo);
             setActivo(0);
             setAbierto(true);
           }}

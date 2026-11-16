@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/api';
 import BuscadorProducto from '../../components/BuscadorProducto';
 import { ErrorDeArchivo, leerHoja } from '../../utils/hojas';
@@ -27,6 +27,8 @@ export default function AjusteInventario({ onAjustado }) {
   const [elegido, setElegido] = useState('');
   const [loteElegido, setLoteElegido] = useState('');
   const [contado, setContado] = useState('');
+  const contadoRef = useRef(null);
+  const loteRef = useRef(null);
 
   const traer = () =>
     Promise.all([api.productos(), api.lotesVigentes()])
@@ -124,10 +126,20 @@ export default function AjusteInventario({ onAjustado }) {
                 const p = productos.find((x) => String(x.id) === String(id));
                 const ls = p?.lleva_vencimiento ? porProducto.get(p.id) || [] : [];
                 setLoteElegido(ls.length === 1 ? String(ls[0].lote_id) : '');
+                // Se sigue con el lote (si hay que elegirlo) o con lo contado.
+                if (id) setTimeout(() => (p?.lleva_vencimiento && ls.length > 1 ? loteRef.current : contadoRef.current)?.focus(), 0);
               }}
             />
             {producto?.lleva_vencimiento && (
-              <select value={loteElegido} onChange={(e) => setLoteElegido(e.target.value)} aria-label="Lote">
+              <select
+                ref={loteRef}
+                value={loteElegido}
+                onChange={(e) => {
+                  setLoteElegido(e.target.value);
+                  if (e.target.value) setTimeout(() => contadoRef.current?.focus(), 0);
+                }}
+                aria-label="Lote"
+              >
                 <option value="">{lotesDelProducto.length ? 'Elige el lote…' : 'Sin lotes con stock'}</option>
                 {lotesDelProducto.map((l) => (
                   <option key={l.lote_id} value={l.lote_id}>
@@ -138,6 +150,7 @@ export default function AjusteInventario({ onAjustado }) {
             )}
             {sistema != null && <span className="aj-sistema">En sistema: <b>{sistema}</b></span>}
             <input
+              ref={contadoRef}
               type="number"
               min="0"
               step="any"

@@ -633,3 +633,9 @@
     grid-template-columns: 1fr;
   }
 }
+
+.kx-hueco td {
+  background: #f8fafc;
+  color: #64748b;
+  font-style: italic;
+}

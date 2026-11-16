@@ -4,15 +4,8 @@ import BuscadorProducto from '../../components/BuscadorProducto';
 import { escribirXlsx, TIPO_XLSX } from '../../utils/hojas';
 import { descargarArchivo } from '../../utils/pdfTicket';
 import { formatoCantidad } from '../../utils/medidas';
+import { filasDelKardex } from '../../utils/kardex';
 
-const TIPOS = {
-  VENTA: 'Venta',
-  ENTRADA: 'Entrada',
-  DEVOLUCION: 'Devolución',
-  SALIDA: 'Salida',
-  AJUSTE: 'Ajuste',
-  MERMA: 'Merma',
-};
 
 const fechaHora = (f) => {
   const [d, h] = String(f || '').split(' ');
@@ -55,15 +48,22 @@ export default function Kardex() {
     };
   }, [elegido, desde, hasta]);
 
+  // Filas a mostrar, de la más nueva a la más antigua. Donde el stock con que
+  // empieza un movimiento no es el saldo del anterior hubo cambios que no se
+  // anotaron (ventas o importaciones de antes de este módulo): se muestra la
+  // diferencia como "Sin registro". Lo mismo entre el último saldo y el stock
+  // de hoy (solo sin fecha "hasta"). Al final, el saldo inicial.
+  const filas = filasDelKardex(kardex, { hastaHoy: !hasta });
+
   const exportar = () => {
     const filas = [
       [`Kárdex: ${kardex.nombre}${kardex.codigo ? ` (${kardex.codigo})` : ''}`],
       [`Stock actual: ${kardex.stock_actual}`],
       [],
       ['Fecha', 'Tipo', 'Referencia', 'Entrada', 'Salida', 'Saldo', 'Usuario', 'Motivo'],
-      ...[...kardex.movimientos]
+      ...[...filas]
         .reverse()
-        .map((m) => [fechaHora(m.fecha_hora), TIPOS[m.tipo] || m.tipo, m.referencia || '', m.entrada || '', m.salida || '', m.saldo, m.usuario || '', m.motivo || '']),
+        .map((f) => [f.fecha ? fechaHora(f.fecha) : '', f.etiqueta, f.referencia || '', f.entrada || '', f.salida || '', f.saldo, f.usuario || '', f.motivo || '']),
     ];
     descargarArchivo(escribirXlsx(filas, { hoja: 'Kardex', anchos: [17, 12, 22, 10, 10, 10, 20, 28] }), `Kardex ${kardex.codigo || kardex.nombre}.xlsx`, {
       tipo: TIPO_XLSX,
@@ -127,20 +127,20 @@ export default function Kardex() {
                   </tr>
                 </thead>
                 <tbody>
-                  {kardex.movimientos.map((m) => (
-                    <tr key={m.id}>
-                      <td>{fechaHora(m.fecha_hora)}</td>
+                  {filas.map((f) => (
+                    <tr key={f.clave} className={f.hueco ? 'kx-hueco' : undefined}>
+                      <td>{f.fecha ? fechaHora(f.fecha) : '—'}</td>
                       <td>
-                        <span className={`kx-tipo kx-tipo-${m.tipo.toLowerCase()}`}>{TIPOS[m.tipo] || m.tipo}</span>
+                        <span className={`kx-tipo${f.tipo ? ` kx-tipo-${f.tipo.toLowerCase()}` : ''}`}>{f.etiqueta}</span>
                       </td>
-                      <td>{m.referencia || ''}</td>
-                      <td className="kx-num aj-sube">{num(m.entrada)}</td>
-                      <td className="kx-num aj-baja">{num(m.salida)}</td>
+                      <td>{f.referencia || ''}</td>
+                      <td className="kx-num aj-sube">{num(f.entrada)}</td>
+                      <td className="kx-num aj-baja">{num(f.salida)}</td>
                       <td className="kx-num">
-                        <b>{formatoCantidad(m.saldo)}</b>
+                        <b>{formatoCantidad(f.saldo)}</b>
                       </td>
-                      <td>{m.usuario || ''}</td>
-                      <td>{m.motivo || ''}</td>
+                      <td>{f.usuario || ''}</td>
+                      <td>{f.motivo || ''}</td>
                     </tr>
                   ))}
                 </tbody>
