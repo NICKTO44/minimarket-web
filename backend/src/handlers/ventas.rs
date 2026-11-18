@@ -707,6 +707,11 @@ pub async fn procesar_venta(
     // Solo se consultan si la venta los usa: una venta común hace las mismas
     // consultas de siempre.
     let mut especiales: Option<std::collections::HashMap<i64, crate::handlers::presentaciones::Especiales>> = None;
+    // Módulo "Elegir precio por mayor": el vendedor puede cobrar el precio por
+    // mayor desde la primera caja (o unidad), sin llegar a la cantidad.
+    let mayor_elegible = modulos
+        .as_deref()
+        .is_some_and(|m| m.split(',').any(|x| x.trim() == crate::handlers::rubros::MODULO_MAYOR_ELEGIBLE));
     if payload.productos.iter().any(|p| p.presentacion_id.is_some()) {
         let esp = crate::handlers::presentaciones::especiales_de(&conn, &ids).await;
         for p in payload.productos.iter_mut() {
@@ -731,7 +736,8 @@ pub async fn procesar_venta(
             let vale = |precio_presentacion: f64| {
                 (p.precio - crate::handlers::presentaciones::precio_unitario_de(precio_presentacion, factor)).abs() < 1e-6
             };
-            if revisar_precios && !vale(precio_pres) && !vale(precio_caja) {
+            let mayor_elegido = mayor_elegible && mayor_pres.is_some_and(|(_, precio_mayor)| precio_mayor > 0.0 && vale(precio_mayor));
+            if revisar_precios && !vale(precio_pres) && !vale(precio_caja) && !mayor_elegido {
                 return Err((
                     StatusCode::CONFLICT,
                     format!(
@@ -804,10 +810,11 @@ pub async fn procesar_venta(
             if especiales.is_none() {
                 especiales = Some(crate::handlers::presentaciones::especiales_de(&conn, &ids).await);
             }
-            let por_mayor = especiales
-                .as_ref()
-                .and_then(|e| e.get(&p.id))
-                .is_some_and(|e| crate::handlers::presentaciones::precio_por_volumen_valido(p.precio, p.cantidad, e));
+            let por_mayor = especiales.as_ref().and_then(|e| e.get(&p.id)).is_some_and(|e| {
+                crate::handlers::presentaciones::precio_por_volumen_valido(p.precio, p.cantidad, e)
+                    // Elegido por el vendedor: cualquier precio por mayor del producto.
+                    || (mayor_elegible && e.mayor.iter().any(|(_, precio)| (p.precio - precio).abs() < 1e-6))
+            });
             if !por_mayor {
                 let nombre = datos.2.clone().unwrap_or_else(|| p.nombre.clone());
                 return Err((

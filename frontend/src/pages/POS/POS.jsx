@@ -23,6 +23,7 @@ import { tituloPedido } from '../../utils/mesas';
 import { abreviaturaUnidad, etiquetaUnidad } from '../../utils/unidades';
 import { UNIDAD_PIE_TABLAR, formatoCantidad, formatoPrecio, leerCantidad, seVendeFraccionado, subtotalLinea } from '../../utils/medidas';
 import { aplicarDescuentos, textoDescuento } from '../../utils/descuentoVenta';
+import { conAutomaticos, conGratis } from '../../utils/cargosRapidos';
 import EditorDescuento from '../../components/DescuentoVenta';
 import CalculadoraPieTablar from '../../components/CalculadoraPieTablar';
 import CantidadFraccionada from '../../components/CantidadFraccionada';
@@ -174,16 +175,36 @@ function PrecioEditable({ valor, onCambiar, etiqueta }) {
 // clave es la de la presentación: dos toques suman un rollo más. Desde
 // `mayor_desde` presentaciones (3 cajas), cada una a su precio por mayor.
 const redondear6 = (n) => Math.round(n * 1e6) / 1e6;
-function lineaDePresentacion(producto, presentacion, n) {
+// `porMayor`: el vendedor la eligió "por mayor" (módulo MAYOR_ELEGIBLE): va
+// en su propia línea, al precio por mayor desde la primera.
+function lineaDePresentacion(producto, presentacion, n, porMayor = false) {
+  const precioCaja = precioPresentacionPara(presentacion, n, porMayor);
   return {
     ...producto,
-    clave: `pres-${presentacion.id}`,
+    clave: `pres-${presentacion.id}${porMayor ? '-mayor' : ''}`,
     presentacion,
     cantidadPresentacion: n,
     cantidad: redondear6(presentacion.factor * n),
-    precio: precioUnitarioDe(precioPresentacionPara(presentacion, n), presentacion.factor),
-    presentacionPorMayor: precioPresentacionPara(presentacion, n) !== presentacion.precio,
+    precio: precioUnitarioDe(precioCaja, presentacion.factor),
+    presentacionPorMayor: precioCaja !== presentacion.precio,
+    elegidoPorMayor: porMayor,
     detalle: detallePresentacion(presentacion.nombre, n),
+  };
+}
+
+// Por unidad "por mayor" elegido por el vendedor (módulo MAYOR_ELEGIBLE):
+// línea propia al precio de la escala, aunque no llegue a la cantidad.
+function lineaPorMayor(producto, escala) {
+  return {
+    ...producto,
+    clave: `mayor-${producto.id}-${escala.desde}`,
+    cantidad: 1,
+    precio: escala.precio,
+    precioNormal: producto.precio,
+    porMayor: true,
+    origenPrecio: 'mayor',
+    elegidoPorMayor: true,
+    descuentoMonto: 0,
   };
 }
 
@@ -367,6 +388,12 @@ export default function POS({
   // Módulo "Descuento en la venta": descuento en % o en soles a un producto
   // del carrito o al total.
   descuentos = false,
+  // Módulo "Elegir precio por mayor": la caja (o la unidad) por mayor sale
+  // como opción aparte y se cobra desde la primera.
+  mayorElegible = false,
+  // Módulo "Cargos rápidos": vaso, bolsa, servicio... como botones al cobrar,
+  // con los primeros gratis por venta o agregados solos en un horario.
+  cargosRapidos = false,
   // Lubricentro: placa y kilometraje en la venta, paquetes y el cobro de
   // una orden de servicio (viene de Órdenes de servicio).
   vehiculos = false,
@@ -407,6 +434,25 @@ export default function POS({
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 900px)').matches
   );
   const [productos, setProductos] = useState([]);
+  // Cargos rápidos (módulo CARGOS_RAPIDOS): la configuración y los que el
+  // vendedor quitó en esta venta (el automático no vuelve a entrar).
+  const [cargos, setCargos] = useState([]);
+  const cargosRef = useRef([]);
+  const cargosQuitadosRef = useRef(new Set());
+  const productosRef = useRef([]);
+  useEffect(() => {
+    productosRef.current = productos;
+  }, [productos]);
+  useEffect(() => {
+    if (!cargosRapidos) return;
+    api
+      .cargosRapidos()
+      .then((lista) => {
+        cargosRef.current = lista || [];
+        setCargos(lista || []);
+      })
+      .catch(() => {});
+  }, [cargosRapidos]);
   const productoPorId = useMemo(() => new Map(productos.map((p) => [p.id, p])), [productos]);
   const [imagenesFallidas, setImagenesFallidas] = useState(() => new Set());
   const [busqueda, setBusqueda] = useState('');
@@ -444,10 +490,19 @@ export default function POS({
     (cambio) =>
       setCarritoCrudo((prev) => {
         const nuevo = typeof cambio === 'function' ? cambio(prev) : cambio;
-        const conMayor =
+        const conPrecios =
           precioMayor || presentaciones
             ? conPrecioPorMayor(nuevo, opcionesRef.current, { mayor: precioMayor, presentaciones })
             : nuevo;
+        // Cargos rápidos: el de madrugada se agrega solo y los gratis se descuentan.
+        let conMayor = conPrecios;
+        if (cargosRef.current.length) {
+          if (conPrecios.length === 0) cargosQuitadosRef.current = new Set();
+          conMayor = conGratis(
+            conAutomaticos(conPrecios, cargosRef.current, productosRef.current, ahoraLima().slice(11, 16), cargosQuitadosRef.current),
+            cargosRef.current
+          );
+        }
         if (!descuentos) return conMayor;
         // Carrito vacío (venta cobrada o cancelada): se va el descuento al total.
         if (conMayor.length === 0) descTotalRef.current = null;
@@ -1144,7 +1199,12 @@ export default function POS({
     }
     setAvisoStock(null);
     // Con presentaciones (rollo, caja...): primero se elige cómo se lleva.
-    if (presentaciones && !suelto && opcionesVenta.get(producto.id)?.presentaciones.length) {
+    // Con "Elegir precio por mayor", también si solo tiene precio por mayor.
+    const opcionDe = opcionesVenta.get(producto.id);
+    if (
+      !suelto &&
+      ((presentaciones && opcionDe?.presentaciones.length) || (mayorElegible && precioMayor && opcionDe?.mayor.length))
+    ) {
       setProductoConPresentaciones(producto);
       return true;
     }
@@ -1185,15 +1245,33 @@ export default function POS({
   };
 
   // Elegida una presentación: entra (o suma una más) en su propia línea.
-  const agregarPresentacion = (presentacion) => {
+  const agregarPresentacion = (presentacion, porMayor = false) => {
     const producto = productoConPresentaciones;
     setProductoConPresentaciones(null);
     if (!producto) return;
-    agregarPresentacionDe(producto, presentacion);
+    agregarPresentacionDe(producto, presentacion, porMayor);
+  };
+  // Elegido "por unidad · por mayor": su propia línea (o una más).
+  const agregarPorMayor = (escala) => {
+    const producto = productoConPresentaciones;
+    setProductoConPresentaciones(null);
+    if (!producto) return;
+    const clave = `mayor-${producto.id}-${escala.desde}`;
+    const yaHay = carrito.find((i) => i.clave === clave)?.cantidad || 0;
+    if (disponibleDe(producto.id, clave) + 1e-6 < yaHay + 1) {
+      if (ofrecerAlternativas(producto)) return;
+      setAvisoStock({ texto: textoSinStock(producto.id, producto.nombre, disponibleDe(producto.id)) });
+      return;
+    }
+    setCarrito((prev) =>
+      prev.some((i) => i.clave === clave)
+        ? prev.map((i) => (i.clave === clave ? { ...i, cantidad: redondear3(i.cantidad + 1) } : i))
+        : [...prev, lineaPorMayor(producto, escala)]
+    );
   };
   // false si no alcanza el stock (no se agrega).
-  const agregarPresentacionDe = (producto, presentacion) => {
-    const clave = `pres-${presentacion.id}`;
+  const agregarPresentacionDe = (producto, presentacion, porMayor = false) => {
+    const clave = `pres-${presentacion.id}${porMayor ? '-mayor' : ''}`;
     const yaHay = carrito.find((i) => i.clave === clave)?.cantidadPresentacion || 0;
     if (disponibleDe(producto.id, clave) + 1e-6 < presentacion.factor * (yaHay + 1)) {
       if (ofrecerAlternativas(producto)) return false;
@@ -1205,10 +1283,12 @@ export default function POS({
       const existe = prev.find((i) => i.clave === clave);
       if (existe) {
         return prev.map((i) =>
-          i === existe ? { ...lineaDePresentacion(i, presentacion, existe.cantidadPresentacion + 1), descuentoMonto: i.descuentoMonto } : i
+          i === existe
+            ? { ...lineaDePresentacion(i, presentacion, existe.cantidadPresentacion + 1, porMayor), descuentoMonto: i.descuentoMonto }
+            : i
         );
       }
-      return [...prev, { ...lineaDePresentacion(producto, presentacion, 1), descuentoMonto: 0 }];
+      return [...prev, { ...lineaDePresentacion(producto, presentacion, 1, porMayor), descuentoMonto: 0 }];
     });
     return true;
   };
@@ -1452,7 +1532,9 @@ export default function POS({
         return;
       }
       setCarrito((prev) =>
-        prev.map((i) => (claveDe(i) === clave ? { ...lineaDePresentacion(i, i.presentacion, n), descuentoMonto: i.descuentoMonto } : i))
+        prev.map((i) =>
+          claveDe(i) === clave ? { ...lineaDePresentacion(i, i.presentacion, n, i.elegidoPorMayor), descuentoMonto: i.descuentoMonto } : i
+        )
       );
       return;
     }
@@ -1520,7 +1602,22 @@ export default function POS({
     if (agregarAlCarrito(producto)) fijarPrecio(producto.id, precio);
   };
 
-  const quitarDelCarrito = (clave) => setCarrito((prev) => prev.filter((i) => claveDe(i) !== clave));
+  // Botones de cargos rápidos (los que tienen producto activo; el automático
+  // también, por si se quiere agregar fuera de horario).
+  const botonesCargos = useMemo(
+    () =>
+      cargos
+        .map((cargo) => ({ cargo, producto: productos.find((p) => p.id === cargo.producto_id) }))
+        .filter((c) => c.producto),
+    [cargos, productos]
+  );
+  const quitarDelCarrito = (clave) =>
+    setCarrito((prev) => {
+      // Un cargo automático quitado a mano no vuelve en esta venta.
+      const quitada = prev.find((i) => claveDe(i) === clave);
+      if (quitada?.cargoAutomatico) cargosQuitadosRef.current.add(quitada.id);
+      return prev.filter((i) => claveDe(i) !== clave);
+    });
 
   // Alternativa elegida: si venía de una línea del carrito, la reemplaza con
   // la misma cantidad (hasta donde alcance el stock); si no, se agrega.
@@ -1970,7 +2067,7 @@ export default function POS({
           cantidad: i.cantidad,
           precio: i.precio,
           // Solo las líneas con descuento (p. ej. de un paquete) lo muestran.
-          ...(i.descuentoMonto > 0 ? { descuento: i.descuentoMonto, motivoDescuento: i.paquete ? `Desc. ${i.paquete.nombre}` : i.descPropio ? `Desc. ${textoDescuento(i.descPropio)}` : null } : {}),
+          ...(i.descuentoMonto > 0 ? { descuento: i.descuentoMonto, motivoDescuento: i.paquete ? `Desc. ${i.paquete.nombre}` : i.descPropio?.gratis ? `${i.descPropio.gratis} gratis` : i.descPropio ? `Desc. ${textoDescuento(i.descPropio)}` : null } : {}),
           // Venta en tabla: código interno y precio sin IGV (de lo cobrado) en el ticket y la hoja.
           ...(ventaTabla
             ? {
@@ -2925,6 +3022,8 @@ export default function POS({
                   <span className="pos-carrito-item-detalle">
                     {item.paquete
                       ? `Paquete ${item.paquete.nombre}`
+                      : item.descPropio?.gratis
+                        ? `${formatoCantidad(item.descPropio.gratis)} gratis`
                       : item.descPropio
                         ? `Descuento ${textoDescuento(item.descPropio)}${item.descTotalParte > 0 ? ' + al total' : ''}`
                         : item.descTotalParte > 0 && item.descuentoMonto === item.descTotalParte
@@ -2933,7 +3032,7 @@ export default function POS({
                     · −S/ {item.descuentoMonto.toFixed(2)}
                   </span>
                 )}
-                {descuentos && !item.paquete && !enCambio && !cobrandoPedido && editandoDescuento !== claveDe(item) && (
+                {descuentos && !item.paquete && !item.descPropio?.gratis && !enCambio && !cobrandoPedido && editandoDescuento !== claveDe(item) && (
                   <button type="button" className="pos-descuento-boton" onClick={() => setEditandoDescuento(claveDe(item))}>
                     🏷 {item.descPropio ? 'Cambiar descuento' : 'Descuento'}
                   </button>
@@ -2982,7 +3081,7 @@ export default function POS({
                 {item.presentacion ? (
                   // Rollo, caja...: su precio fijo y cuánto es en la unidad del producto.
                   <span className="pos-carrito-item-precio">
-                    S/ {Number(precioPresentacionPara(item.presentacion, item.cantidadPresentacion)).toFixed(2)} c/u
+                    S/ {Number(precioPresentacionPara(item.presentacion, item.cantidadPresentacion, item.elegidoPorMayor)).toFixed(2)} c/u
                     {item.presentacionPorMayor && ' (por mayor)'} · {formatoCantidad(item.cantidad)}{' '}
                     {abreviaturaUnidad(item.unidad_medida)} · S/ {subtotalLinea(item.precio, item.cantidad).toFixed(2)}
                   </span>
@@ -3114,6 +3213,25 @@ export default function POS({
             </div>
           ) : (
             <>
+              {cargosRapidos && botonesCargos.length > 0 && !cobrandoPedido && !enCambio && (
+                <div className="pos-cargos" aria-label="Cargos rápidos">
+                  {botonesCargos.map(({ cargo, producto }) => (
+                    <button
+                      key={producto.id}
+                      type="button"
+                      className="pos-cargo"
+                      onClick={() => agregarAlCarrito(producto, { suelto: true })}
+                      title={cargo.gratis_por_venta > 0 ? `Los primeros ${cargo.gratis_por_venta} de cada venta van gratis` : undefined}
+                    >
+                      + {producto.nombre}
+                      <small>
+                        S/ {formatoPrecio(producto.precio)}
+                        {cargo.gratis_por_venta > 0 && ` · ${formatoCantidad(cargo.gratis_por_venta)} gratis`}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              )}
               {descuentos && carrito.length > 0 && !cobrandoPedido && (
                 <div className="pos-descuento-total">
                   {editandoDescuento === 'TOTAL' ? (
@@ -3632,7 +3750,7 @@ export default function POS({
       {productoConPresentaciones && (
         <ElegirPresentacion
           producto={productoConPresentaciones}
-          presentaciones={opcionesVenta.get(productoConPresentaciones.id)?.presentaciones || []}
+          presentaciones={(presentaciones && opcionesVenta.get(productoConPresentaciones.id)?.presentaciones) || []}
           escalas={escalasDe(opcionesVenta.get(productoConPresentaciones.id), productoConPresentaciones.precio, {
             mayor: precioMayor,
             presentaciones,
@@ -3644,6 +3762,8 @@ export default function POS({
             agregarAlCarrito(producto, { suelto: true });
           }}
           onPresentacion={agregarPresentacion}
+          mayorElegible={mayorElegible}
+          onPorMayor={agregarPorMayor}
           onCerrar={() => setProductoConPresentaciones(null)}
         />
       )}

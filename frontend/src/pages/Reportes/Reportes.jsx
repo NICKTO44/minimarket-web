@@ -5,6 +5,7 @@ import './Reportes.css';
 import { nombreMetodo, partesDelPago } from '../../utils/metodoPago';
 import { fechaHoraLima, hoyLima } from '../../utils/formato';
 import Ganancias from './Ganancias';
+import GananciasPeriodo from './GananciasPeriodo';
 import MargenPlatos from './MargenPlatos';
 import VentasEditorial from './VentasEditorial';
 import VerComprobanteVenta from '../../components/VerComprobanteVenta';
@@ -18,8 +19,10 @@ const NOMBRE_EN_REPORTE = {
 // El día de hoy en Perú (el servidor corta los reportes en esa hora).
 const hoy = () => hoyLima();
 
+// `hasta`: cuántos días antes de hoy termina (Ayer: de -1 a -1).
 const RANGOS_RAPIDOS = [
   { label: 'Hoy', dias: 0 },
+  { label: 'Ayer', dias: 1, hasta: 1 },
   { label: '7 días', dias: 6 },
   { label: '30 días', dias: 29 },
 ];
@@ -60,6 +63,9 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
   const [fechaFin, setFechaFin] = useState(hoy());
   const [estadisticas, setEstadisticas] = useState(null);
   const [productosVendidos, setProductosVendidos] = useState([]);
+  const [masVendidosCategoria, setMasVendidosCategoria] = useState([]);
+  // Ganancias: por mes (con gastos) o por días (hoy, ayer, semana, fechas).
+  const [gananciasPor, setGananciasPor] = useState('MES');
   const [ventas, setVentas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState(null);
@@ -88,11 +94,13 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
       api.reportesEstadisticas(fechaInicio, fechaFin),
       api.reportesProductosVendidos(fechaInicio, fechaFin),
       api.reportesVentas(fechaInicio, fechaFin),
+      api.reportesMasVendidosPorCategoria(fechaInicio, fechaFin).catch(() => []),
     ])
-      .then(([e, p, v]) => {
+      .then(([e, p, v, c]) => {
         setEstadisticas(e);
         setProductosVendidos(p);
         setVentas(v);
+        setMasVendidosCategoria(c || []);
       })
       .catch((err) => setMensaje({ tipo: 'error', texto: err.message }))
       .finally(() => setCargando(false));
@@ -160,9 +168,9 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
   };
   const alternarVenta = (id) => setVentaAbierta((actual) => (actual === id ? null : id));
 
-  const aplicarRangoRapido = (dias) => {
+  const aplicarRangoRapido = (dias, hasta = 0) => {
     setFechaInicio(hoyLima(-dias));
-    setFechaFin(hoyLima());
+    setFechaFin(hoyLima(-hasta));
   };
 
   const pestanas = (ganancias || costeo || editoriales) && (
@@ -218,7 +226,15 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
           <h1>Reportes</h1>
         </div>
         {pestanas}
-        <Ganancias onVerSinPrecio={onVerSinPrecio} />
+        <div className="rep-rangos-rapidos gp-modo" role="group" aria-label="Ver ganancias por">
+          <button type="button" className={gananciasPor === 'MES' ? 'activo' : ''} onClick={() => setGananciasPor('MES')}>
+            Por mes
+          </button>
+          <button type="button" className={gananciasPor === 'DIAS' ? 'activo' : ''} onClick={() => setGananciasPor('DIAS')}>
+            Por días (hoy, ayer, semana…)
+          </button>
+        </div>
+        {gananciasPor === 'MES' ? <Ganancias onVerSinPrecio={onVerSinPrecio} /> : <GananciasPeriodo />}
       </div>
     );
   }
@@ -229,7 +245,11 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
         <h1>Reportes</h1>
         <div className="rep-rangos-rapidos">
           {RANGOS_RAPIDOS.map((r) => (
-            <button key={r.label} onClick={() => aplicarRangoRapido(r.dias)}>
+            <button
+              key={r.label}
+              className={fechaInicio === hoyLima(-r.dias) && fechaFin === hoyLima(-(r.hasta || 0)) ? 'activo' : ''}
+              onClick={() => aplicarRangoRapido(r.dias, r.hasta)}
+            >
               {r.label}
             </button>
           ))}
@@ -371,6 +391,29 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
               </table>
             </div>
           </div>
+
+          {masVendidosCategoria.length > 0 && (
+            <div className="rep-seccion">
+              <h2>Más vendidos por categoría</h2>
+              <div className="rep-top-categorias">
+                {masVendidosCategoria.map((c) => (
+                  <div key={c.categoria} className="rep-top-categoria">
+                    <h3>{c.categoria}</h3>
+                    <ol>
+                      {c.productos.map((p, i) => (
+                        <li key={i}>
+                          <span className="rep-top-nombre">{p.producto_nombre}</span>
+                          <span className="rep-top-cantidad">
+                            {Number(p.cantidad_vendida.toFixed(3))} · S/ {p.total_vendido.toFixed(2)}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="rep-seccion" ref={seccionVentas}>
             <h2>Ventas del período ({ventasVisibles.length})</h2>

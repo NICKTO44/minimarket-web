@@ -328,6 +328,9 @@ export const api = {
     return request(`/kardex/${productoId}${q.toString() ? `?${q}` : ''}`);
   },
   inventarioAjustar: (data) => request('/inventario/ajustes', { method: 'POST', body: JSON.stringify(data) }),
+  // Cargos rápidos (vaso, bolsa, servicio de madrugada)
+  cargosRapidos: () => request('/cargos-rapidos'),
+  cargosRapidosGuardar: (lista) => request('/configuracion/cargos-rapidos', { method: 'PUT', body: JSON.stringify(lista) }),
   lotesVentas: (id) => request(`/lotes/${id}/ventas`),
   medicamentosFichas: () => request('/medicamentos/fichas'),
   recetasLibro: (desde, hasta) => request(`/recetas?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`),
@@ -554,6 +557,9 @@ export const api = {
   },
   reportesVentas: (inicio, fin) => request(`/reportes/ventas?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   reportesProductosVendidos: (inicio, fin) => request(`/reportes/productos-vendidos?fecha_inicio=${inicio}&fecha_fin=${fin}`),
+  reportesMasVendidosPorCategoria: (inicio, fin) =>
+    request(`/reportes/mas-vendidos-por-categoria?fecha_inicio=${inicio}&fecha_fin=${fin}`),
+  reportesGananciasPeriodo: (desde, hasta) => request(`/reportes/ganancias/periodo?desde=${desde}&hasta=${hasta}`),
   reportesEstadisticas: (inicio, fin) => request(`/reportes/estadisticas?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   reportesCompras: (inicio, fin) => request(`/reportes/compras?fecha_inicio=${inicio}&fecha_fin=${fin}`),
   // Módulo "Reporte de ganancias" (solo administrador). mes: "2026-10".

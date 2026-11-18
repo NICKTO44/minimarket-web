@@ -15,10 +15,13 @@ export const precioUnitarioDe = (precioPresentacion, factor) => Math.round((prec
  * desde `mayor_desde` (3 cajas) vale `precio_mayor`. Igual que el servidor
  * (precio_presentacion_para).
  */
-export const precioPresentacionPara = (presentacion, n) =>
-  presentacion.mayor_desde > 0 && presentacion.precio_mayor > 0 && n + 1e-9 >= presentacion.mayor_desde
+export const precioPresentacionPara = (presentacion, n, elegidoPorMayor = false) =>
+  presentacion.mayor_desde > 0 && presentacion.precio_mayor > 0 && (elegidoPorMayor || n + 1e-9 >= presentacion.mayor_desde)
     ? presentacion.precio_mayor
     : presentacion.precio;
+
+/** ¿La presentación tiene precio por mayor? (para ofrecerla "por mayor" al vender). */
+export const tienePrecioMayor = (presentacion) => presentacion.mayor_desde > 0 && presentacion.precio_mayor > 0;
 
 /** "Rollo x 100 m", 2 -> "2 × Rollo x 100 m" (igual que lo guarda el servidor). */
 export const detallePresentacion = (nombre, cantidad) => `${cantidad} × ${nombre}`;

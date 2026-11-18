@@ -424,9 +424,11 @@ async fn main() {
         )
         .route("/reportes/ventas", get(handlers::reportes::ventas_por_rango))
         .route("/reportes/productos-vendidos", get(handlers::reportes::productos_mas_vendidos))
+        .route("/reportes/mas-vendidos-por-categoria", get(handlers::reportes::mas_vendidos_por_categoria))
         .route("/reportes/estadisticas", get(handlers::reportes::estadisticas_completas))
         .route("/reportes/compras", get(handlers::reportes::compras_por_rango))
         .route("/reportes/ganancias", get(handlers::ganancias::reporte))
+        .route("/reportes/ganancias/periodo", get(handlers::ganancias::periodo))
         .route("/ganancias/costos", get(handlers::ganancias::costos))
         .route("/ganancias/inventario", get(handlers::ganancias::inventario))
         // Restaurante: margen por plato (módulo COSTEO).
@@ -536,6 +538,9 @@ async fn main() {
         .route("/guias/:id/cdr", get(handlers::guias_directas::descargar_cdr))
         .route("/configuracion/guias", axum::routing::put(handlers::guias::guardar_config))
         .route("/configuracion/detraccion", axum::routing::put(handlers::detraccion::guardar_detraccion))
+        // Cargos rápidos (vaso, bolsa, servicio de madrugada): módulo CARGOS_RAPIDOS.
+        .route("/cargos-rapidos", get(handlers::cargos_rapidos::listar))
+        .route("/configuracion/cargos-rapidos", axum::routing::put(handlers::cargos_rapidos::guardar))
         // Ropa y calzado: tallas y colores, y cambio de prenda.
         .route("/modelos", post(handlers::variantes::crear_modelo))
         .route("/modelos/:id", axum::routing::put(handlers::variantes::actualizar_modelo))

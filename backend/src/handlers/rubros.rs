@@ -189,6 +189,12 @@ pub const MODULO_CODIGOS_BARRAS: &str = "CODIGOS_BARRAS";
 /// o por lote) y el kárdex de cada producto. Lo trae Farmacia; cualquier
 /// rubro lo puede encender.
 pub const MODULO_AJUSTES_KARDEX: &str = "AJUSTES_KARDEX";
+/// Cargos rápidos: vaso, bolsa, servicio... como botones al cobrar, con los
+/// primeros N gratis por venta o agregados solos en un horario.
+pub const MODULO_CARGOS_RAPIDOS: &str = "CARGOS_RAPIDOS";
+/// Elegir precio por mayor al vender: la caja (o la unidad) por mayor sale
+/// como opción aparte y se cobra desde la primera, sin llegar a la cantidad.
+pub const MODULO_MAYOR_ELEGIBLE: &str = "MAYOR_ELEGIBLE";
 
 pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
 
@@ -257,6 +263,8 @@ const MODULOS: &[&str] = &[
     MODULO_DESCUENTO_VENTA,
     MODULO_CODIGOS_BARRAS,
     MODULO_AJUSTES_KARDEX,
+    MODULO_CARGOS_RAPIDOS,
+    MODULO_MAYOR_ELEGIBLE,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.

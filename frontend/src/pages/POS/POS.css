@@ -2054,3 +2054,35 @@
     box-shadow: 0 -10px 12px -4px var(--pos-superficie);
   }
 }
+
+/* Cargos rápidos (vaso, bolsa, servicio): botones junto al total. */
+.pos-cargos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.pos-cargo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 6px 10px;
+  border: 1.5px solid #e4e6eb;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  color: #16181d;
+  cursor: pointer;
+}
+
+.pos-cargo:hover {
+  border-color: var(--color-primario);
+}
+
+.pos-cargo small {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+}

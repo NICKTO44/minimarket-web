@@ -778,6 +778,153 @@ pub async fn reporte(
     Ok(Json(ReporteGanancias { mes: clave(mes), meses, productos, devoluciones, productos_sin_precio }))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct FiltroPeriodo {
+    /// "AAAA-MM-DD" (días de Perú, ambos incluidos).
+    pub desde: String,
+    pub hasta: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GananciaPeriodo {
+    pub desde: String,
+    pub hasta: String,
+    /// Todo lo vendido en el periodo, menos las devoluciones.
+    pub vendido: f64,
+    pub vendido_con_costo: f64,
+    pub costo: f64,
+    pub ganancia: f64,
+    pub margen: Option<f64>,
+    pub sin_costo: f64,
+    pub devoluciones: DevolucionesMes,
+    pub productos: Vec<ProductoGanancia>,
+    pub estimado: bool,
+}
+
+/// GET /reportes/ganancias/periodo?desde=2026-11-17&hasta=2026-11-17 — la
+/// ganancia de las ventas de un día, una semana o las fechas que se elijan
+/// (sin gastos ni merma, que son del mes). Solo el administrador, con el
+/// módulo encendido.
+pub async fn periodo(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+    Query(filtro): Query<FiltroPeriodo>,
+) -> Resultado<GananciaPeriodo> {
+    exigir_admin(&claims)?;
+    let conn = tenant.0.connect().map_err(e500)?;
+    exigir_modulo(&conn).await?;
+    let dia = |t: &str| NaiveDate::parse_from_str(t.trim(), "%Y-%m-%d").ok();
+    let (Some(d1), Some(d2)) = (dia(&filtro.desde), dia(&filtro.hasta)) else {
+        return Err((StatusCode::BAD_REQUEST, "Fechas no válidas. Usa AAAA-MM-DD.".to_string()));
+    };
+    if d2 < d1 {
+        return Err((StatusCode::BAD_REQUEST, "La fecha final es anterior a la inicial.".to_string()));
+    }
+    if (d2 - d1).num_days() > 366 {
+        return Err((StatusCode::BAD_REQUEST, "Elige un periodo de hasta un año.".to_string()));
+    }
+    let desde = inicio_utc(d1);
+    let hasta = inicio_utc(d2 + Duration::days(1));
+
+    // Producto por producto (y de ahí el total).
+    let mut productos = Vec::new();
+    let (mut vendido, mut con_costo, mut costo_total, mut estimado) = (0.0, 0.0, 0.0, false);
+    let mut filas = conn
+        .query(
+            &format!(
+                "SELECT p.id, p.nombre, p.modelo_nombre, COALESCE(c.nombre, 'Sin categoría'), COALESCE(p.unidad_medida, 'UNIDAD'),
+                        CAST(SUM(dv.cantidad) AS REAL), CAST(SUM(dv.total_linea) AS REAL),
+                        CAST(SUM(CASE WHEN {costo} > 0 THEN dv.cantidad * {costo} ELSE 0 END) AS REAL),
+                        SUM(CASE WHEN {costo} > 0 OR {sin_stock} THEN 0 ELSE 1 END),
+                        SUM(CASE WHEN dv.costo_unitario IS NULL AND {costo} > 0 THEN 1 ELSE 0 END)
+                 FROM detalles_venta dv
+                 JOIN ventas v ON v.id = dv.venta_id
+                 JOIN productos p ON p.id = dv.producto_id
+                 LEFT JOIN categorias c ON c.id = p.categoria_id
+                 WHERE v.estado = 'COMPLETADA' AND v.fecha_hora >= ?1 AND v.fecha_hora < ?2
+                 GROUP BY p.id
+                 ORDER BY 7 DESC",
+                costo = COSTO,
+                sin_stock = SIN_STOCK
+            ),
+            libsql::params![desde.clone(), hasta.clone()],
+        )
+        .await
+        .map_err(actualizando)?;
+    while let Some(f) = filas.next().await.map_err(e500)? {
+        let v: f64 = f.get(6).unwrap_or(0.0);
+        let c: f64 = f.get(7).unwrap_or(0.0);
+        let sin_costo = f.get::<i64>(8).unwrap_or(0) > 0;
+        let est = f.get::<i64>(9).unwrap_or(0) > 0;
+        vendido += v;
+        if !sin_costo {
+            con_costo += v;
+            costo_total += c;
+        }
+        estimado |= est;
+        productos.push(ProductoGanancia {
+            producto_id: f.get(0).unwrap_or_default(),
+            nombre: f.get(1).unwrap_or_default(),
+            modelo: f.get::<String>(2).ok().filter(|m| !m.is_empty()),
+            categoria: f.get(3).unwrap_or_default(),
+            unidad: f.get(4).unwrap_or_default(),
+            cantidad: f.get(5).unwrap_or(0.0),
+            vendido: redondear_2(v),
+            costo: if sin_costo { None } else { Some(redondear_2(c)) },
+            ganancia: if sin_costo { None } else { Some(redondear_2(v - c)) },
+            estimado: est,
+        });
+    }
+    drop(filas);
+
+    // Devoluciones del periodo: restan lo vendido; el costo vuelve si volvió al stock.
+    let mut devoluciones = DevolucionesMes { monto: 0.0, costo_recuperado: 0.0 };
+    let mut filas = conn
+        .query(
+            &format!(
+                "SELECT CAST(COALESCE(SUM(dd.subtotal), 0) AS REAL),
+                        CAST(COALESCE(SUM(CASE WHEN {costo} > 0 OR {sin_stock} THEN dd.subtotal ELSE 0 END), 0) AS REAL),
+                        CAST(COALESCE(SUM(CASE WHEN dd.condicion = 'REVENTA' AND {costo} > 0 THEN dd.cantidad_devuelta * {costo} ELSE 0 END), 0) AS REAL)
+                 FROM detalles_devolucion dd
+                 JOIN devoluciones d ON d.id = dd.devolucion_id
+                 JOIN productos p ON p.id = dd.producto_id
+                 LEFT JOIN detalles_venta dv ON dv.id = dd.detalle_venta_id
+                 WHERE d.estado = 'PROCESADA' AND d.fecha_hora >= ?1 AND d.fecha_hora < ?2",
+                costo = COSTO,
+                sin_stock = SIN_STOCK
+            ),
+            libsql::params![desde, hasta],
+        )
+        .await
+        .map_err(actualizando)?;
+    if let Some(f) = filas.next().await.map_err(e500)? {
+        let (monto, monto_con_costo, costo): (f64, f64, f64) = (f.get(0).unwrap_or(0.0), f.get(1).unwrap_or(0.0), f.get(2).unwrap_or(0.0));
+        vendido -= monto;
+        con_costo -= monto_con_costo;
+        costo_total -= costo;
+        devoluciones = DevolucionesMes { monto: redondear_2(monto), costo_recuperado: redondear_2(costo) };
+    }
+    drop(filas);
+
+    let vendido = redondear_2(vendido);
+    let con_costo = redondear_2(con_costo);
+    let costo_total = redondear_2(costo_total);
+    let ganancia = redondear_2(con_costo - costo_total);
+    Ok(Json(GananciaPeriodo {
+        desde: d1.format("%Y-%m-%d").to_string(),
+        hasta: d2.format("%Y-%m-%d").to_string(),
+        vendido,
+        vendido_con_costo: con_costo,
+        costo: costo_total,
+        ganancia,
+        margen: Some(con_costo).filter(|v| *v > 0.005).map(|v| (ganancia / v * 1000.0).round() / 10.0),
+        sin_costo: redondear_2(vendido - con_costo),
+        devoluciones,
+        productos,
+        estimado,
+    }))
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;

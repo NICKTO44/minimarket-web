@@ -95,6 +95,8 @@ import {
   MODULO_SIN_VUELTO,
   MODULO_DESCUENTO_VENTA,
   MODULO_AJUSTES_KARDEX,
+  MODULO_MAYOR_ELEGIBLE,
+  MODULO_CARGOS_RAPIDOS,
   MODULO_CREDITOS_POR_CLIENTE,
   MODULO_COMPROBANTE_CLASICO,
   MODULO_LOGO_TICKET,
@@ -798,6 +800,8 @@ function App() {
               sinConexion={negocio.modulos.includes(MODULO_VENTA_SIN_CONEXION)}
               sinVuelto={negocio.modulos.includes(MODULO_SIN_VUELTO)}
               descuentos={negocio.modulos.includes(MODULO_DESCUENTO_VENTA)}
+              mayorElegible={negocio.modulos.includes(MODULO_MAYOR_ELEGIBLE)}
+              cargosRapidos={negocio.modulos.includes(MODULO_CARGOS_RAPIDOS)}
               vehiculos={negocio.modulos.includes(MODULO_VEHICULOS)}
               paquetes={negocio.modulos.includes(MODULO_PAQUETES)}
               ordenACargar={negocio.modulos.includes(MODULO_ORDENES_SERVICIO) ? ordenACargar : null}

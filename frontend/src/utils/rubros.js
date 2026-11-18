@@ -88,6 +88,10 @@ export const MODULO_DESCUENTO_VENTA = 'DESCUENTO_VENTA';
 export const MODULO_CODIGOS_BARRAS = 'CODIGOS_BARRAS';
 // Ajustes y Kárdex: ajuste de inventario tras contar y kárdex por producto.
 export const MODULO_AJUSTES_KARDEX = 'AJUSTES_KARDEX';
+// Elegir precio por mayor al vender: la caja por mayor como opción aparte.
+export const MODULO_MAYOR_ELEGIBLE = 'MAYOR_ELEGIBLE';
+// Cargos rápidos: vaso, bolsa, servicio... como botones al cobrar.
+export const MODULO_CARGOS_RAPIDOS = 'CARGOS_RAPIDOS';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
@@ -113,7 +117,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE, MODULO_DESCUENTO_VENTA, MODULO_CODIGOS_BARRAS, MODULO_AJUSTES_KARDEX];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE, MODULO_DESCUENTO_VENTA, MODULO_CODIGOS_BARRAS, MODULO_AJUSTES_KARDEX, MODULO_MAYOR_ELEGIBLE, MODULO_CARGOS_RAPIDOS];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -366,6 +370,18 @@ export const MODULOS = [
     label: 'Pedir con cuánto paga (vuelto)',
     descripcion:
       'Al cobrar en efectivo, se escribe con cuánto paga el cliente y el sistema calcula el vuelto. Si lo apagas, el cobro en efectivo es directo por el total, sin escribir nada (útil si a tu personal se le complica).',
+  },
+  {
+    valor: MODULO_CARGOS_RAPIDOS,
+    label: 'Cargos rápidos (vaso, bolsa, servicio)',
+    descripcion:
+      'Botones junto al total para agregar con un toque el vaso, la bolsa o un servicio. Cada uno puede llevar sus primeros gratis por venta (ej. 2 vasos gratis; desde el 3.º se cobran) y un horario en que se agrega solo (ej. servicio de madrugada de 00:00 a 05:00). Salen del stock como cualquier producto y suman en caja y reportes. Se configura en Configuración → Cargos rápidos.',
+  },
+  {
+    valor: MODULO_MAYOR_ELEGIBLE,
+    label: 'Elegir precio por mayor al vender',
+    descripcion:
+      'Lo que tiene precio por mayor sale dos veces al vender: "Caja x12 · por menor S/ 84" y "Caja x12 · por mayor S/ 72". El vendedor elige según el cliente y el de mayor se cobra desde la primera caja. Sin elegir, sigue pasando solo a por mayor desde la cantidad configurada. Va con Presentaciones o Precio por mayor.',
   },
   {
     valor: MODULO_AJUSTES_KARDEX,

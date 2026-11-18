@@ -16,7 +16,8 @@ import MiCuenta from '../../components/MiCuenta';
 import PantallasUsuario from '../../components/PantallasUsuario';
 import { etiquetaRol } from '../../utils/menu';
 import { etiquetaTasa, TASA_GENERAL } from '../../utils/igv';
-import { datosNegocio, MODULO_CAMBIOS, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
+import { datosNegocio, MODULO_CAMBIOS, MODULO_CARGOS_RAPIDOS, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
+import ConfiguracionCargos from './ConfiguracionCargos';
 import TarjetaRuc from '../../components/TarjetaRuc';
 import { useConsultaRuc } from '../../utils/useConsultaRuc';
 import { sugerirEn } from '../../utils/sugerencia';
@@ -350,6 +351,10 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
           onCambiado={alCambiarNegocio}
           onMensaje={setMensaje}
         />
+      )}
+
+      {vista === 'NEGOCIO' && formConfig && negocio.modulos.includes(MODULO_CARGOS_RAPIDOS) && (
+        <ConfiguracionCargos onMensaje={setMensaje} />
       )}
 
       {vista === 'NEGOCIO' && formConfig && negocio.modulos.includes(MODULO_DETRACCION) && (

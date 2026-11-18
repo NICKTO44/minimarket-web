@@ -190,6 +190,60 @@ pub async fn productos_mas_vendidos(
     Ok(Json(productos))
 }
 
+#[derive(serde::Serialize)]
+pub struct CategoriaMasVendidos {
+    pub categoria: String,
+    pub productos: Vec<ProductoVendido>,
+}
+
+/// GET /reportes/mas-vendidos-por-categoria?fecha_inicio&fecha_fin — los 5
+/// más vendidos (por cantidad) de cada categoría en el periodo; las
+/// categorías ordenadas por lo que vendieron.
+pub async fn mas_vendidos_por_categoria(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Query(rango): Query<RangoFechas>,
+) -> Result<Json<Vec<CategoriaMasVendidos>>, StatusCode> {
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut rows = conn
+        .query(
+            "WITH vendidos AS (
+                 SELECT COALESCE(c.nombre, 'Sin categoría') AS categoria, p.nombre AS nombre,
+                        SUM(dv.cantidad) AS cantidad, SUM(dv.total_linea) AS total
+                 FROM detalles_venta dv
+                 JOIN productos p ON dv.producto_id = p.id
+                 LEFT JOIN categorias c ON c.id = p.categoria_id
+                 JOIN ventas v ON dv.venta_id = v.id
+                 WHERE date(v.fecha_hora, '-5 hours') BETWEEN ?1 AND ?2 AND v.estado = 'COMPLETADA'
+                 GROUP BY p.id
+             ),
+             puestos AS (
+                 SELECT *, ROW_NUMBER() OVER (PARTITION BY categoria ORDER BY cantidad DESC, total DESC) AS puesto,
+                        SUM(total) OVER (PARTITION BY categoria) AS total_categoria
+                 FROM vendidos
+             )
+             SELECT categoria, nombre, CAST(cantidad AS REAL), CAST(total AS REAL)
+             FROM puestos WHERE puesto <= 5
+             ORDER BY total_categoria DESC, categoria, puesto",
+            libsql::params![rango.fecha_inicio.clone(), rango.fecha_fin.clone()],
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut lista: Vec<CategoriaMasVendidos> = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
+        let categoria: String = row.get(0).unwrap_or_default();
+        let producto = ProductoVendido {
+            producto_nombre: row.get(1).unwrap_or_default(),
+            cantidad_vendida: row.get(2).unwrap_or_default(),
+            total_vendido: row.get(3).unwrap_or_default(),
+        };
+        match lista.last_mut() {
+            Some(ultima) if ultima.categoria == categoria => ultima.productos.push(producto),
+            _ => lista.push(CategoriaMasVendidos { categoria, productos: vec![producto] }),
+        }
+    }
+    Ok(Json(lista))
+}
+
 pub async fn estadisticas_completas(
     Extension(tenant): Extension<Arc<TenantDb>>,
     Extension(claims): Extension<crate::models::auth::Claims>,
