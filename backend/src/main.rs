@@ -249,6 +249,12 @@ async fn main() {
         // El sistema como app instalable, con el nombre y logo de cada negocio.
         .route("/publico/app/:direccion/manifest", get(handlers::app_instalable::manifiesto))
         .route("/publico/app/:direccion/icono/:tam", get(handlers::app_instalable::icono))
+        // App Monspeet (avisos de Yape y Plin): el celular entra con su clave,
+        // no con usuario (handlers/avisos_pago.rs).
+        .route("/dispositivo/yo", get(handlers::avisos_pago::yo))
+        .route("/dispositivo/pagos", post(handlers::avisos_pago::recibir))
+        .route("/dispositivo/pagos/esperar", get(handlers::avisos_pago::esperar))
+        .route("/dispositivo/pagos/hoy", get(handlers::avisos_pago::hoy_dispositivo))
         .merge(Router::new().nest_service("/uploads", ServeDir::new("uploads")).layer(axum::middleware::from_fn(cache_de_fotos)))
         .merge(rutas_autenticacion);
 
@@ -541,6 +547,9 @@ async fn main() {
         // Cargos rápidos (vaso, bolsa, servicio de madrugada): módulo CARGOS_RAPIDOS.
         .route("/cargos-rapidos", get(handlers::cargos_rapidos::listar))
         .route("/configuracion/cargos-rapidos", axum::routing::put(handlers::cargos_rapidos::guardar))
+        .route("/avisos-pago/hoy", get(handlers::avisos_pago::hoy))
+        .route("/avisos-pago/dispositivos", get(handlers::avisos_pago::dispositivos).post(handlers::avisos_pago::vincular))
+        .route("/avisos-pago/dispositivos/:id", axum::routing::delete(handlers::avisos_pago::quitar))
         // Ropa y calzado: tallas y colores, y cambio de prenda.
         .route("/modelos", post(handlers::variantes::crear_modelo))
         .route("/modelos/:id", axum::routing::put(handlers::variantes::actualizar_modelo))

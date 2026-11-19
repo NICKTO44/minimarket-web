@@ -275,6 +275,12 @@ impl RegistroTiendas {
         Ok(db)
     }
 
+    /// Deja lista en la caché la base de una tienda (las pruebas usan una
+    /// base local en vez de Turso).
+    pub async fn usar_conexion(&self, tienda_id: i64, db: Arc<libsql::Database>) {
+        self.conexiones.write().await.insert(tienda_id, db);
+    }
+
     /// Descarta la conexión cacheada de una tienda (por ejemplo, si se
     /// rotó su token de Turso y la conexión vieja ya no sirve). La
     /// siguiente petición la reconstruye desde cero con los datos

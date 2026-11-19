@@ -331,6 +331,10 @@ export const api = {
   // Cargos rápidos (vaso, bolsa, servicio de madrugada)
   cargosRapidos: () => request('/cargos-rapidos'),
   cargosRapidosGuardar: (lista) => request('/configuracion/cargos-rapidos', { method: 'PUT', body: JSON.stringify(lista) }),
+  // Avisos de Yape y Plin (módulo AVISOS_PAGO): celulares de la app Monspeet.
+  avisosDispositivos: () => request('/avisos-pago/dispositivos'),
+  avisosDispositivoQuitar: (id) => request(`/avisos-pago/dispositivos/${id}`, { method: 'DELETE' }),
+  avisosPagosHoy: () => request('/avisos-pago/hoy'),
   lotesVentas: (id) => request(`/lotes/${id}/ventas`),
   medicamentosFichas: () => request('/medicamentos/fichas'),
   recetasLibro: (desde, hasta) => request(`/recetas?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`),

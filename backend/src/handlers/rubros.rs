@@ -195,6 +195,9 @@ pub const MODULO_CARGOS_RAPIDOS: &str = "CARGOS_RAPIDOS";
 /// Elegir precio por mayor al vender: la caja (o la unidad) por mayor sale
 /// como opción aparte y se cobra desde la primera, sin llegar a la cantidad.
 pub const MODULO_MAYOR_ELEGIBLE: &str = "MAYOR_ELEGIBLE";
+/// Avisos de Yape y Plin: la app Monspeet lee los pagos en el celular del
+/// Yape y los dice en voz alta en el celular de la tienda.
+pub const MODULO_AVISOS_PAGO: &str = "AVISOS_PAGO";
 
 pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
 
@@ -265,6 +268,7 @@ const MODULOS: &[&str] = &[
     MODULO_AJUSTES_KARDEX,
     MODULO_CARGOS_RAPIDOS,
     MODULO_MAYOR_ELEGIBLE,
+    MODULO_AVISOS_PAGO,
 ];
 
 /// Rubro de un negocio que no eligió ninguno y no atiende en mesas.

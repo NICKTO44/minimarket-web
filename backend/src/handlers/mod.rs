@@ -65,3 +65,4 @@ pub mod compra_rapida;
 pub mod compra_excel;
 pub mod kardex;
 pub mod cargos_rapidos;
+pub mod avisos_pago;

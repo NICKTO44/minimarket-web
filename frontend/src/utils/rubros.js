@@ -92,6 +92,8 @@ export const MODULO_AJUSTES_KARDEX = 'AJUSTES_KARDEX';
 export const MODULO_MAYOR_ELEGIBLE = 'MAYOR_ELEGIBLE';
 // Cargos rápidos: vaso, bolsa, servicio... como botones al cobrar.
 export const MODULO_CARGOS_RAPIDOS = 'CARGOS_RAPIDOS';
+// Avisos de Yape y Plin: la app Monspeet avisa en voz alta cada pago recibido.
+export const MODULO_AVISOS_PAGO = 'AVISOS_PAGO';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,
@@ -117,7 +119,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE, MODULO_DESCUENTO_VENTA, MODULO_CODIGOS_BARRAS, MODULO_AJUSTES_KARDEX, MODULO_MAYOR_ELEGIBLE, MODULO_CARGOS_RAPIDOS];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE, MODULO_DESCUENTO_VENTA, MODULO_CODIGOS_BARRAS, MODULO_AJUSTES_KARDEX, MODULO_MAYOR_ELEGIBLE, MODULO_CARGOS_RAPIDOS, MODULO_AVISOS_PAGO];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -376,6 +378,12 @@ export const MODULOS = [
     label: 'Cargos rápidos (vaso, bolsa, servicio)',
     descripcion:
       'Botones junto al total para agregar con un toque el vaso, la bolsa o un servicio. Cada uno puede llevar sus primeros gratis por venta (ej. 2 vasos gratis; desde el 3.º se cobran) y un horario en que se agrega solo (ej. servicio de madrugada de 00:00 a 05:00). Salen del stock como cualquier producto y suman en caja y reportes. Se configura en Configuración → Cargos rápidos.',
+  },
+  {
+    valor: MODULO_AVISOS_PAGO,
+    label: 'Avisos de Yape y Plin',
+    descripcion:
+      'Para no caer en capturas falsas: con la app Monspeet en el celular donde llegan los Yape (aunque esté lejos de la tienda), cada pago que entra suena al instante en el celular de la tienda: "Carlos te yapeó 2 soles", con el código de seguridad. Los celulares se vinculan desde la app y se ven en Configuración → Avisos de Yape y Plin.',
   },
   {
     valor: MODULO_MAYOR_ELEGIBLE,
