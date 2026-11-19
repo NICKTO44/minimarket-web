@@ -47,6 +47,7 @@ import CodigosBarras from './pages/CodigosBarras/CodigosBarras';
 import Produccion from './pages/Produccion/Produccion';
 import Paquetes from './pages/Paquetes/Paquetes';
 import AvisosListos from './components/AvisosListos';
+import AvisosYape from './components/AvisosYape';
 import DireccionNegocio from './components/DireccionNegocio';
 import { irADireccion, leerDireccion } from './utils/direccion';
 import { usarAppDelNegocio } from './utils/appInstalable';
@@ -89,6 +90,7 @@ import {
   MODULO_MENU_ARRIBA,
   MODULO_VENTA_FUERA_INVENTARIO,
   MODULO_VENTA_SIN_CONEXION,
+  MODULO_AVISOS_PAGO,
   MODULO_VARIAS_CAJAS,
   MODULO_INGRESO_RAPIDO,
   MODULO_COMPRA_EXCEL,
@@ -740,6 +742,8 @@ function App() {
             onRenovar={() => setPantalla('SUSCRIPCION')}
           />
         )}
+        {/* Avisos de Yape y Plin (módulo AVISOS_PAGO), discretos y sin sonido */}
+        {negocio.modulos.includes(MODULO_AVISOS_PAGO) && !soloPreparacion && !soloRepartidor && <AvisosYape />}
         {negocio.modulos.includes(MODULO_VENTA_SIN_CONEXION) && <EstadoSinConexion nombreTienda={nombreTienda} identificadorNegocio={tiendaRecordada?.identificador} />}
         {pantallaVisible === 'MESAS' && soloRepartidor && (
           <MisEntregas nombreTienda={nombreTienda} onCobrar={handleCobrarPedido} />

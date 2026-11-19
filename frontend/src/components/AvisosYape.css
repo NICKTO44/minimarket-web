@@ -1,0 +1,128 @@
+/* Avisos de Yape y Plin: tarjetas pequeñas flotantes, abajo a la derecha,
+   con el mismo estilo discreto que el aviso de vencimiento del plan. */
+.avisos-yape {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 901;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  pointer-events: none;
+}
+
+/* Si también está el aviso de vencimiento, van encima de él. */
+.aviso-venc ~ .avisos-yape {
+  bottom: 150px;
+}
+
+.aviso-yape {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 10px 12px 14px;
+  border: 1px solid #ececef;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(17, 24, 39, 0.1), 0 2px 6px rgba(17, 24, 39, 0.06);
+  color: #1f2937;
+  animation: aviso-yape-entrar 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes aviso-yape-entrar {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Punto morado para Yape, celeste para Plin, verde para otros. */
+.aviso-yape-punto {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.15);
+}
+
+.aviso-yape-yape .aviso-yape-punto {
+  background: #742284;
+  box-shadow: 0 0 0 4px rgba(116, 34, 132, 0.15);
+}
+
+.aviso-yape-plin .aviso-yape-punto {
+  background: #00b2c8;
+  box-shadow: 0 0 0 4px rgba(0, 178, 200, 0.15);
+}
+
+.aviso-yape-cuerpo {
+  flex: 1;
+  min-width: 0;
+}
+
+.aviso-yape-titulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.aviso-yape-texto {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #6b7280;
+  overflow-wrap: anywhere;
+}
+
+.aviso-yape-texto strong {
+  color: #1f2937;
+}
+
+.aviso-yape-cerrar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -2px 0 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+}
+
+.aviso-yape-cerrar:hover {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+/* Celular: encima de la barra de navegación inferior. */
+@media (max-width: 899px) {
+  .avisos-yape {
+    right: 12px;
+    left: 12px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    width: auto;
+  }
+
+  .aviso-venc ~ .avisos-yape {
+    bottom: calc(210px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media print {
+  .avisos-yape {
+    display: none !important;
+  }
+}
