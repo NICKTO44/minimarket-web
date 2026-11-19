@@ -9,6 +9,7 @@ use crate::tenants::TenantDb;
 use crate::models::configuracion::*;
 
 pub async fn obtener_configuracion(
+    State(state): State<Arc<AppState>>,
     Extension(tenant): Extension<Arc<TenantDb>>,
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<ConfiguracionTienda>, StatusCode> {
@@ -52,6 +53,7 @@ pub async fn obtener_configuracion(
             codigo_establecimiento: None,
             sucursal: None,
             direccion_completa: None,
+            plan: state.tiendas.plan(claims.tienda_id).await,
             };
             // Datos de la emisión directa (migración 0020). Aparte y sin
             // fallar: una base sin esas columnas devuelve lo de siempre.

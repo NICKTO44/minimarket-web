@@ -94,6 +94,15 @@ export const MODULO_MAYOR_ELEGIBLE = 'MAYOR_ELEGIBLE';
 export const MODULO_CARGOS_RAPIDOS = 'CARGOS_RAPIDOS';
 // Avisos de Yape y Plin: la app Monspeet avisa en voz alta cada pago recibido.
 export const MODULO_AVISOS_PAGO = 'AVISOS_PAGO';
+// Módulos que se usan solo desde el plan Comercial (Comercial y Pro), igual
+// que MODULOS_DESDE_COMERCIAL en logica/plan.rs (el servidor es el que manda).
+export const MODULOS_DESDE_COMERCIAL = [MODULO_AVISOS_PAGO];
+export const MENSAJE_SOLO_COMERCIAL =
+  'Los avisos de Yape y Plin están disponibles desde el plan Comercial. Escríbenos para cambiar de plan.';
+// `plan` viene en la configuración del negocio (BASICO, COMERCIAL o PRO). Si
+// no llegó (no se pudo leer), no se bloquea nada aquí: decide el servidor.
+export const planIncluyeModulo = (plan, modulo) =>
+  !MODULOS_DESDE_COMERCIAL.includes(modulo) || !plan || plan === 'COMERCIAL' || plan === 'PRO';
 // Módulo -> el que necesita encendido (igual que DEPENDENCIAS en rubros.rs).
 export const DEPENDENCIAS = {
   [MODULO_RECETAS]: MODULO_FICHA_MEDICAMENTO,

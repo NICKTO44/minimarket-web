@@ -524,7 +524,7 @@ async fn main() {
         .route("/modificadores/:id", axum::routing::put(handlers::mesas::actualizar_grupo_modificador))
         .route("/modificadores/:id/desactivar", post(handlers::mesas::desactivar_grupo_modificador))
         .route("/negocio", get(handlers::rubros::obtener_negocio))
-        .route("/configuracion/negocio", axum::routing::put(handlers::rubros::guardar_negocio))
+        .route("/configuracion/negocio", axum::routing::put(handlers::rubros::guardar_negocio_segun_plan))
         .route("/detraccion", get(handlers::detraccion::obtener_detraccion))
         .route("/cotizaciones", get(handlers::cotizaciones::listar).post(handlers::cotizaciones::crear))
         .route("/cotizaciones/:id", get(handlers::cotizaciones::obtener))

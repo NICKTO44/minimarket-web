@@ -26,6 +26,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::handlers::rubros::MODULO_AVISOS_PAGO;
+use crate::logica::plan::{plan_permite_modulo, MENSAJE_SOLO_COMERCIAL};
 use crate::middleware_auth::exigir_solo_admin;
 use crate::models::auth::Claims;
 use crate::tenants::{NivelAcceso, TenantDb};
@@ -207,6 +208,39 @@ async fn modulo_encendido(conn: &libsql::Connection) -> bool {
     }
 }
 
+/// Cuánto se recuerda el plan de un negocio: la app del celular pregunta cada
+/// 25 s y así no se consulta la base central en cada vuelta. Al cambiarle el
+/// plan, se nota en a lo más este tiempo.
+const PLAN_EN_MEMORIA: StdDuration = StdDuration::from_secs(60);
+
+fn planes_recordados() -> &'static Mutex<HashMap<i64, (bool, std::time::Instant)>> {
+    static M: OnceLock<Mutex<HashMap<i64, (bool, std::time::Instant)>>> = OnceLock::new();
+    M.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// ¿El plan del negocio incluye los avisos de Yape y Plin? Solo desde el
+/// plan Comercial (Comercial y Pro). Si el plan no se pudo leer (la base
+/// central no respondió un momento) no se corta el servicio.
+async fn plan_incluye_avisos(state: &AppState, tienda_id: i64) -> bool {
+    if let Some((incluye, cuando)) = planes_recordados().lock().unwrap().get(&tienda_id) {
+        if cuando.elapsed() < PLAN_EN_MEMORIA {
+            return *incluye;
+        }
+    }
+    match state.tiendas.plan(tienda_id).await {
+        Some(plan) => {
+            let incluye = plan_permite_modulo(Some(&plan), MODULO_AVISOS_PAGO);
+            planes_recordados().lock().unwrap().insert(tienda_id, (incluye, std::time::Instant::now()));
+            incluye
+        }
+        None => true,
+    }
+}
+
+fn solo_plan_comercial() -> Fallo {
+    (StatusCode::FORBIDDEN, MENSAJE_SOLO_COMERCIAL.into())
+}
+
 /// Valida la clave del celular (cabecera Authorization: Bearer <clave>).
 async fn dispositivo(
     state: &AppState,
@@ -234,6 +268,9 @@ async fn dispositivo(
     let fila = filas.next().await.map_err(e500)?.ok_or_else(sin_acceso)?;
     if !modulo_encendido(&conn).await {
         return Err((StatusCode::FORBIDDEN, "El módulo \"Avisos de Yape y Plin\" está apagado en este negocio.".into()));
+    }
+    if !plan_incluye_avisos(state, tienda_id).await {
+        return Err(solo_plan_comercial());
     }
     let _ = conn
         .execute("UPDATE avisos_dispositivos SET ultimo_uso = datetime('now') WHERE id = ?1", libsql::params![disp_id])
@@ -475,7 +512,14 @@ pub async fn hoy_dispositivo(
 // ---------------------------------------------------------------------------
 
 /// GET /avisos-pago/hoy — pagos recibidos hoy (cualquier usuario).
-pub async fn hoy(Extension(tenant): Extension<Arc<TenantDb>>) -> Result<Json<Vec<Pago>>, Fallo> {
+pub async fn hoy(
+    State(state): State<Arc<AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<Pago>>, Fallo> {
+    if !plan_incluye_avisos(&state, claims.tienda_id).await {
+        return Err(solo_plan_comercial());
+    }
     let conn = tenant.0.connect().map_err(e500)?;
     Ok(Json(pagos_de_hoy(&conn).await?))
 }
@@ -515,6 +559,9 @@ pub async fn vincular(
     let conn = tenant.0.connect().map_err(e500)?;
     if !modulo_encendido(&conn).await {
         return Err(malo("Primero enciende el módulo \"Avisos de Yape y Plin\" en Configuración → Módulos."));
+    }
+    if !plan_incluye_avisos(&state, claims.tienda_id).await {
+        return Err(solo_plan_comercial());
     }
     let mut activos = conn.query("SELECT COUNT(*) FROM avisos_dispositivos WHERE activo = 1", ()).await.map_err(e500)?;
     let n_activos: i64 = activos.next().await.map_err(e500)?.and_then(|f| f.get(0).ok()).unwrap_or(0);

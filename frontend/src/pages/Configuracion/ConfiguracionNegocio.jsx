@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Lock } from 'lucide-react';
 import { api } from '../../api/api';
 import { confirmar } from '../../utils/confirmar';
 import {
@@ -6,6 +7,8 @@ import {
   MODULO_MESAS,
   MODULOS,
   MODULOS_SIN_RUBRO,
+  MENSAJE_SOLO_COMERCIAL,
+  planIncluyeModulo,
   RUBROS,
   alternarConDependencias,
   rubroDe,
@@ -26,7 +29,7 @@ function nombresModulos(valores) {
  * Lo universal (ventas, caja, productos, clientes, reportes) no depende de
  * nada de esto.
  */
-export default function ConfiguracionNegocio({ rubro, rubroFijo = false, modulos, onCambiado, onMensaje }) {
+export default function ConfiguracionNegocio({ rubro, rubroFijo = false, modulos, plan, onCambiado, onMensaje }) {
   const [guardando, setGuardando] = useState(false);
   // La lista de módulos es larga: se abre solo cuando se quiere cambiar algo,
   // para que no empuje hacia abajo los datos del negocio.
@@ -182,14 +185,16 @@ export default function ConfiguracionNegocio({ rubro, rubroFijo = false, modulos
       <div className="neg-modulos">
         {MODULOS.filter((m) => moduloDisponible(m, rubro)).map((m) => {
           const encendido = estaEncendido(m);
+          // Del plan Comercial y el negocio no lo tiene: se ve con candado.
+          const bloqueado = !encendido && !planIncluyeModulo(plan, m.valor);
           return (
             <button
               key={m.valor}
               type="button"
               role="switch"
               aria-checked={encendido}
-              className={`neg-modulo${encendido ? ' encendido' : ''}`}
-              onClick={() => alternarModulo(m)}
+              className={`neg-modulo${encendido ? ' encendido' : ''}${bloqueado ? ' neg-modulo-plan' : ''}`}
+              onClick={() => (bloqueado ? onMensaje({ tipo: 'error', texto: MENSAJE_SOLO_COMERCIAL }) : alternarModulo(m))}
               disabled={guardando}
             >
               <span className="neg-interruptor" aria-hidden="true" />
@@ -197,7 +202,13 @@ export default function ConfiguracionNegocio({ rubro, rubroFijo = false, modulos
                 <strong>{m.label}</strong>
                 <span>{m.descripcion}</span>
               </span>
-              <span className="neg-estado">{encendido ? 'Encendido' : 'Apagado'}</span>
+              {bloqueado ? (
+                <span className="neg-estado neg-estado-plan">
+                  <Lock size={12} aria-hidden="true" /> Plan Comercial
+                </span>
+              ) : (
+                <span className="neg-estado">{encendido ? 'Encendido' : 'Apagado'}</span>
+              )}
             </button>
           );
         })}

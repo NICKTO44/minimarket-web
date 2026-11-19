@@ -16,7 +16,7 @@ import MiCuenta from '../../components/MiCuenta';
 import PantallasUsuario from '../../components/PantallasUsuario';
 import { etiquetaRol } from '../../utils/menu';
 import { etiquetaTasa, TASA_GENERAL } from '../../utils/igv';
-import { datosNegocio, MODULO_AVISOS_PAGO, MODULO_CAMBIOS, MODULO_CARGOS_RAPIDOS, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
+import { datosNegocio, planIncluyeModulo, MODULO_AVISOS_PAGO, MODULO_CAMBIOS, MODULO_CARGOS_RAPIDOS, MODULO_DETRACCION, MODULO_MESAS } from '../../utils/rubros';
 import ConfiguracionCargos from './ConfiguracionCargos';
 import ConfiguracionAvisos from './ConfiguracionAvisos';
 import TarjetaRuc from '../../components/TarjetaRuc';
@@ -349,6 +349,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
           rubro={negocio.rubro}
           rubroFijo={!!negocio.rubro_fijo}
           modulos={negocio.modulos}
+          plan={formConfig.plan}
           onCambiado={alCambiarNegocio}
           onMensaje={setMensaje}
         />
@@ -358,7 +359,7 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
         <ConfiguracionCargos onMensaje={setMensaje} />
       )}
 
-      {vista === 'NEGOCIO' && formConfig && negocio.modulos.includes(MODULO_AVISOS_PAGO) && (
+      {vista === 'NEGOCIO' && formConfig && negocio.modulos.includes(MODULO_AVISOS_PAGO) && planIncluyeModulo(formConfig.plan, MODULO_AVISOS_PAGO) && (
         <ConfiguracionAvisos onMensaje={setMensaje} />
       )}
 

@@ -8,7 +8,7 @@
 //! "Productos") viven en el frontend (utils/rubros.js), que debe coincidir
 //! con este catálogo.
 
-use axum::{extract::Extension, Json, http::StatusCode};
+use axum::{extract::{Extension, State}, Json, http::StatusCode};
 use std::sync::Arc;
 
 use crate::handlers::mesas::{aplicar_modo_negocio, modo_restaurante};
@@ -435,6 +435,38 @@ pub async fn exigir_modulo(conn: &libsql::Connection, modulo: &str, nombre: &str
 pub async fn obtener_negocio(Extension(tenant): Extension<Arc<TenantDb>>) -> Resultado<Negocio> {
     let conn = tenant.0.connect().map_err(e500)?;
     Ok(Json(negocio(&conn).await))
+}
+
+/// PUT /configuracion/negocio — `guardar_negocio` con la regla de planes:
+/// un negocio Básico no puede ENCENDER los módulos del plan Comercial
+/// (avisos de Yape y Plin). Si ya lo tenía encendido, puede seguir guardando
+/// lo demás; lo que ese módulo hace igual lo corta el plan.
+pub async fn guardar_negocio_segun_plan(
+    State(state): State<Arc<crate::AppState>>,
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+    Json(payload): Json<GuardarNegocio>,
+) -> Resultado<Negocio> {
+    exigir_solo_admin(&claims)?;
+    let del_plan_comercial: Vec<&String> = payload
+        .modulos
+        .iter()
+        .filter(|m| crate::logica::plan::MODULOS_DESDE_COMERCIAL.contains(&m.as_str()))
+        .collect();
+    if !del_plan_comercial.is_empty() {
+        let conn = tenant.0.connect().map_err(e500)?;
+        let actual = negocio(&conn).await;
+        if del_plan_comercial.iter().any(|m| !actual.modulos.contains(m)) {
+            let plan = state.tiendas.plan(claims.tienda_id).await;
+            if del_plan_comercial
+                .iter()
+                .any(|m| !crate::logica::plan::plan_permite_modulo(plan.as_deref(), m))
+            {
+                return Err((StatusCode::FORBIDDEN, crate::logica::plan::MENSAJE_SOLO_COMERCIAL.to_string()));
+            }
+        }
+    }
+    guardar_negocio(Extension(tenant), Extension(claims), Json(payload)).await
 }
 
 /// PUT /configuracion/negocio — el administrador cambia el rubro y/o los

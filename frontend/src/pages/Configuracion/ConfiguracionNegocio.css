@@ -212,3 +212,17 @@
   font-size: 12px;
   color: #6b7280;
 }
+
+/* Módulo del plan Comercial en un negocio Básico: con candado. */
+.neg-modulo-plan .neg-interruptor {
+  opacity: 0.4;
+}
+
+.neg-estado-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #742284;
+  font-weight: 600;
+  white-space: nowrap;
+}

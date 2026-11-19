@@ -25,6 +25,12 @@ async fn local(nombre: &str) -> libsql::Database {
 }
 
 async fn montar(modulos: &str) -> (Arc<AppState>, Arc<TenantDb>) {
+    montar_con_plan(modulos, None, 42).await
+}
+
+/// Con `plan` se crea la columna `tiendas.plan` (como en producción). Cada
+/// prueba de planes usa su propio id de negocio: el plan se recuerda 60 s.
+async fn montar_con_plan(modulos: &str, plan: Option<&str>, id: i64) -> (Arc<AppState>, Arc<TenantDb>) {
     let central = local("central").await;
     let clave = [7u8; 32];
     let token = crypto::cifrar("token-falso", &clave).unwrap();
@@ -34,11 +40,17 @@ async fn montar(modulos: &str) -> (Arc<AppState>, Arc<TenantDb>) {
         .execute_batch(&format!(
             "CREATE TABLE tiendas (id INTEGER PRIMARY KEY, nombre_negocio TEXT, identificador TEXT UNIQUE,
                 turso_db_url TEXT, turso_db_token TEXT, estado TEXT, fecha_vencimiento TEXT, slug TEXT);
-             INSERT INTO tiendas VALUES (42, 'Licorería prueba', 'lico-42', 'http://127.0.0.1:9', '{}', 'ACTIVO', NULL, 'lico');",
-            token
+             INSERT INTO tiendas VALUES ({id}, 'Licorería prueba', 'lico-{id}', 'http://127.0.0.1:9', '{}', 'ACTIVO', NULL, 'lico');",
+            token,
+            id = id
         ))
         .await
         .unwrap();
+    if let Some(plan) = plan {
+        let c = central.connect().unwrap();
+        c.execute("ALTER TABLE tiendas ADD COLUMN plan TEXT NOT NULL DEFAULT 'BASICO'", ()).await.unwrap();
+        c.execute("UPDATE tiendas SET plan = ?1", libsql::params![plan]).await.unwrap();
+    }
 
     let db = local(&format!("negocio_{}", modulos.len())).await;
     let conn = db.connect().unwrap();
@@ -64,7 +76,7 @@ async fn montar(modulos: &str) -> (Arc<AppState>, Arc<TenantDb>) {
         limitador_registro: rate_limit::LimitadorRegistro::con_topes(5, 50),
         jwt_secret: "x".into(),
     });
-    state.tiendas.usar_conexion(42, db.clone()).await;
+    state.tiendas.usar_conexion(id, db.clone()).await;
     (state, Arc::new(TenantDb(db)))
 }
 
@@ -174,7 +186,7 @@ async fn yape_llega_a_la_tienda_al_instante() {
     assert_eq!(e.0, StatusCode::FORBIDDEN);
 
     // La lista de hoy (app y Monspeet web) trae los dos.
-    let hoy = avisos_pago::hoy(Extension(t.clone())).await.unwrap().0;
+    let hoy = avisos_pago::hoy(State(state.clone()), Extension(t.clone()), Extension(cajera())).await.unwrap().0;
     assert_eq!(hoy.len(), 2);
     let hoy_app = avisos_pago::hoy_dispositivo(State(state.clone()), con_clave(&tienda)).await.unwrap().0;
     assert_eq!(hoy_app.len(), 2);
@@ -205,4 +217,27 @@ async fn yape_llega_a_la_tienda_al_instante() {
 async fn sin_el_modulo_no_se_vincula_ni_se_recibe() {
     let (state, t) = montar("").await;
     assert!(vincular(&state, &t, admin(), "YAPE").await.is_err());
+}
+
+#[tokio::test]
+async fn solo_desde_el_plan_comercial() {
+    // Plan Básico: con el módulo encendido igual no se vincula ni se ven los pagos.
+    let (state, t) = montar_con_plan("AVISOS_PAGO", Some("BASICO"), 501).await;
+    let basico = Claims { tienda_id: 501, ..admin() };
+    let error = vincular(&state, &t, basico.clone(), "YAPE").await.unwrap_err();
+    assert_eq!(error.0, StatusCode::FORBIDDEN);
+    assert!(error.1.contains("plan Comercial"));
+    assert_eq!(
+        avisos_pago::hoy(State(state.clone()), Extension(t.clone()), Extension(basico)).await.unwrap_err().0,
+        StatusCode::FORBIDDEN
+    );
+
+    // Plan Comercial y Pro: funciona.
+    for (plan, id) in [("COMERCIAL", 502), ("PRO", 503)] {
+        let (state, t) = montar_con_plan("AVISOS_PAGO", Some(plan), id).await;
+        let claims = Claims { tienda_id: id, ..admin() };
+        let clave = vincular(&state, &t, claims.clone(), "YAPE").await.unwrap();
+        assert!(avisos_pago::yo(State(state.clone()), con_clave(&clave)).await.is_ok());
+        assert!(avisos_pago::hoy(State(state.clone()), Extension(t.clone()), Extension(claims)).await.is_ok());
+    }
 }

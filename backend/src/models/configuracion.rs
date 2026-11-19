@@ -36,6 +36,9 @@ pub struct ConfiguracionTienda {
     /// departamento, provincia y distrito de la emisión directa). None si
     /// el negocio no tiene esos datos: se imprime `direccion` como siempre.
     pub direccion_completa: Option<String>,
+    /// Plan del negocio (BASICO, COMERCIAL o PRO; None si no se pudo leer):
+    /// la web muestra con candado los módulos del plan Comercial.
+    pub plan: Option<String>,
 }
 
 /// La dirección con "DEPARTAMENTO - PROVINCIA - DISTRITO" (como la Ficha

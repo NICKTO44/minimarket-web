@@ -85,6 +85,23 @@ pub const PLAN_COMERCIAL: &str = "COMERCIAL";
 pub const PLAN_PRO: &str = "PRO";
 pub const PLANES: [&str; 3] = [PLAN_BASICO, PLAN_COMERCIAL, PLAN_PRO];
 
+/// Módulos que se usan solo desde el plan Comercial (Comercial y Pro). Todo
+/// lo demás está en todos los planes.
+pub const MODULOS_DESDE_COMERCIAL: [&str; 1] = ["AVISOS_PAGO"];
+
+/// Aviso cuando un negocio Básico quiere un módulo del plan Comercial.
+pub const MENSAJE_SOLO_COMERCIAL: &str =
+    "Los avisos de Yape y Plin están disponibles desde el plan Comercial. Escríbenos para cambiar de plan.";
+
+/// ¿El plan del negocio (`tiendas.plan`) permite este módulo? Sin plan
+/// guardado cuenta como Básico.
+pub fn plan_permite_modulo(plan: Option<&str>, modulo: &str) -> bool {
+    if !MODULOS_DESDE_COMERCIAL.contains(&modulo) {
+        return true;
+    }
+    matches!(plan.and_then(normalizar_plan), Some(PLAN_COMERCIAL) | Some(PLAN_PRO))
+}
+
 /// " comercial " -> "COMERCIAL". None si no es uno de los planes.
 pub fn normalizar_plan(codigo: &str) -> Option<&'static str> {
     let codigo = codigo.trim().to_uppercase();
@@ -284,6 +301,14 @@ mod pruebas {
     #[test]
     fn planes_por_negocio() {
         assert_eq!(normalizar_plan(" comercial "), Some(PLAN_COMERCIAL));
+        // Avisos de Yape y Plin: solo desde el plan Comercial.
+        assert!(!plan_permite_modulo(None, "AVISOS_PAGO"));
+        assert!(!plan_permite_modulo(Some("BASICO"), "AVISOS_PAGO"));
+        assert!(plan_permite_modulo(Some("comercial"), "AVISOS_PAGO"));
+        assert!(plan_permite_modulo(Some("PRO"), "AVISOS_PAGO"));
+        // Lo demás, en todos los planes.
+        assert!(plan_permite_modulo(Some("BASICO"), "CREDITO"));
+        assert!(plan_permite_modulo(None, "CREDITO"));
         assert_eq!(normalizar_plan("Pro"), Some(PLAN_PRO));
         assert_eq!(normalizar_plan("premium"), None);
         let comercial = Plan::por_codigo(Some("COMERCIAL"));

@@ -4,6 +4,7 @@ use libsql::Builder;
 use minimarket_backend::{
     crypto,
     licencias_logica::{calcular_nueva_fecha, generar_codigo, hoy, normalizar_unidad},
+    logica::plan::normalizar_plan,
     tenants::RegistroTiendas,
 };
 
@@ -164,6 +165,26 @@ async fn cambiar_estado(conn: &libsql::Connection, identificador: &str, estado: 
     }
 }
 
+/// Cambia el plan de un negocio (BASICO, COMERCIAL o PRO): límite de
+/// comprobantes, mensualidad y módulos del plan Comercial (avisos de Yape).
+async fn cambiar_plan(conn: &libsql::Connection, identificador: &str, plan: &str) {
+    let Some(plan) = normalizar_plan(plan) else {
+        println!("Plan no válido: usa BASICO, COMERCIAL o PRO.");
+        return;
+    };
+    match conn
+        .execute(
+            "UPDATE tiendas SET plan = ?1 WHERE identificador = ?2",
+            libsql::params![plan, identificador],
+        )
+        .await
+    {
+        Ok(0) => println!("No se encontró ningún negocio con identificador '{}'.", identificador),
+        Ok(_) => println!("✅ {} -> plan {} (se nota en el sistema en a lo más 1 minuto)", identificador, plan),
+        Err(e) => println!("Error actualizando: {}", e),
+    }
+}
+
 async fn generar_codigo_cmd(conn: &libsql::Connection, cantidad: i64, unidad: &str, dias_para_expirar: i64) {
     let unidad_normalizada = match normalizar_unidad(unidad) {
         Some(u) => u,
@@ -205,12 +226,14 @@ fn imprimir_ayuda() {
     println!("  licencias restringir <identificador>");
     println!("  licencias suspender <identificador>");
     println!("  licencias reactivar <identificador>");
+    println!("  licencias plan <identificador> <BASICO|COMERCIAL|PRO>");
     println!();
     println!("Ejemplos:");
     println!("  licencias generar-codigo 1 mes");
     println!("  licencias generar-codigo 1 anio 15");
     println!("  licencias buscar \"La Esquina\"");
     println!("  licencias activar bodega-juan-83af 1 mes");
+    println!("  licencias plan bodega-juan-83af COMERCIAL");
 }
 
 #[tokio::main]
@@ -278,6 +301,10 @@ async fn main() {
         Some("reactivar") => match args.get(2) {
             Some(identificador) => cambiar_estado(&conn, identificador, "ACTIVO").await,
             None => imprimir_ayuda(),
+        },
+        Some("plan") => match (args.get(2), args.get(3)) {
+            (Some(identificador), Some(plan)) => cambiar_plan(&conn, identificador, plan).await,
+            _ => imprimir_ayuda(),
         },
         _ => imprimir_ayuda(),
     }
