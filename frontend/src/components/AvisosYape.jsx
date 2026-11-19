@@ -7,6 +7,8 @@ import './AvisosYape.css';
 const REFRESCO_MS = 6000;
 // Cuánto queda a la vista cada aviso antes de irse solo.
 const DURACION_MS = 15000;
+// Tiempo extra si la página estuvo congelada (impresión, otra pestaña).
+const DURACION_AL_VOLVER_MS = 8000;
 // Avisos a la vista a la vez (los más nuevos).
 const MAXIMO = 3;
 
@@ -34,6 +36,23 @@ export default function AvisosYape() {
     temporizadores.current.delete(id);
   }, []);
 
+  // Quita el aviso cuando se cumple su tiempo. Si el temporizador llega tarde
+  // es que la página estuvo congelada (diálogo de impresión, pestaña oculta):
+  // entonces no se vio, y se deja unos segundos más en vez de quitarlo.
+  const programar = useCallback(
+    (id, ms) => {
+      const vence = Date.now() + ms;
+      temporizadores.current.set(
+        id,
+        setTimeout(() => {
+          if (Date.now() - vence > 1500) programar(id, DURACION_AL_VOLVER_MS);
+          else quitar(id);
+        }, ms)
+      );
+    },
+    [quitar]
+  );
+
   const revisar = useCallback(() => {
     if (document.hidden) return;
     api
@@ -52,17 +71,12 @@ export default function AvisosYape() {
         if (nuevos.length === 0) return;
 
         setAvisos((actuales) => [...nuevos.reverse(), ...actuales].slice(0, MAXIMO));
-        nuevos.forEach((p) => {
-          temporizadores.current.set(
-            p.id,
-            setTimeout(() => quitar(p.id), DURACION_MS)
-          );
-        });
+        nuevos.forEach((p) => programar(p.id, DURACION_MS));
       })
       .catch(() => {
         // sin conexión por un momento: se reintenta en la siguiente vuelta
       });
-  }, [quitar]);
+  }, [programar]);
 
   useEffect(() => {
     revisar();
