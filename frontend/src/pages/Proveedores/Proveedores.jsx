@@ -978,6 +978,13 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
               <input type="number" placeholder={compraComo ? `Precio ${compraComo.toLowerCase()}` : 'Precio'} value={compraPrecio} onChange={(e) => setCompraPrecio(e.target.value)} />
               <button onClick={agregarItemCompra}>+ Agregar</button>
             </div>
+            {compraProductoSel && (
+              <PrecioVentaAlAgregar
+                producto={productos.find((p) => p.id === parseInt(compraProductoSel, 10))}
+                presentacion={(presPorProducto.get(parseInt(compraProductoSel, 10)) || []).find((x) => x.nombre === compraComo)}
+                precio={compraPrecio}
+              />
+            )}
             {pedidosExcel && (
               <CargarPedido
                 productos={productos}
@@ -1125,6 +1132,7 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
                         {Number(it.compradoComo.precio).toFixed(2)} → entran {it.cantidad} unidades
                       </span>
                     )}
+                    <PrecioVentaEnCompra producto={productos.find((p) => p.id === it.producto_id)} costo={it.precio_compra} />
                   </span>
                   {pedidosExcel ? (
                     // Lo cargado desde Excel se revisa aquí mismo: cantidad y costo editables.
@@ -1553,5 +1561,42 @@ export default function Proveedores({ variantes = false, ganancias = false, pedi
         />
       )}
     </div>
+  );
+}
+
+const dosDecimales = (n) => Number(n).toFixed(2);
+
+/**
+ * Debajo de cada producto de la compra: a cuánto se vende (por unidad) y
+ * cuánto se gana con el costo de esta compra. El costo ya viene por unidad
+ * (si se compró por caja, aUnidades lo dividió).
+ */
+function PrecioVentaEnCompra({ producto, costo }) {
+  const venta = Number(producto?.precio);
+  if (!(venta > 0)) return null;
+  const gana = venta - Number(costo);
+  const pct = Math.round((gana / venta) * 100);
+  return (
+    <span className={`prov-precio-venta${gana <= 0 ? ' prov-precio-venta-pierde' : ''}`}>
+      P. venta: S/ {dosDecimales(venta)} c/u · {gana < 0 ? 'pierde' : 'gana'} S/ {dosDecimales(Math.abs(gana))} ({pct} %)
+    </span>
+  );
+}
+
+/** Al elegir el producto: su precio de venta y, con el precio escrito, cuánto se gana por unidad. */
+function PrecioVentaAlAgregar({ producto, presentacion, precio }) {
+  const venta = Number(producto?.precio);
+  if (!(venta > 0)) return null;
+  const escrito = parseFloat(precio);
+  const factor = presentacion ? Number(presentacion.factor) : 1;
+  const costoUnidad = escrito > 0 ? escrito / factor : null;
+  const gana = costoUnidad != null ? venta - costoUnidad : null;
+  return (
+    <p className={`prov-precio-venta prov-precio-venta-agregar${gana != null && gana <= 0 ? ' prov-precio-venta-pierde' : ''}`}>
+      P. venta: S/ {dosDecimales(venta)} c/u
+      {presentacion && Number(presentacion.precio) > 0 && ` · ${presentacion.nombre}: S/ ${dosDecimales(presentacion.precio)}`}
+      {gana != null &&
+        ` · costo c/u S/ ${costoUnidad < 1 ? costoUnidad.toFixed(4) : dosDecimales(costoUnidad)} → ${gana < 0 ? 'pierde' : 'gana'} S/ ${dosDecimales(Math.abs(gana))} (${Math.round((gana / venta) * 100)} %)`}
+    </p>
   );
 }
