@@ -11,6 +11,7 @@ import SelectorTasaIgv from './SelectorTasaIgv';
 import ConfiguracionDetraccion from './ConfiguracionDetraccion';
 import ConfiguracionCambios from './ConfiguracionCambios';
 import ConfiguracionImpresora from './ConfiguracionImpresora';
+import ConfiguracionOrdenProductos from './ConfiguracionOrdenProductos';
 import UsoPlan from '../../components/UsoPlan';
 import MiCuenta from '../../components/MiCuenta';
 import PantallasUsuario from '../../components/PantallasUsuario';
@@ -370,6 +371,8 @@ export default function Configuracion({ onIdentidadActualizada, usuarioActualId,
       {vista === 'NEGOCIO' && formConfig && negocio.modulos.includes(MODULO_CAMBIOS) && (
         <ConfiguracionCambios onMensaje={setMensaje} />
       )}
+
+      {vista === 'NEGOCIO' && formConfig && <ConfiguracionOrdenProductos onMensaje={setMensaje} />}
 
       {vista === 'NEGOCIO' && formConfig && <ConfiguracionImpresora onMensaje={setMensaje} />}
 

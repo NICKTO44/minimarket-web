@@ -489,3 +489,62 @@ pub async fn reactivar_usuario(
 
     Ok(Json(AccionResponse { success: true, message: "Usuario reactivado".into() }))
 }
+
+// ---------------------------------------------------------------------------
+// Orden de la lista de productos (migración 0072)
+// ---------------------------------------------------------------------------
+
+/// Por código interno: primero los que empiezan con número, por su valor
+/// (9001 antes que 19001; 25012 antes que 25012-S), y después los demás.
+pub const ORDEN_POR_CODIGO: &str =
+    " ORDER BY (p.codigo GLOB '[0-9]*') DESC, CAST(p.codigo AS INTEGER), p.codigo, p.nombre";
+/// El de siempre.
+pub const ORDEN_POR_NOMBRE: &str = " ORDER BY p.nombre";
+
+/// ¿El negocio marcó "Ordenar productos por código interno"? Una base sin la
+/// columna (antes de la 0072) sigue por nombre.
+pub async fn ordena_por_codigo(conn: &libsql::Connection) -> bool {
+    match conn.query("SELECT orden_productos FROM configuracion_tienda LIMIT 1", ()).await {
+        Ok(mut filas) => matches!(filas.next().await, Ok(Some(f)) if f.get::<String>(0).map(|v| v == "CODIGO").unwrap_or(false)),
+        Err(_) => false,
+    }
+}
+
+/// El ORDER BY de la lista de productos para este negocio.
+pub async fn sql_orden_productos(conn: &libsql::Connection) -> &'static str {
+    if ordena_por_codigo(conn).await { ORDEN_POR_CODIGO } else { ORDEN_POR_NOMBRE }
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct OrdenProductos {
+    pub por_codigo: bool,
+}
+
+/// GET /configuracion/orden-productos
+pub async fn obtener_orden_productos(Extension(tenant): Extension<Arc<TenantDb>>) -> Result<Json<OrdenProductos>, StatusCode> {
+    let conn = tenant.0.connect().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(OrdenProductos { por_codigo: ordena_por_codigo(&conn).await }))
+}
+
+/// PUT /configuracion/orden-productos — solo el administrador.
+pub async fn guardar_orden_productos(
+    Extension(tenant): Extension<Arc<TenantDb>>,
+    Extension(claims): Extension<Claims>,
+    Json(datos): Json<OrdenProductos>,
+) -> Result<Json<OrdenProductos>, (StatusCode, String)> {
+    exigir_solo_admin(&claims)?;
+    let conn = tenant
+        .0
+        .connect()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "No se pudo conectar a la base.".to_string()))?;
+    let valor = if datos.por_codigo { "CODIGO" } else { "NOMBRE" };
+    conn.execute("UPDATE configuracion_tienda SET orden_productos = ?1", libsql::params![valor])
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::CONFLICT,
+                "Aún no se puede guardar: el sistema se está actualizando. Intenta en un minuto.".to_string(),
+            )
+        })?;
+    Ok(Json(OrdenProductos { por_codigo: datos.por_codigo }))
+}

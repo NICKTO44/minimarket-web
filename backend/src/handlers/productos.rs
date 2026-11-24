@@ -61,20 +61,22 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
     const SQL_DESDE: &str = " FROM productos p
              LEFT JOIN categorias c ON p.categoria_id = c.id
              WHERE p.activo = ?1";
-    const SQL_ORDEN: &str = " ORDER BY p.nombre";
+    // Por nombre (siempre) o por código interno si el negocio marcó la casilla
+    // en Configuración (migración 0072). La pantalla y los Excel siguen este orden.
+    let orden = crate::handlers::configuracion::sql_orden_productos(&conn).await;
     // Platos de la carta del día: solo los de hoy y solo entre los activos
     // (los de días pasados no aparecen ni en "desactivados").
     let hoy = crate::handlers::carta::hoy_lima();
     let con_carta = format!(
         "{}, p.controla_stock, p.carta_fecha IS NOT NULL, COALESCE(p.agotado, 0){} AND (p.carta_fecha IS NULL OR (?1 = 1 AND p.carta_fecha = ?2)){}",
-        SQL_BASE, SQL_DESDE, SQL_ORDEN
+        SQL_BASE, SQL_DESDE, orden
     );
     // IGV por producto/categoría (migración 0012): efectivo, propio del
     // producto y el de su categoría.
     let con_igv = format!(
         "{}, p.controla_stock, p.carta_fecha IS NOT NULL, COALESCE(p.agotado, 0),
             COALESCE(p.afectacion_igv, c.afectacion_igv, 'GRAVADO'), p.afectacion_igv, COALESCE(c.afectacion_igv, 'GRAVADO'){} AND (p.carta_fecha IS NULL OR (?1 = 1 AND p.carta_fecha = ?2)){}",
-        SQL_BASE, SQL_DESDE, SQL_ORDEN
+        SQL_BASE, SQL_DESDE, orden
     );
     // Tallas y colores (migración 0017): modelo, talla y color de cada producto.
     let con_modelo = con_igv.replacen(
@@ -91,12 +93,12 @@ async fn consultar_productos(tenant: &TenantDb, activo: i64) -> Result<Vec<Produ
       match conn.query(&con_carta, libsql::params![activo, hoy]).await {
         Ok(rows) => (rows, 2),
         Err(_) => match conn
-            .query(&format!("{}, p.controla_stock{}{}", SQL_BASE, SQL_DESDE, SQL_ORDEN), libsql::params![activo])
+            .query(&format!("{}, p.controla_stock{}{}", SQL_BASE, SQL_DESDE, orden), libsql::params![activo])
             .await
         {
             Ok(rows) => (rows, 1),
             Err(_) => (
-                conn.query(&format!("{}{}{}", SQL_BASE, SQL_DESDE, SQL_ORDEN), libsql::params![activo])
+                conn.query(&format!("{}{}{}", SQL_BASE, SQL_DESDE, orden), libsql::params![activo])
                     .await
                     .map_err(|e| {
                         eprintln!("❌ Error en el SELECT de listar_productos: {}", e);

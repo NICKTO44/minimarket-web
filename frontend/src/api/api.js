@@ -429,6 +429,9 @@ export const api = {
   configuracionActualizar: (data) => request('/configuracion', { method: 'PUT', body: JSON.stringify(data) }),
   // "Completa los datos de tu negocio": solo nombre, RUC y dirección.
   datosNegocioGuardar: (data) => request('/configuracion/datos-negocio', { method: 'PUT', body: JSON.stringify(data) }),
+  ordenProductos: () => request('/configuracion/orden-productos'),
+  ordenProductosGuardar: (por_codigo) =>
+    request('/configuracion/orden-productos', { method: 'PUT', body: JSON.stringify({ por_codigo }) }),
   configuracionSubirLogo: (archivo) => subirImagen('/configuracion/logo', 'logo', archivo, 'Error al subir el logo'),
   usuariosListar: () => request('/usuarios'),
   usuarioPantallas: (id, ocultas) =>

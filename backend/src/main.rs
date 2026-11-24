@@ -473,6 +473,10 @@ async fn main() {
         .route("/configuracion", axum::routing::put(handlers::configuracion::actualizar_configuracion))
         .route("/configuracion/datos-negocio", axum::routing::put(handlers::configuracion::guardar_datos_negocio))
         .route(
+            "/configuracion/orden-productos",
+            get(handlers::configuracion::obtener_orden_productos).put(handlers::configuracion::guardar_orden_productos),
+        )
+        .route(
             "/configuracion/logo",
             post(handlers::imagenes::subir_logo_tienda).layer(DefaultBodyLimit::max(6 * 1024 * 1024)),
         )
