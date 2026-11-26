@@ -414,6 +414,7 @@ async fn main() {
         .route("/compras/recibir", post(handlers::proveedores::recibir_mercaderia))
         // Ingreso rápido de productos: compra ya recibida, sin elegir proveedor.
         .route("/compras/rapida", post(handlers::compra_rapida::ingreso_rapido))
+        .route("/compras/peso", post(handlers::compra_peso::registrar))
         .route(
             "/compras/excel/proveedor/:id",
             get(handlers::compra_excel::obtener).post(handlers::compra_excel::aprender),
@@ -577,7 +578,10 @@ async fn main() {
     // login y su propio middleware; apagado si faltan PANEL_USUARIO y
     // PANEL_CLAVE en el .env. Ver handlers/panel.rs.
     let rutas_panel = Router::new()
-        .route("/panel/negocios", get(handlers::panel::listar_negocios))
+        .route(
+            "/panel/negocios",
+            get(handlers::panel::listar_negocios).post(handlers::registro::crear_negocio_panel),
+        )
         .route("/panel/negocios/:id/renovar", post(handlers::panel::renovar))
         .route("/panel/negocios/:id/estado", post(handlers::panel::cambiar_estado))
         .route("/panel/negocios/:id/vencimiento", axum::routing::put(handlers::panel::fijar_vencimiento))

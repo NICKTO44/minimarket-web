@@ -62,6 +62,7 @@ pub mod reparaciones;
 pub mod desde_nota;
 pub mod sin_conexion;
 pub mod compra_rapida;
+pub mod compra_peso;
 pub mod compra_excel;
 pub mod kardex;
 pub mod cargos_rapidos;

@@ -15,6 +15,7 @@ import Inventario from './pages/Inventario/Inventario';
 import LibroRecetas from './pages/Recetas/LibroRecetas';
 import StockLotes from './pages/StockLotes/StockLotes';
 import Proveedores from './pages/Proveedores/Proveedores';
+import CompraPeso from './pages/CompraPeso/CompraPeso';
 import Devoluciones from './pages/Devoluciones/Devoluciones';
 import Clientes from './pages/Clientes/Clientes';
 import Comprobantes from './pages/Comprobantes/Comprobantes';
@@ -95,6 +96,7 @@ import {
   planIncluyeModulo,
   MODULO_VARIAS_CAJAS,
   MODULO_INGRESO_RAPIDO,
+  MODULO_COMPRA_PESO,
   MODULO_COMPRA_EXCEL,
   MODULO_SIN_VUELTO,
   MODULO_DESCUENTO_VENTA,
@@ -151,6 +153,7 @@ const MODULO_DE_PANTALLA = {
   PRODUCCION: MODULO_PRODUCCION,
   CATALOGO: MODULO_CATALOGO,
   CODIGOS_BARRAS: MODULO_CODIGOS_BARRAS,
+  COMPRA_PESO: MODULO_COMPRA_PESO,
 };
 
 function App() {
@@ -886,6 +889,7 @@ function App() {
         {pantallaVisible === 'CODIGOS_BARRAS' && (
           <CodigosBarras nombreTienda={nombreTienda} identificadorNegocio={tiendaRecordada?.identificador} />
         )}
+        {pantallaVisible === 'COMPRA_PESO' && <CompraPeso />}
         {pantallaVisible === 'PROVEEDORES' && (
           <Proveedores
             variantes={negocio.modulos.includes(MODULO_VARIANTES)}

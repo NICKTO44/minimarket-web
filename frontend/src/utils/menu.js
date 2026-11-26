@@ -31,6 +31,7 @@ import {
   Smartphone,
   Images,
   Barcode,
+  Scale,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
@@ -66,6 +67,8 @@ export const GRUPOS_MENU = [
       { id: 'CODIGOS_BARRAS', label: 'Códigos de barras', icono: Barcode, modulo: 'CODIGOS_BARRAS' },
       { id: 'STOCK', label: 'Stock y Lotes', icono: Boxes },
       { id: 'PROVEEDORES', label: 'Proveedores', icono: Truck },
+      // Recicladoras: material por kilo pagado con la caja.
+      { id: 'COMPRA_PESO', label: 'Compra por peso', icono: Scale, modulo: 'COMPRA_PESO' },
       { id: 'DEVOLUCIONES', label: 'Devoluciones', icono: Undo2 },
       { id: 'PAQUETES', label: 'Paquetes', icono: PackageOpen, soloAdmin: true, modulo: 'PAQUETES' },
       // Pastelería / panadería.

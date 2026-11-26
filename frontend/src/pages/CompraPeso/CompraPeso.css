@@ -1,0 +1,326 @@
+.cpe-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cpe-top h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 22px;
+}
+
+.cpe-cuerpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+
+.cpe-buscar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.cpe-buscar input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  background: transparent;
+}
+
+.cpe-categorias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.cpe-categorias button {
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cpe-categorias button.activo {
+  border-color: var(--color-primario);
+  background: var(--color-primario);
+  color: var(--color-sobre-primario);
+}
+
+.cpe-grilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.cpe-material {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 78px;
+  padding: 10px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  text-align: center;
+  cursor: pointer;
+}
+
+.cpe-material.en-compra {
+  border-color: var(--color-primario);
+  box-shadow: inset 0 0 0 1px var(--color-primario);
+}
+
+.cpe-material-nombre {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.cpe-material-precio {
+  color: #475569;
+  font-size: 13px;
+}
+
+.cpe-compra {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.cpe-compra h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.cpe-vacio {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* El aviso de "no hay materiales" ocupa toda la fila de la grilla. */
+.cpe-grilla .cpe-vacio {
+  grid-column: 1 / -1;
+}
+
+.cpe-lineas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cpe-linea {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.cpe-linea-texto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cpe-linea-texto span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.cpe-linea-total {
+  font-weight: 700;
+}
+
+.cpe-quitar {
+  display: inline-flex;
+  padding: 6px;
+  border: none;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.cpe-persona,
+.cpe-modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cpe-persona input,
+.cpe-modal input {
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+.cpe-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 15px;
+}
+
+.cpe-total strong {
+  font-size: 22px;
+}
+
+.cpe-pagar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 12px;
+  background: var(--color-primario);
+  color: var(--color-sobre-primario);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cpe-pagar:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cpe-reimprimir {
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cpe-error,
+.cpe-aviso {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.cpe-error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.cpe-aviso {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.cpe-modal-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.cpe-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 360px;
+  padding: 18px;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.cpe-modal-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cpe-modal-cabecera h3 {
+  margin: 0;
+}
+
+.cpe-modal-cabecera button {
+  display: inline-flex;
+  padding: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.cpe-modal-total {
+  font-size: 15px;
+}
+
+@media (max-width: 760px) {
+  .cpe-cuerpo {
+    grid-template-columns: 1fr;
+  }
+
+  .cpe-compra {
+    position: static;
+  }
+
+  .cpe-grilla {
+    grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+  }
+}
+
+.cpe-pagos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cpe-pagos button {
+  padding: 7px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cpe-pagos button.activo {
+  border-color: var(--color-primario);
+  background: var(--color-primario);
+  color: var(--color-sobre-primario);
+}

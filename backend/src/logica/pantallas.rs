@@ -146,6 +146,8 @@ pub fn bloqueada(ocultas: &[String], metodo: &Method, ruta: &str) -> bool {
     if oculta("PROVEEDORES")
         && (empieza(&r, "/proveedores") || empieza(&r, "/devoluciones-proveedor") || empieza(&r, "/compras"))
         && !(!oculta("PRODUCTOS") && igual(&r, "/compras/rapida"))
+        // La compra por peso es su propia pantalla (módulo COMPRA_PESO).
+        && !igual(&r, "/compras/peso")
     {
         return true;
     }

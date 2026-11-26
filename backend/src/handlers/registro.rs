@@ -234,15 +234,22 @@ pub async fn consultar_ruc(Query(params): Query<ConsultarRucQuery>) -> Json<Cons
 /// el RUC exista, antes de crear nada. No cambia ningún dato del payload ni
 /// los pasos de creación de abajo. Un error aquí es 400, así que el
 /// limitador de registros devuelve el cupo.
-async fn validar_datos_registro(payload: &RegistroRequest) -> Result<(), (StatusCode, String)> {
+///
+/// `ruc_obligatorio`: el registro público siempre lo exige. El panel de
+/// Monspeet puede crear un negocio sin RUC (informal: solo tickets / notas de
+/// venta); si igual escriben uno, se valida como siempre.
+async fn validar_datos_registro(payload: &RegistroRequest, ruc_obligatorio: bool) -> Result<(), (StatusCode, String)> {
     use crate::logica::validacion_documento::{consultar_ruc_registro, ConsultaRucRegistro};
     use crate::logica::validacion_registro::{error_formato_ruc, error_nombre, error_usuario};
 
     let error = |m: String| Err((StatusCode::BAD_REQUEST, m));
 
-    let ruc = payload.ruc.as_deref().unwrap_or("");
-    if let Some(m) = error_formato_ruc(ruc) {
-        return error(m.into());
+    let ruc = payload.ruc.as_deref().unwrap_or("").trim();
+    let con_ruc = ruc_obligatorio || !ruc.is_empty();
+    if con_ruc {
+        if let Some(m) = error_formato_ruc(ruc) {
+            return error(m.into());
+        }
     }
     if let Some(m) = error_nombre(&payload.nombre_negocio, "El nombre del negocio") {
         return error(m);
@@ -254,20 +261,16 @@ async fn validar_datos_registro(payload: &RegistroRequest) -> Result<(), (Status
         return error(m.into());
     }
     // Solo bloquea si Factiliza dice que no existe; si no responde, sigue.
-    if let ConsultaRucRegistro::NoExiste = consultar_ruc_registro(ruc).await {
-        return error(MENSAJE_RUC_NO_EXISTE.into());
+    if con_ruc {
+        if let ConsultaRucRegistro::NoExiste = consultar_ruc_registro(ruc).await {
+            return error(MENSAJE_RUC_NO_EXISTE.into());
+        }
     }
     Ok(())
 }
 
-/// Punto de entrada público: intenta el registro completo y, si algo
-/// falla en cualquier paso, deshace automáticamente lo que ya se haya
-/// creado (fila central, índice de usuario, y la base de Turso misma) en
-/// vez de dejar un negocio a medias o una base huérfana.
-pub async fn registrar_negocio(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<RegistroRequest>,
-) -> Result<Json<RegistroResponse>, (StatusCode, String)> {
+/// Nombre, dueño, usuario y una contraseña de al menos 6 caracteres.
+fn exigir_campos(payload: &RegistroRequest) -> Result<(), (StatusCode, String)> {
     if payload.nombre_negocio.trim().is_empty()
         || payload.nombre_completo.trim().is_empty()
         || payload.usuario.trim().is_empty()
@@ -278,10 +281,45 @@ pub async fn registrar_negocio(
             "Completa todos los campos (la contraseña debe tener al menos 6 caracteres)".into(),
         ));
     }
+    Ok(())
+}
+
+/// POST /panel/negocios — el dueño de Monspeet crea un negocio desde su panel
+/// (detrás de requiere_panel). Igual que el registro, pero el RUC es
+/// opcional: sin RUC el negocio trabaja solo con tickets (notas de venta) y
+/// se le pone su RUC en Configuración el día que pase a SUNAT.
+pub async fn crear_negocio_panel(
+    State(state): State<Arc<AppState>>,
+    Json(mut payload): Json<RegistroRequest>,
+) -> Result<Json<RegistroResponse>, (StatusCode, String)> {
+    exigir_campos(&payload)?;
+    payload.ruc = payload.ruc.take().map(|r| r.trim().to_string()).filter(|r| !r.is_empty());
+    validar_datos_registro(&payload, false).await?;
+    crear_negocio(state, payload).await
+}
+
+/// Punto de entrada público: intenta el registro completo y, si algo
+/// falla en cualquier paso, deshace automáticamente lo que ya se haya
+/// creado (fila central, índice de usuario, y la base de Turso misma) en
+/// vez de dejar un negocio a medias o una base huérfana.
+pub async fn registrar_negocio(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<RegistroRequest>,
+) -> Result<Json<RegistroResponse>, (StatusCode, String)> {
+    exigir_campos(&payload)?;
 
     // RUC obligatorio y real, nombres y usuario que no sean texto al azar.
-    validar_datos_registro(&payload).await?;
+    validar_datos_registro(&payload, true).await?;
 
+    crear_negocio(state, payload).await
+}
+
+/// La creación en sí (usuario libre, base de Turso, fila central) con su
+/// rollback. La usan el registro público y el panel, ya validados.
+async fn crear_negocio(
+    state: Arc<AppState>,
+    payload: RegistroRequest,
+) -> Result<Json<RegistroResponse>, (StatusCode, String)> {
     // El usuario tiene que estar libre en toda la plataforma.
     if state.tiendas.buscar_por_usuario(&payload.usuario).await.is_ok() {
         return Err((StatusCode::BAD_REQUEST, "Ese nombre de usuario ya está en uso".into()));

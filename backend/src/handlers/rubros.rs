@@ -163,6 +163,11 @@ pub const MODULO_VARIAS_CAJAS: &str = "VARIAS_CAJAS";
 /// elegir proveedor; queda como compra ya recibida al proveedor "COMPRA
 /// RÁPIDA" (handlers/compra_rapida.rs). Sirve para cualquier rubro.
 pub const MODULO_INGRESO_RAPIDO: &str = "INGRESO_RAPIDO";
+/// Compra por peso (recicladoras, chatarrerías): comprar material por kilo a
+/// quien lo trae, pagar con la caja e imprimir su ticket. Es una compra ya
+/// recibida al proveedor "COMPRA POR PESO" (handlers/compra_peso.rs). Sirve
+/// para cualquier rubro.
+pub const MODULO_COMPRA_PESO: &str = "COMPRA_PESO";
 /// Compras por Excel: exportar la lista de productos (o los que están en su
 /// stock mínimo), llenar cantidad y costo, y cargarla en Nueva compra de un
 /// golpe. Solo es de pantalla (la compra se registra como siempre). Viene
@@ -260,6 +265,7 @@ const MODULOS: &[&str] = &[
     MODULO_REPARACIONES,
     MODULO_VARIAS_CAJAS,
     MODULO_INGRESO_RAPIDO,
+    MODULO_COMPRA_PESO,
     MODULO_COMPRA_EXCEL,
     MODULO_SIN_VUELTO,
     MODULO_CREDITOS_POR_CLIENTE,

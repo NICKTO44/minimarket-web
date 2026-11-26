@@ -187,10 +187,11 @@ async fn codigo_libre(conn: &libsql::Connection) -> Result<String, Fallo> {
     Err(e500("No se pudo generar un código libre. Intenta de nuevo."))
 }
 
-/// El proveedor "COMPRA RÁPIDA" del negocio (lo crea la primera vez).
-async fn proveedor_rapido(conn: &libsql::Connection) -> Result<i64, Fallo> {
+/// El proveedor del sistema con ese nombre ("COMPRA RÁPIDA", "COMPRA POR
+/// PESO"...): lo crea la primera vez.
+pub async fn proveedor_del_sistema(conn: &libsql::Connection, nombre: &str, notas: &str) -> Result<i64, Fallo> {
     let mut f = conn
-        .query("SELECT id FROM proveedores WHERE nombre = ?1 ORDER BY id LIMIT 1", libsql::params![PROVEEDOR_RAPIDO])
+        .query("SELECT id FROM proveedores WHERE nombre = ?1 ORDER BY id LIMIT 1", libsql::params![nombre.to_string()])
         .await
         .map_err(e500)?;
     if let Some(fila) = f.next().await.map_err(e500)? {
@@ -198,8 +199,8 @@ async fn proveedor_rapido(conn: &libsql::Connection) -> Result<i64, Fallo> {
     }
     drop(f);
     conn.execute(
-        "INSERT INTO proveedores (nombre, tipo_documento, notas) VALUES (?1, 'NINGUNO', 'Ingresos rápidos de productos (lo crea el sistema).')",
-        libsql::params![PROVEEDOR_RAPIDO],
+        "INSERT INTO proveedores (nombre, tipo_documento, notas) VALUES (?1, 'NINGUNO', ?2)",
+        libsql::params![nombre.to_string(), notas.to_string()],
     )
     .await
     .map_err(e500)?;
@@ -223,6 +224,23 @@ pub async fn ingreso_rapido(
 ) -> Result<Json<ResultadoIngreso>, Fallo> {
     let conn = tenant.0.connect().map_err(e500)?;
     crate::handlers::rubros::exigir_modulo(&conn, crate::handlers::rubros::MODULO_INGRESO_RAPIDO, "Ingreso rápido").await?;
+    let proveedor_id =
+        proveedor_del_sistema(&conn, PROVEEDOR_RAPIDO, "Ingresos rápidos de productos (lo crea el sistema).").await?;
+    ingresar(tenant, claims, ingreso, proveedor_id, "Ingreso rápido").await.map(Json)
+}
+
+/// El ingreso en sí: productos nuevos, la compra al proveedor indicado y su
+/// recepción completa (sube el stock y el precio de compra). Con
+/// EFECTIVO_CAJA, la compra lo descuenta de la caja abierta. Lo usan el
+/// Ingreso rápido y la Compra por peso (handlers/compra_peso.rs).
+pub async fn ingresar(
+    tenant: Arc<TenantDb>,
+    claims: Claims,
+    ingreso: IngresoRapido,
+    proveedor_id: i64,
+    texto: &str,
+) -> Result<ResultadoIngreso, Fallo> {
+    let conn = tenant.0.connect().map_err(e500)?;
     let negocio = crate::handlers::rubros::negocio(&conn).await;
     let con_presentaciones = negocio.modulos.iter().any(|m| m == crate::handlers::rubros::MODULO_PRESENTACIONES);
     validar(&ingreso, con_presentaciones).map_err(malo)?;
@@ -263,8 +281,6 @@ pub async fn ingreso_rapido(
             }
         }
     }
-
-    let proveedor_id = proveedor_rapido(&conn).await?;
 
     // Productos nuevos (stock 0: lo sube la compra al recibirse).
     let mut creados: Vec<i64> = Vec::new();
@@ -342,7 +358,7 @@ pub async fn ingreso_rapido(
         fecha_vencimiento_pago: None,
         factura_numero: None,
         tipo_comprobante: None,
-        notas: Some(ingreso.notas.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| "Ingreso rápido".to_string())),
+        notas: Some(ingreso.notas.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| texto.to_string())),
         usuario_id: claims.sub,
     };
     let creada = match crate::handlers::proveedores::crear_compra(Extension(tenant.clone()), Extension(claims.clone()), Json(compra)).await {
@@ -378,7 +394,7 @@ pub async fn ingreso_rapido(
                 numero_lote: None,
             })
             .collect(),
-        notas_recepcion: Some("Ingreso rápido".to_string()),
+        notas_recepcion: Some(texto.to_string()),
     };
     if let Err((_, texto)) = crate::handlers::proveedores::recibir_mercaderia(Extension(tenant.clone()), Json(recepcion)).await {
         // La compra ya quedó (y si fue con la caja, su pago): no se borra a
@@ -402,7 +418,7 @@ pub async fn ingreso_rapido(
     if ingreso.tipo_pago == "EFECTIVO_CAJA" && total > 0.0 {
         mensaje.push_str(" Se descontó del efectivo de la caja.");
     }
-    Ok(Json(ResultadoIngreso { compra_id, folio, creados: creados.len(), repuestos, mensaje }))
+    Ok(ResultadoIngreso { compra_id, folio, creados: creados.len(), repuestos, mensaje })
 }
 
 #[cfg(test)]

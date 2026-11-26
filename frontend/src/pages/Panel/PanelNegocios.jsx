@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, RefreshCw, Search } from 'lucide-react';
+import { ChevronRight, Plus, RefreshCw, Search } from 'lucide-react';
 import { panelApi } from '../../api/panel';
+import PanelNuevoNegocio from './PanelNuevoNegocio';
 import { fechaCorta, modoFacturacion, situacion, soles, textoDias, tonoUso } from './formato';
 
 /** Todos los negocios, con su suscripción y su modo de facturación. */
@@ -13,6 +14,7 @@ export default function PanelNegocios({ onAbrir }) {
   // (contadores, filtros y búsqueda) es dentro del grupo elegido.
   const [grupo, setGrupo] = useState('CLIENTE');
   const [cargando, setCargando] = useState(false);
+  const [creando, setCreando] = useState(false);
 
   const cargar = async () => {
     setCargando(true);
@@ -90,10 +92,17 @@ export default function PanelNegocios({ onAbrir }) {
           <h1>Negocios</h1>
           <p>Suscripción y facturación de cada cliente de Monspeet.</p>
         </div>
-        <button type="button" className="pnl-boton" onClick={cargar} disabled={cargando}>
-          <RefreshCw size={15} className={cargando ? 'pnl-girando' : ''} /> Actualizar
-        </button>
+        <div className="pnl-acciones">
+          <button type="button" className="pnl-boton" onClick={() => setCreando((v) => !v)}>
+            <Plus size={15} /> Nuevo negocio
+          </button>
+          <button type="button" className="pnl-boton" onClick={cargar} disabled={cargando}>
+            <RefreshCw size={15} className={cargando ? 'pnl-girando' : ''} /> Actualizar
+          </button>
+        </div>
       </div>
+
+      {creando && <PanelNuevoNegocio onCreado={cargar} onCerrar={() => setCreando(false)} />}
 
       <div className="pnl-segmentos pnl-grupos" role="radiogroup" aria-label="Tipo de negocio">
         {[

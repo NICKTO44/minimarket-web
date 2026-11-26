@@ -76,6 +76,8 @@ export const MODULO_REPARACIONES = 'REPARACIONES';
 export const MODULO_VARIAS_CAJAS = 'VARIAS_CAJAS';
 // Ingreso rápido de productos (nuevos o para reponer) sin elegir proveedor.
 export const MODULO_INGRESO_RAPIDO = 'INGRESO_RAPIDO';
+// Compra por peso (recicladoras, chatarrerías): material por kilo pagado con la caja, con ticket.
+export const MODULO_COMPRA_PESO = 'COMPRA_PESO';
 // Compras por Excel: exportar la lista, llenar cantidad y costo y cargarla en Nueva compra.
 export const MODULO_COMPRA_EXCEL = 'COMPRA_EXCEL';
 // Al revés: si está en la lista, en efectivo NO se pide "con cuánto paga".
@@ -128,7 +130,7 @@ export function alternarConDependencias(modulos, valor) {
   return necesita && !nuevos.includes(necesita) ? [...nuevos, necesita] : nuevos;
 }
 // Módulos que no dependen del rubro: al cambiar de rubro se conservan.
-export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE, MODULO_DESCUENTO_VENTA, MODULO_CODIGOS_BARRAS, MODULO_AJUSTES_KARDEX, MODULO_MAYOR_ELEGIBLE, MODULO_CARGOS_RAPIDOS, MODULO_AVISOS_PAGO];
+export const MODULOS_SIN_RUBRO = [MODULO_GANANCIAS, MODULO_PRECIO_VENTA, MODULO_VENTA_SIN_CONEXION, MODULO_COMPROBANTE_CLASICO, MODULO_LOGO_TICKET, MODULO_IMPRESION_DIRECTA, MODULO_CATALOGO, MODULO_VARIAS_CAJAS, MODULO_INGRESO_RAPIDO, MODULO_COMPRA_PESO, MODULO_COMPRA_EXCEL, MODULO_SIN_VUELTO, MODULO_CREDITOS_POR_CLIENTE, MODULO_DESCUENTO_VENTA, MODULO_CODIGOS_BARRAS, MODULO_AJUSTES_KARDEX, MODULO_MAYOR_ELEGIBLE, MODULO_CARGOS_RAPIDOS, MODULO_AVISOS_PAGO];
 
 // Módulos que ya existen (los nuevos se agregan aquí cuando estén listos).
 export const MODULOS = [
@@ -373,6 +375,12 @@ export const MODULOS = [
     label: 'Ingreso rápido de productos',
     descripcion:
       'Botón "Ingreso rápido" en Productos: varios productos nuevos o para reponer en un paso, sin elegir proveedor. El código se genera solo y, si viene por caja (9 botellas), calcula las unidades y el costo de cada una. Queda como una compra en Compras y en los reportes.',
+  },
+  {
+    valor: MODULO_COMPRA_PESO,
+    label: 'Compra por peso',
+    descripcion:
+      'Para recicladoras y chatarrerías que compran material por kilo: se toca el material (cobre, cartón, fierro...), se pone el peso y lo que se paga por kilo (se puede cambiar cuando sube o baja). Al pagar sale de la caja, sube el stock de cada material y se imprime el ticket para quien lo trajo. Queda como una compra en Compras y en los reportes.',
   },
   {
     valor: MODULO_SIN_VUELTO,

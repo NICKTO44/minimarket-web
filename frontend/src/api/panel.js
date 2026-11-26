@@ -62,6 +62,8 @@ export const panelApi = {
   login: (usuario, clave) => pedir('/panel/login', { metodo: 'POST', cuerpo: { usuario, clave } }),
 
   negocios: () => pedir('/panel/negocios'),
+  // Crear un negocio (como el registro, pero el RUC es opcional: sin RUC trabaja solo con tickets).
+  crearNegocio: (datos) => pedir('/panel/negocios', { metodo: 'POST', cuerpo: datos }),
   renovar: (id, cantidad, unidad) => pedir(`/panel/negocios/${id}/renovar`, { metodo: 'POST', cuerpo: { cantidad, unidad } }),
   cambiarEstado: (id, estado) => pedir(`/panel/negocios/${id}/estado`, { metodo: 'POST', cuerpo: { estado } }),
   // CLIENTE (negocio real) o DEMO (cuenta de prueba, sin vencimiento).
