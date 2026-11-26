@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, Scale, Search, Trash2, X } from 'lucide-react';
+import { ChevronRight, Printer, Scale, Search, ShoppingCart, Trash2, X } from 'lucide-react';
 import { api } from '../../api/api';
 import { abreviaturaUnidad } from '../../utils/unidades';
 import TicketCompra from '../../components/TicketCompra';
@@ -43,6 +43,8 @@ export default function CompraPeso() {
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
   const [ticket, setTicket] = useState(null);
+  // Celular: la compra se abre a pantalla completa desde la barra de abajo (como el carrito del punto de venta).
+  const [compraAbierta, setCompraAbierta] = useState(false);
   const numeroTicket = useRef(0);
   const pesoRef = useRef(null);
 
@@ -178,8 +180,13 @@ export default function CompraPeso() {
           </div>
         </section>
 
-        <aside className="cpe-compra">
-          <h3>Compra actual</h3>
+        <aside className={`cpe-compra${compraAbierta ? ' cpe-compra-abierta' : ''}`}>
+          <div className="cpe-compra-cabecera">
+            <h3>Compra actual</h3>
+            <button type="button" className="cpe-compra-cerrar" onClick={() => setCompraAbierta(false)} aria-label="Volver a los materiales">
+              <X size={18} />
+            </button>
+          </div>
           {lineas.length === 0 ? (
             <p className="cpe-vacio">Toca un material para ponerle el peso.</p>
           ) : (
@@ -239,6 +246,18 @@ export default function CompraPeso() {
           )}
         </aside>
       </div>
+
+      {/* Solo en celular: barra de la compra abajo; al tocarla se abre para pagar. */}
+      {lineas.length > 0 && !compraAbierta && (
+        <button type="button" className="cpe-barra" onClick={() => setCompraAbierta(true)} aria-label="Abrir la compra para pagar">
+          <ShoppingCart size={18} />
+          <span className="cpe-barra-numero">{lineas.length}</span>
+          <span>{lineas.length === 1 ? 'material' : 'materiales'}</span>
+          <span className="cpe-barra-total">
+            S/ {soles(total)} · Pagar <ChevronRight size={16} />
+          </span>
+        </button>
+      )}
 
       {elegido && (
         <div className="cpe-modal-fondo" onClick={() => setElegido(null)}>
