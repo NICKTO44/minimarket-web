@@ -66,9 +66,12 @@ export default function CompraPeso() {
     return () => clearTimeout(t);
   }, [ticket]);
 
+  // El cursor va al peso solo al abrir la ventanita de un material (no en
+  // cada tecla: si no, al borrar el precio saltaba al peso).
+  const idElegido = elegido?.producto.id;
   useEffect(() => {
-    if (elegido) setTimeout(() => pesoRef.current?.focus(), 50);
-  }, [elegido]);
+    if (idElegido) setTimeout(() => pesoRef.current?.focus(), 50);
+  }, [idElegido]);
 
   const categorias = useMemo(
     () => [...new Set(productos.map((p) => p.categoria_nombre).filter(Boolean))].sort(),
