@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, Printer, Scale, Search, ShoppingCart, Trash2, X } from 'lucide-react';
-import { api } from '../../api/api';
+import { api, API_URL } from '../../api/api';
 import { abreviaturaUnidad } from '../../utils/unidades';
 import TicketCompra from '../../components/TicketCompra';
 import { imprimirTicket } from '../../utils/imprimirTicket';
@@ -45,6 +45,8 @@ export default function CompraPeso() {
   const [ticket, setTicket] = useState(null);
   // Celular: la compra se abre a pantalla completa desde la barra de abajo (como el carrito del punto de venta).
   const [compraAbierta, setCompraAbierta] = useState(false);
+  // Fotos que no cargaron: el botón queda sin foto (como en el punto de venta).
+  const [imagenesFallidas, setImagenesFallidas] = useState(() => new Set());
   const numeroTicket = useRef(0);
   const pesoRef = useRef(null);
 
@@ -169,6 +171,15 @@ export default function CompraPeso() {
               const enCompra = lineas.some((l) => l.producto.id === p.id);
               return (
                 <button key={p.id} type="button" className={`cpe-material${enCompra ? ' en-compra' : ''}`} onClick={() => abrir(p)}>
+                  {p.imagen_url && !imagenesFallidas.has(p.id) && (
+                    <img
+                      className="cpe-material-imagen"
+                      src={`${API_URL}${p.imagen_url}`}
+                      alt={p.nombre}
+                      loading="lazy"
+                      onError={() => setImagenesFallidas((s) => new Set(s).add(p.id))}
+                    />
+                  )}
                   <span className="cpe-material-nombre">{p.nombre}</span>
                   <span className="cpe-material-precio">
                     S/ {soles(p.precio_compra)} / {abreviaturaUnidad(p.unidad_medida)}
