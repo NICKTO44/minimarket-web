@@ -70,6 +70,8 @@ export const MODULO_INSUMOS = 'INSUMOS';
 export const MODULO_DELIVERY = 'DELIVERY';
 // Restaurante: margen por plato (costo por receta, costo fijo o %; alertas).
 export const MODULO_COSTEO = 'COSTEO';
+// Restaurante: la comanda sale sola en la ticketera de cocina (estación de comandas).
+export const MODULO_COMANDAS = 'COMANDAS';
 // Tecnología: órdenes de reparación (equipo, diagnóstico, presupuesto, garantía).
 export const MODULO_REPARACIONES = 'REPARACIONES';
 // Varias cajas abiertas a la vez: cada vendedor abre la suya (una por computadora).
@@ -112,6 +114,7 @@ export const DEPENDENCIAS = {
   [MODULO_ORDENES_SERVICIO]: MODULO_VEHICULOS,
   [MODULO_INSUMOS]: MODULO_PRODUCCION,
   [MODULO_DELIVERY]: MODULO_MESAS,
+  [MODULO_COMANDAS]: MODULO_MESAS,
   [MODULO_CREDITOS_POR_CLIENTE]: MODULO_CREDITO,
 };
 
@@ -348,6 +351,13 @@ export const MODULOS = [
     label: 'Pedidos delivery (dark kitchen)',
     descripcion:
       'Para cocinas sin local que atienden por WhatsApp: el tablero de pedidos reemplaza a las mesas, con cliente, dirección y costo de envío; pago adelantado (no sale sin cobrar) o contra entrega con vuelto; repartidor, en camino y entregado; y "Por rendir": cuánto debe entregar cada repartidor. Enciende también la atención en mesas.',
+  },
+  {
+    valor: MODULO_COMANDAS,
+    label: 'Impresión de comandas',
+    descripcion:
+      'La comanda sale sola en la ticketera de cocina cuando el mozo envía el pedido desde su celular. La computadora de esa ticketera deja abierta la pantalla Comandas y la imprime (con botón para reimprimir). La cocina no marca "listo": se oculta Preparación y al cobrar la mesa todo lo enviado queda entregado. Enciende también la atención en mesas.',
+    rubros: ['RESTAURANTE'],
   },
   {
     valor: MODULO_COSTEO,

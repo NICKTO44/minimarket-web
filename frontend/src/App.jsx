@@ -34,6 +34,7 @@ import PedidosDelivery from './pages/Delivery/PedidosDelivery';
 import MisEntregas from './pages/Delivery/MisEntregas';
 import { Bike } from 'lucide-react';
 import Preparacion from './pages/Preparacion/Preparacion';
+import Comandas from './pages/Comandas/Comandas';
 import CartaDia from './pages/CartaDia/CartaDia';
 import Cotizaciones from './pages/Cotizaciones/Cotizaciones';
 import Creditos from './pages/Creditos/Creditos';
@@ -78,6 +79,7 @@ import {
   MODULO_MEDIDAS,
   MODULO_MESAS,
   MODULO_DELIVERY,
+  MODULO_COMANDAS,
   MODULO_SERVICIOS,
   MODULO_GANANCIAS, MODULO_COSTEO, MODULO_REPARACIONES, MODULO_PRECIO_VENTA, MODULO_VARIANTES, MODULO_PRESENTACIONES, MODULO_PRECIO_MAYOR,
   MODULO_FICHA_MEDICAMENTO,
@@ -154,6 +156,7 @@ const MODULO_DE_PANTALLA = {
   CATALOGO: MODULO_CATALOGO,
   CODIGOS_BARRAS: MODULO_CODIGOS_BARRAS,
   COMPRA_PESO: MODULO_COMPRA_PESO,
+  COMANDAS: MODULO_COMANDAS,
 };
 
 function App() {
@@ -781,6 +784,7 @@ function App() {
           />
         )}
         {pantallaVisible === 'PREPARACION' && restaurante && <Preparacion />}
+        {pantallaVisible === 'COMANDAS' && restaurante && <Comandas />}
         {pantallaVisible === 'CARTA' && restaurante && <CartaDia />}
         {pantallaVisible === 'POS' &&
           (modoLectura ? (

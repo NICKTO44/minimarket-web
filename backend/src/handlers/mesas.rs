@@ -862,6 +862,8 @@ pub async fn enviar_a_preparar(
         return Err(error(StatusCode::BAD_REQUEST, "No hay productos nuevos para enviar."));
     }
 
+    comanda_sin_estacion(&conn, pedido_id).await;
+
     let detalle = detalle_pedido(&conn, pedido_id).await?;
     let items = detalle.items.into_iter().filter(|i| ids.contains(&i.id)).collect();
     Ok(Json(Comanda { pedido: detalle.resumen, items, fecha: ahora }))
@@ -1326,6 +1328,95 @@ pub async fn listar_preparacion(Extension(tenant): Extension<Arc<TenantDb>>) -> 
     let conn = tenant.0.connect().map_err(e500)?;
     exigir_modulo(&conn).await?;
     Ok(Json(tickets_preparacion(&conn).await?))
+}
+
+/// ¿El restaurante tiene encendido el módulo "Impresión de comandas"?
+pub async fn comandas_activo(conn: &libsql::Connection) -> bool {
+    modo_restaurante(conn).await
+        && crate::handlers::rubros::negocio(conn)
+            .await
+            .modulos
+            .iter()
+            .any(|m| m == crate::handlers::rubros::MODULO_COMANDAS)
+}
+
+/// Después de mandar líneas a cocina: sin el módulo de comandas, la comanda
+/// salió en el equipo del que se envió, así que se da por impresa (si luego
+/// encienden el módulo, la estación no la vuelve a imprimir). Una base sin
+/// la migración 0074 lo ignora.
+pub async fn comanda_sin_estacion(conn: &libsql::Connection, pedido_id: i64) {
+    if comandas_activo(conn).await {
+        return;
+    }
+    let _ = conn
+        .execute(
+            "UPDATE pedido_items SET comanda_impresa = datetime('now', 'localtime')
+             WHERE pedido_id = ?1 AND estado = 'ENVIADO' AND comanda_impresa IS NULL",
+            libsql::params![pedido_id],
+        )
+        .await;
+}
+
+#[derive(serde::Serialize)]
+pub struct EstadoComandas {
+    pub activo: bool,
+}
+
+/// GET /preparacion/comandas — ¿la comanda sale en la estación? (el equipo
+/// del mozo no la imprime al enviar). Cualquier usuario del restaurante.
+pub async fn estado_comandas(Extension(tenant): Extension<Arc<TenantDb>>) -> Resultado<EstadoComandas> {
+    let conn = tenant.0.connect().map_err(e500)?;
+    Ok(Json(EstadoComandas { activo: comandas_activo(&conn).await }))
+}
+
+/// POST /preparacion/comandas/tomar — la estación de comandas (pantalla
+/// Comandas con "Imprimir en este equipo") pide lo que aún no se imprimió.
+///
+/// Un solo UPDATE ... RETURNING marca las líneas como impresas y dice cuáles
+/// fueron: si hay dos estaciones abiertas, o la página se recarga, cada línea
+/// sale una sola vez. Devuelve una comanda por cada envío (pedido + hora de
+/// envío), igual que la que imprime el mozo al tocar "Enviar a preparar".
+/// Con el módulo "Impresión de comandas" apagado no toma nada.
+pub async fn tomar_comandas(Extension(tenant): Extension<Arc<TenantDb>>) -> Resultado<Vec<Comanda>> {
+    let conn = tenant.0.connect().map_err(e500)?;
+    exigir_modulo(&conn).await?;
+    if !comandas_activo(&conn).await {
+        return Ok(Json(Vec::new()));
+    }
+    // Solo lo enviado en las últimas horas: lo de un turno anterior que nadie
+    // imprimió (estación cerrada) ya no sirve en cocina.
+    let mut filas = conn
+        .query(
+            "UPDATE pedido_items SET comanda_impresa = datetime('now', 'localtime')
+             WHERE estado = 'ENVIADO' AND comanda_impresa IS NULL
+               AND fecha_envio >= datetime('now', 'localtime', '-3 hours')
+             RETURNING id, pedido_id, COALESCE(fecha_envio, '')",
+            (),
+        )
+        .await
+        .map_err(e500)?;
+    // (pedido, fecha de envío) -> ids de esas líneas, en el orden en que llegaron.
+    let mut envios: Vec<(i64, String, Vec<i64>)> = Vec::new();
+    while let Some(f) = filas.next().await.map_err(e500)? {
+        let id: i64 = f.get(0).unwrap_or_default();
+        let pedido_id: i64 = f.get(1).unwrap_or_default();
+        let fecha: String = f.get(2).unwrap_or_default();
+        match envios.iter_mut().find(|(p, fe, _)| *p == pedido_id && *fe == fecha) {
+            Some((_, _, ids)) => ids.push(id),
+            None => envios.push((pedido_id, fecha, vec![id])),
+        }
+    }
+    envios.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
+
+    let mut comandas = Vec::new();
+    for (pedido_id, fecha, ids) in envios {
+        let detalle = detalle_pedido(&conn, pedido_id).await?;
+        let items: Vec<ItemPedido> = detalle.items.into_iter().filter(|i| ids.contains(&i.id)).collect();
+        if !items.is_empty() {
+            comandas.push(Comanda { pedido: detalle.resumen, items, fecha });
+        }
+    }
+    Ok(Json(comandas))
 }
 
 fn validar_ids(ids: &[i64]) -> Result<(), (StatusCode, String)> {

@@ -522,6 +522,8 @@ async fn main() {
         .route("/reparto/:id/salir", post(handlers::delivery::reparto_salir))
         .route("/reparto/:id/entregar", post(handlers::delivery::reparto_entregar))
         .route("/preparacion", get(handlers::mesas::listar_preparacion))
+        .route("/preparacion/comandas", get(handlers::mesas::estado_comandas))
+        .route("/preparacion/comandas/tomar", post(handlers::mesas::tomar_comandas))
         .route("/preparacion/listo", post(handlers::mesas::marcar_listo))
         .route("/preparacion/entregado", post(handlers::mesas::marcar_entregado))
         .route("/modificadores", get(handlers::mesas::listar_modificadores))

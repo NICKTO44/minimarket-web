@@ -32,6 +32,7 @@ import {
   Images,
   Barcode,
   Scale,
+  Printer,
 } from 'lucide-react';
 
 export const GRUPOS_MENU = [
@@ -40,6 +41,8 @@ export const GRUPOS_MENU = [
     items: [
       { id: 'MESAS', label: 'Mesas', icono: UtensilsCrossed, soloRestaurante: true },
       { id: 'PREPARACION', label: 'Preparación', icono: ChefHat, soloRestaurante: true },
+      // Módulo "Impresión de comandas": la estación que imprime (reemplaza a Preparación).
+      { id: 'COMANDAS', label: 'Comandas', icono: Printer, soloRestaurante: true, modulo: 'COMANDAS' },
       { id: 'CARTA', label: 'Carta de hoy', icono: ClipboardList, soloRestaurante: true, sinCajero: true },
       { id: 'POS', label: 'Punto de Venta', icono: ScanBarcode },
       { id: 'RESUMEN', label: 'Resumen', icono: LayoutGrid },
@@ -219,6 +222,9 @@ export function gruposParaUsuario(usuario, { restaurante = false, etiquetas = {}
       .filter((i) => {
       if (i.soloRestaurante && !restaurante) return false;
       if (i.modulo && !modulos.includes(i.modulo)) return false;
+      // Con "Impresión de comandas" la cocina no marca listo: sin Preparación
+      // (salvo el usuario de Barra/Cocina, si todavía existe).
+      if (i.id === 'PREPARACION' && modulos.includes('COMANDAS') && !preparacion) return false;
       // Pantallas que el administrador le ocultó a este usuario.
       if (!esAdmin && pantallaOculta(usuario, i.id)) return false;
       if (almacen) return PANTALLAS_ALMACEN.includes(i.id);

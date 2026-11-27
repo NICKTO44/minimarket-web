@@ -1,0 +1,10 @@
+--- frontend/src/utils/menu.js
++++ frontend/src/utils/menu.js
+@@ -31,6 +31,7 @@ import {
+   Smartphone,
+   Images,
+   Barcode,
++  Printer,
+ } from 'lucide-react';
+ 
+ export const GRUPOS_MENU = [

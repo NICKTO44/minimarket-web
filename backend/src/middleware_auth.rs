@@ -237,7 +237,12 @@ fn ruta_permitida(rol: &str, metodo: &Method, ruta: &str) -> bool {
                 || ruta == "/preparacion/entregado"
                 || es_carta(ruta)
                 || (lectura
-                    && matches!(ruta, "/mesas" | "/productos" | "/categorias" | "/modificadores" | "/preparacion"))
+                    && matches!(
+                        ruta,
+                        "/mesas" | "/productos" | "/categorias" | "/modificadores" | "/preparacion"
+                            // ¿Hay impresión de comandas? (entonces su celular no imprime la comanda)
+                            | "/preparacion/comandas"
+                    ))
         }
         // También puede marcar "entregado": en local chico la barra entrega
         // en el mostrador, y así limpia lo que quedó pendiente.
@@ -311,6 +316,8 @@ mod pruebas {
         assert!(ruta_permitida("MESERO", &p, "/pedidos/5/items"));
         assert!(ruta_permitida("MESERO", &p, "/preparacion/entregado"));
         assert!(!ruta_permitida("MESERO", &p, "/preparacion/listo"));
+        assert!(ruta_permitida("MESERO", &g, "/preparacion/comandas"));
+        assert!(!ruta_permitida("MESERO", &p, "/preparacion/comandas/tomar"));
         assert!(!ruta_permitida("MESERO", &p, "/ventas"));
         assert!(!ruta_permitida("MESERO", &g, "/reportes/ventas"));
         assert!(!ruta_permitida("MESERO", &p, "/mesas"));

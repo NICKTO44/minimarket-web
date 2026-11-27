@@ -162,6 +162,18 @@ export default function PedidosDelivery({ usuario, nombreTienda, onCobrar, abrir
   const numeroTicket = useRef(0);
   const tienda = nombreTienda || 'nuestra cocina';
 
+  // Módulo "Impresión de comandas": lo que entra a cocina sale en la
+  // estación de comandas, no aquí (el botón de la comanda sigue imprimiendo aquí).
+  const comandasAuto = useRef(false);
+  useEffect(() => {
+    api
+      .comandasEstado()
+      .then((c) => {
+        comandasAuto.current = !!c.activo;
+      })
+      .catch(() => {});
+  }, []);
+
   const imprimirComanda = useCallback((p, items) => {
     if (!items?.length) return;
     setTicket({ pedido: pedidoTicket(p), items, clave: ++numeroTicket.current });
@@ -195,7 +207,7 @@ export default function PedidosDelivery({ usuario, nombreTienda, onCobrar, abrir
             const p = t.pedidos.find((x) => x.id === pendiente);
             if (p && p.cobrado) {
               guardarClave(null);
-              imprimirComanda(
+              if (!comandasAuto.current) imprimirComanda(
                 p,
                 p.lineas.map((l) => ({ id: l.id, nombre_producto: l.nombre, opciones: l.opciones, nota: l.nota, cantidad: l.cantidad }))
               );
@@ -563,7 +575,7 @@ export default function PedidosDelivery({ usuario, nombreTienda, onCobrar, abrir
           onGuardado={(p) => {
             setFormulario(null);
             // Lo que acaba de entrar a cocina sale en su comanda.
-            if (p.comanda?.length) imprimirComanda(p, p.comanda);
+            if (p.comanda?.length && !comandasAuto.current) imprimirComanda(p, p.comanda);
             cargar();
           }}
         />

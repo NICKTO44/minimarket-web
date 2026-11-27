@@ -147,6 +147,12 @@ pub const MODULO_DELIVERY: &str = "DELIVERY";
 /// fijo o un % aproximado, margen sin IGV, alertas y descarga en Excel
 /// (handlers/costeo.rs). Solo para el rubro Restaurante.
 pub const MODULO_COSTEO: &str = "COSTEO";
+/// Restaurante: impresión de comandas. La comanda sale sola en la ticketera
+/// de cocina desde la estación de comandas (pantalla Comandas en la
+/// computadora de esa ticketera), aunque el mozo envíe desde su celular. La
+/// cocina no marca "listo": se oculta Preparación y al cobrar todo lo enviado
+/// queda entregado (handlers/mesas.rs). Necesita la atención en mesas.
+pub const MODULO_COMANDAS: &str = "COMANDAS";
 
 /// Tecnología: órdenes de reparación (celulares, laptops, impresoras) con
 /// datos del equipo, diagnóstico, presupuesto, técnico y garantía. Cada orden
@@ -209,6 +215,7 @@ pub const RUBRO_TECNOLOGIA: &str = "TECNOLOGIA";
 /// (módulo, único rubro donde se puede encender).
 const SOLO_EN_RUBRO: &[(&str, &str)] = &[
     (MODULO_COSTEO, RUBRO_RESTAURANTE),
+    (MODULO_COMANDAS, RUBRO_RESTAURANTE),
     (MODULO_REPARACIONES, RUBRO_TECNOLOGIA),
     (MODULO_TRES_PRECIOS, "LUBRICENTRO"),
     (MODULO_VENTA_TABLA, "LUBRICENTRO"),
@@ -221,6 +228,7 @@ const DEPENDENCIAS: &[(&str, &str)] = &[
     (MODULO_ORDENES_SERVICIO, MODULO_VEHICULOS),
     (MODULO_INSUMOS, MODULO_PRODUCCION),
     (MODULO_DELIVERY, MODULO_MESAS),
+    (MODULO_COMANDAS, MODULO_MESAS),
     (MODULO_CREDITOS_POR_CLIENTE, MODULO_CREDITO),
 ];
 
@@ -262,6 +270,7 @@ const MODULOS: &[&str] = &[
     MODULO_INSUMOS,
     MODULO_DELIVERY,
     MODULO_COSTEO,
+    MODULO_COMANDAS,
     MODULO_REPARACIONES,
     MODULO_VARIAS_CAJAS,
     MODULO_INGRESO_RAPIDO,

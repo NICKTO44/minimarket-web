@@ -830,6 +830,7 @@ async fn a_cocina(conn: &libsql::Connection, pedido_id: i64) -> Result<Vec<ItemC
         });
     }
     comanda.sort_by_key(|i| i.id);
+    crate::handlers::mesas::comanda_sin_estacion(conn, pedido_id).await;
     Ok(comanda)
 }
 
@@ -1447,6 +1448,7 @@ pub async fn al_cobrar(conn: &libsql::Connection, pedido_id: i64, usuario_id: i6
         libsql::params![pedido_id],
     )
     .await;
+    crate::handlers::mesas::comanda_sin_estacion(conn, pedido_id).await;
     // Lo cobró su repartidor delante del cliente: queda entregado.
     let _ = conn
         .execute(

@@ -1203,13 +1203,17 @@ pub async fn procesar_venta(
                 // se toca: ahí se paga antes y se entrega después.
                 // La venta ya está registrada: si esto falla (p. ej. la base aún no
                 // tiene la migración 0008) no se revierte nada, solo se ignora.
+                // Con el módulo "Impresión de comandas" la cocina no marca
+                // listo: al pagar la mesa, todo lo enviado queda entregado.
+                let sin_listo = crate::handlers::mesas::comandas_activo(&conn).await;
                 let _ = conn
                     .execute(
-                        "UPDATE pedido_items SET fecha_entregado = datetime('now', 'localtime')
-                         WHERE pedido_id = ?1 AND estado = 'ENVIADO' AND fecha_listo IS NOT NULL
+                        "UPDATE pedido_items SET fecha_listo = COALESCE(fecha_listo, datetime('now', 'localtime')),
+                                fecha_entregado = datetime('now', 'localtime')
+                         WHERE pedido_id = ?1 AND estado = 'ENVIADO' AND (fecha_listo IS NOT NULL OR ?2 = 1)
                            AND fecha_entregado IS NULL
                            AND (SELECT tipo FROM pedidos WHERE id = ?1) = 'MESA'",
-                        libsql::params![pedido_id],
+                        libsql::params![pedido_id, if sin_listo { 1 } else { 0 }],
                     )
                     .await;
             }

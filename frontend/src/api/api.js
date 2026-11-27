@@ -497,6 +497,10 @@ export const api = {
     request('/preparacion/listo', { method: 'POST', body: JSON.stringify({ item_ids, listo }) }),
   preparacionEntregado: (item_ids) =>
     request('/preparacion/entregado', { method: 'POST', body: JSON.stringify({ item_ids }) }),
+  // Módulo "Impresión de comandas": ¿la comanda sale en la estación? (el equipo del mozo no la imprime).
+  comandasEstado: () => request('/preparacion/comandas'),
+  // Estación de comandas: lo enviado que aún no se imprimió (cada línea sale una sola vez).
+  comandasTomar: () => request('/preparacion/comandas/tomar', { method: 'POST' }),
   modificadores: () => request('/modificadores'),
   negocioGuardar: (rubro, modulos) =>
     request('/configuracion/negocio', { method: 'PUT', body: JSON.stringify({ rubro, modulos }) }),

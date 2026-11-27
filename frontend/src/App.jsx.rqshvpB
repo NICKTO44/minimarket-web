@@ -1,0 +1,10 @@
+--- frontend/src/App.jsx
++++ frontend/src/App.jsx
+@@ -153,6 +155,7 @@ const MODULO_DE_PANTALLA = {
+   PRODUCCION: MODULO_PRODUCCION,
+   CATALOGO: MODULO_CATALOGO,
+   CODIGOS_BARRAS: MODULO_CODIGOS_BARRAS,
++  COMANDAS: MODULO_COMANDAS,
+ };
+ 
+ function App() {

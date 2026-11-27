@@ -69,6 +69,15 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
   const [imagenesFallidas, setImagenesFallidas] = useState(() => new Set());
   // Cambia en cada impresión para volver a dibujar (e imprimir) el ticket.
   const numeroTicket = useRef(0);
+  // Módulo "Impresión de comandas": la comanda sale en la estación de
+  // comandas, no en este equipo (el botón "Comanda" sigue reimprimiendo aquí si hace falta).
+  const [comandasAuto, setComandasAuto] = useState(false);
+  useEffect(() => {
+    api
+      .comandasEstado()
+      .then((c) => setComandasAuto(!!c.activo))
+      .catch(() => setComandasAuto(false));
+  }, []);
 
   // Los cambios se ven al instante y se guardan en segundo plano.
   const {
@@ -310,7 +319,9 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
     try {
       const comanda = await ejecutar(() => api.pedidoEnviar(pedidoId), 'Enviado a preparar');
       if (!comanda) return;
-      setTicket({ tipo: 'COMANDA', pedido: comanda.pedido, items: comanda.items, clave: ++numeroTicket.current });
+      if (!comandasAuto) {
+        setTicket({ tipo: 'COMANDA', pedido: comanda.pedido, items: comanda.items, clave: ++numeroTicket.current });
+      }
       await cargar().catch(() => {});
     } finally {
       enviando.current = false;
@@ -641,7 +652,7 @@ export default function PedidoMesa({ pedidoId, usuario, nombreTienda, mesas, onV
           {preparando.length > 0 && (
             <>
               <span className="pedido-seccion pedido-seccion-preparando">
-                <ChefHat size={13} /> En preparación
+                <ChefHat size={13} /> {comandasAuto ? 'En cocina' : 'En preparación'}
               </span>
               {preparando.map(filaItem)}
             </>
