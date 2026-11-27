@@ -7,6 +7,7 @@ import { tituloPedido } from '../../utils/mesas';
 import { etiquetaTicket } from '../../utils/papelTicket';
 import TicketMesa from '../../components/TicketMesa';
 import { imprimirTicket } from '../../utils/imprimirTicket';
+import { horaLima } from '../../utils/formato';
 import './Comandas.css';
 
 // Este equipo es la estación de comandas: se guarda en ESTE equipo (como el
@@ -38,9 +39,8 @@ function guardar(clave, valor) {
 }
 
 function horaCorta(fecha) {
-  // "2026-11-26 12:30:05" -> "12:30"
-  const m = /\s(\d{2}:\d{2})/.exec(fecha || '');
-  return m ? m[1] : '';
+  // La fecha viene en UTC ("2026-11-26 17:30:05"): se muestra en hora de Perú.
+  return fecha ? horaLima(fecha, { hour: '2-digit', minute: '2-digit' }) : '';
 }
 
 const PRUEBA = {
