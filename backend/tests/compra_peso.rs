@@ -135,6 +135,22 @@ async fn pagado_con_plata_de_otro_lado_no_toca_la_caja() {
     assert!((real(&t, "SELECT stock FROM productos WHERE id = 1").await - 2.45).abs() < 1e-9);
     let conn = t.0.connect().unwrap();
     assert!(cajas::efectivo_en_caja(&conn, caja).await.unwrap().abs() < 0.001);
+
+    // Por Yape: tampoco toca la caja y Reportes lo ve como YAPE.
+    let yape = comprar(&t, json!({"tipo_pago": "YAPE", "lineas": [{"producto_id": 2, "cantidad": 5, "precio": 0.2}]}))
+        .await
+        .expect("compra por yape");
+    assert!(cajas::efectivo_en_caja(&conn, caja).await.unwrap().abs() < 0.001);
+    let Json(lista) = minimarket_backend::handlers::reportes::compras_por_rango(
+        Extension(t.clone()),
+        Extension(admin()),
+        axum::extract::Query(serde_json::from_value(json!({"fecha_inicio": "2000-01-01", "fecha_fin": "2100-12-31"})).unwrap()),
+    )
+    .await
+    .expect("reporte de compras");
+    let medio = |id: i64| lista.iter().find(|c| c.id == id).map(|c| c.medio_pago.clone()).unwrap_or_default();
+    assert_eq!(medio(yape.compra_id), "YAPE");
+    assert_eq!(medio(hecha.compra_id), "EFECTIVO");
 }
 
 #[tokio::test]

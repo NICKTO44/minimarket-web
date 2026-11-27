@@ -575,16 +575,109 @@ export default function Reportes({ ganancias = false, costeo = false, editoriale
     </div>
   );
 }
-const PAGO_COMPRA = { EFECTIVO: 'Efectivo', TRANSFERENCIA: 'Transferencia', CREDITO: 'Crédito', MIXTO: 'Mixto' };
+const PAGO_COMPRA = {
+  EFECTIVO_CAJA: 'Efectivo de la caja',
+  EFECTIVO: 'Efectivo (no de la caja)',
+  YAPE: 'Yape',
+  PLIN: 'Plin',
+  TRANSFERENCIA: 'Transferencia',
+  CREDITO: 'Crédito',
+  MIXTO: 'Mixto',
+};
+const ORDEN_PAGO_COMPRA = Object.keys(PAGO_COMPRA);
 
-/** Compras del período (solo el administrador): proveedor, comprobante y pago. */
+/** Con qué se pagó la compra: el detalle (medio_pago) o, en datos viejos, tipo_pago. */
+const medioCompra = (c) => c.medio_pago || c.tipo_pago || '';
+
+/** Compras del período (solo el administrador): total por forma de pago y el detalle. */
 function ComprasDelPeriodo({ compras }) {
+  const [medioFiltro, setMedioFiltro] = useState('');
   const vigentes = compras.filter((c) => c.estado !== 'CANCELADA');
   const total = vigentes.reduce((s, c) => s + (Number(c.total) || 0), 0);
-  const porPagar = vigentes.reduce((s, c) => s + (Number(c.saldo_pendiente) || 0), 0);
+  const porMedio = {};
+  for (const c of vigentes) {
+    const m = medioCompra(c);
+    porMedio[m] = porMedio[m] || { medio: m, cantidad: 0, monto: 0 };
+    porMedio[m].cantidad += 1;
+    porMedio[m].monto += Number(c.total) || 0;
+  }
+  const resumen = Object.values(porMedio).sort(
+    (a, b) => (ORDEN_PAGO_COMPRA.indexOf(a.medio) + 99) % 99 - (ORDEN_PAGO_COMPRA.indexOf(b.medio) + 99) % 99
+  );
+  const lista = medioFiltro ? compras.filter((c) => medioCompra(c) === medioFiltro) : compras;
+  const enLista = lista.filter((c) => c.estado !== 'CANCELADA');
+  const totalLista = enLista.reduce((s, c) => s + (Number(c.total) || 0), 0);
+  const porPagar = enLista.reduce((s, c) => s + (Number(c.saldo_pendiente) || 0), 0);
   return (
+    <>
+      {resumen.length > 0 && (
+        <div className="rep-seccion">
+          <h2>Compras por forma de pago</h2>
+          <div className="rep-tabla-wrapper">
+            <table className="rep-tabla rep-tabla-metodos">
+              <thead>
+                <tr>
+                  <th>Pagado con</th>
+                  <th className="num">Compras</th>
+                  <th className="num">Monto</th>
+                  <th className="rep-metodo-barra-th">Del total</th>
+                  <th>
+                    <span className="rep-solo-lector">Ver compras</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {resumen.map((m) => {
+                  const parte = total > 0 ? (m.monto / total) * 100 : 0;
+                  const activo = medioFiltro === m.medio;
+                  return (
+                    <tr key={m.medio} className={activo ? 'rep-fila-activa' : ''}>
+                      <td>{PAGO_COMPRA[m.medio] || m.medio || 'Sin dato'}</td>
+                      <td className="num">{m.cantidad}</td>
+                      <td className="num">{soles(m.monto)}</td>
+                      <td>
+                        <div className="rep-metodo-barra">
+                          <span className="rep-metodo-pista">
+                            <span className="rep-metodo-relleno" style={{ width: `${Math.min(100, parte)}%` }} />
+                          </span>
+                          <span className="rep-metodo-porcentaje">{parte.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                      <td className="rep-celda-accion">
+                        <button
+                          type="button"
+                          className={`rep-boton-ver${activo ? ' activo' : ''}`}
+                          aria-pressed={activo}
+                          onClick={() => setMedioFiltro(activo ? '' : m.medio)}
+                        >
+                          {activo ? 'Viendo' : 'Ver compras'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="rep-nota">
+            Total comprado: <strong>{soles(total)}</strong>. "Efectivo de la caja" es lo que salió de la caja abierta (ya
+            está descontado en Caja); lo demás no tocó la caja. No cuenta las compras canceladas.
+          </p>
+        </div>
+      )}
     <div className="rep-seccion">
-      <h2>Compras del período ({vigentes.length})</h2>
+      <h2>
+        Compras del período ({enLista.length})
+        {medioFiltro && (
+          <>
+            {' '}
+            · {PAGO_COMPRA[medioFiltro] || medioFiltro}{' '}
+            <button type="button" className="rep-boton-ver" onClick={() => setMedioFiltro('')}>
+              Ver todas
+            </button>
+          </>
+        )}
+      </h2>
       <div className="rep-tabla-wrapper">
         <table className="rep-tabla">
           <thead>
@@ -600,7 +693,7 @@ function ComprasDelPeriodo({ compras }) {
             </tr>
           </thead>
           <tbody>
-            {compras.map((c) => (
+            {lista.map((c) => (
               <tr key={c.id}>
                 <td>{c.fecha_compra}</td>
                 <td>{c.folio}</td>
@@ -610,7 +703,7 @@ function ComprasDelPeriodo({ compras }) {
                 </td>
                 <td>{textoComprobanteCompra(c)}</td>
                 <td>
-                  {PAGO_COMPRA[c.tipo_pago] || c.tipo_pago}
+                  {PAGO_COMPRA[medioCompra(c)] || medioCompra(c)}
                   {c.saldo_pendiente > 0.004 && <span className="rep-sub">Debe {soles(c.saldo_pendiente)}</span>}
                 </td>
                 <td>{c.estado}</td>
@@ -618,7 +711,7 @@ function ComprasDelPeriodo({ compras }) {
                 <td className="num">{soles(c.total)}</td>
               </tr>
             ))}
-            {compras.length === 0 && (
+            {lista.length === 0 && (
               <tr>
                 <td colSpan={8} className="rep-sin-resultados">
                   No hay compras en este período.
@@ -628,9 +721,9 @@ function ComprasDelPeriodo({ compras }) {
           </tbody>
         </table>
       </div>
-      {compras.length > 0 && (
+      {lista.length > 0 && (
         <p className="rep-nota">
-          Total comprado: <strong>{soles(total)}</strong>
+          {medioFiltro ? 'Total con este pago' : 'Total comprado'}: <strong>{soles(totalLista)}</strong>
           {porPagar > 0.004 && (
             <>
               {' '}
@@ -641,6 +734,7 @@ function ComprasDelPeriodo({ compras }) {
         </p>
       )}
     </div>
+    </>
   );
 }
 

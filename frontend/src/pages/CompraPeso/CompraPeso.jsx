@@ -11,7 +11,9 @@ import './CompraPeso.css';
 const PAGOS = [
   { valor: 'EFECTIVO_CAJA', label: 'De la caja' },
   { valor: 'EFECTIVO', label: 'Efectivo (no de la caja)' },
-  { valor: 'TRANSFERENCIA', label: 'Yape / transferencia' },
+  { valor: 'YAPE', label: 'Yape' },
+  { valor: 'PLIN', label: 'Plin' },
+  { valor: 'TRANSFERENCIA', label: 'Transferencia' },
 ];
 
 function soles(n) {

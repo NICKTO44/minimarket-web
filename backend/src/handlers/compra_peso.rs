@@ -39,14 +39,24 @@ pub struct CompraPeso {
     #[serde(default)]
     pub persona: Option<String>,
     /// Con qué se paga: EFECTIVO_CAJA (por defecto: sale de la caja abierta),
-    /// EFECTIVO (plata de otro lado, no toca la caja) o TRANSFERENCIA
-    /// (Yape, Plin, banco).
+    /// EFECTIVO (plata de otro lado, no toca la caja), YAPE, PLIN o
+    /// TRANSFERENCIA (banco). Los tres últimos no tocan la caja.
     #[serde(default)]
     pub tipo_pago: Option<String>,
 }
 
 /// Formas de pago de una compra por peso.
-pub const PAGOS: [&str; 3] = ["EFECTIVO_CAJA", "EFECTIVO", "TRANSFERENCIA"];
+pub const PAGOS: [&str; 5] = ["EFECTIVO_CAJA", "EFECTIVO", "YAPE", "PLIN", "TRANSFERENCIA"];
+
+/// La forma de pago de la compra en sí (compras.tipo_pago solo acepta
+/// EFECTIVO, TRANSFERENCIA...): Yape y Plin van como TRANSFERENCIA y el
+/// detalle queda en compras.medio_pago (migración 0073).
+fn tipo_pago_compra(medio: &str) -> String {
+    match medio {
+        "YAPE" | "PLIN" => "TRANSFERENCIA".to_string(),
+        otro => otro.to_string(),
+    }
+}
 
 fn tipo_pago(compra: &CompraPeso) -> String {
     compra.tipo_pago.as_deref().map(str::trim).filter(|t| !t.is_empty()).unwrap_or("EFECTIVO_CAJA").to_uppercase()
@@ -156,7 +166,7 @@ pub async fn registrar(
                 vender_caja: None,
             })
             .collect(),
-        tipo_pago: tipo_pago(&compra),
+        tipo_pago: tipo_pago_compra(&tipo_pago(&compra)),
         notas: Some(match &persona {
             Some(p) => format!("Compra por peso a {}", p),
             None => "Compra por peso".to_string(),
@@ -169,6 +179,11 @@ pub async fn registrar(
     )
     .await?;
     let hecho = ingresar(tenant, claims, ingreso, proveedor_id, "Compra por peso").await?;
+    // El detalle del pago para Reportes (Yape y Plin por separado). Una base
+    // sin la migración 0073 lo ignora: la compra ya quedó.
+    let _ = conn
+        .execute("UPDATE compras SET medio_pago = ?1 WHERE id = ?2", libsql::params![tipo_pago(&compra), hecho.compra_id])
+        .await;
 
     let total = redondear(lineas.iter().map(|l| l.subtotal).sum());
     Ok(Json(CompraPesoHecha {
@@ -195,6 +210,7 @@ mod pruebas {
         assert!(validar(&compra(serde_json::json!({"lineas": [{"producto_id": 1, "cantidad": 2.35, "precio": 38}]}))).is_ok());
         assert!(validar(&compra(serde_json::json!({"lineas": []}))).is_err());
         assert!(validar(&compra(serde_json::json!({"tipo_pago": "EFECTIVO", "lineas": [{"producto_id": 1, "cantidad": 1, "precio": 2}]}))).is_ok());
+        assert!(validar(&compra(serde_json::json!({"tipo_pago": "PLIN", "lineas": [{"producto_id": 1, "cantidad": 1, "precio": 2}]}))).is_ok());
         assert!(validar(&compra(serde_json::json!({"tipo_pago": "CREDITO", "lineas": [{"producto_id": 1, "cantidad": 1, "precio": 2}]}))).is_err());
         assert!(validar(&compra(serde_json::json!({"lineas": [{"producto_id": 1, "cantidad": 0, "precio": 38}]}))).is_err());
         assert!(validar(&compra(serde_json::json!({"lineas": [{"producto_id": 1, "cantidad": 1, "precio": -1}]}))).is_err());

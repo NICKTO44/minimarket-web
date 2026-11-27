@@ -377,6 +377,10 @@ pub struct CompraDelPeriodo {
     pub factura_numero: Option<String>,
     pub total: f64,
     pub tipo_pago: String,
+    /// Con qué se pagó, con detalle: EFECTIVO_CAJA, EFECTIVO, YAPE, PLIN,
+    /// TRANSFERENCIA, CREDITO o MIXTO (migración 0073; si no lo guardó la
+    /// compra, se deduce de caja_id y tipo_pago).
+    pub medio_pago: String,
     pub estado: String,
     pub estado_pago: String,
     pub saldo_pendiente: f64,
@@ -400,7 +404,8 @@ pub async fn compras_por_rango(
             "SELECT c.id, c.folio, c.fecha_compra, COALESCE(p.nombre, ''), p.numero_documento,
                     c.tipo_comprobante, c.factura_numero, CAST(COALESCE(c.total, 0) AS REAL),
                     COALESCE(c.tipo_pago, ''), COALESCE(c.estado, ''), COALESCE(c.estado_pago, ''),
-                    CAST(COALESCE(c.saldo_pendiente, 0) AS REAL), COALESCE(u.nombre_completo, '')
+                    CAST(COALESCE(c.saldo_pendiente, 0) AS REAL), COALESCE(u.nombre_completo, ''),
+                    COALESCE(c.medio_pago, CASE WHEN c.caja_id IS NOT NULL THEN 'EFECTIVO_CAJA' ELSE c.tipo_pago END, '')
              FROM compras c
              LEFT JOIN proveedores p ON p.id = c.proveedor_id
              LEFT JOIN usuarios u ON u.id = c.usuario_id
@@ -427,6 +432,7 @@ pub async fn compras_por_rango(
             estado_pago: f.get(10).unwrap_or_default(),
             saldo_pendiente: f.get(11).unwrap_or_default(),
             registrado_por: f.get(12).unwrap_or_default(),
+            medio_pago: f.get(13).unwrap_or_default(),
         });
     }
     Ok(Json(compras))
